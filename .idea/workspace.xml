@@ -4,23 +4,7 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="19504417-cf6f-455d-b9af-3bfa2290415d" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/planningMode.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/src/services/db.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/core/sync_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/core/sync_service.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/dashboard/dashboard_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/dashboard/dashboard_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/shell/app_shell.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/shell/app_shell.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/shell/gst_setup_widget.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/shell/gst_setup_widget.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/sync/sync_engine.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/sync/sync_engine.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/utils/export_service.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/utils/export_service.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/backend/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/prisma/schema.prisma" beforeDir="false" afterPath="$PROJECT_DIR$/backend/prisma/schema.prisma" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/server.ts" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/server.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/services/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/services/auth.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/services/sync.ts" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/services/sync.ts" afterDir="false" />
-    </list>
+    <list default="true" id="19504417-cf6f-455d-b9af-3bfa2290415d" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
