@@ -4,23 +4,7 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="19504417-cf6f-455d-b9af-3bfa2290415d" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/app/lib/features/reports/balance_sheet_screen.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/lib/features/reports/day_book_screen.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/lib/features/reports/pl_report_screen.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/lib/features/reports/reports_menu_screen.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/lib/features/sales/quotation_builder_screen.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/lib/features/search/search_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/core/models.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/core/models.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/core/session.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/core/session.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/data/app_database.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/data/app_database.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/data/repositories.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/data/repositories.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/dashboard/dashboard_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/dashboard/dashboard_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/sales/invoice_detail_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/sales/invoice_detail_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/shell/app_shell.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/shell/app_shell.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/utils/pdf_invoice.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/utils/pdf_invoice.dart" afterDir="false" />
-    </list>
+    <list default="true" id="19504417-cf6f-455d-b9af-3bfa2290415d" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
