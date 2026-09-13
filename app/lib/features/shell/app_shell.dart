@@ -6,6 +6,7 @@ import '../../sync/sync_engine.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../customers/customer_form.dart';
+import '../customers/parties_tab.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../expenses/expense_form.dart';
 import '../inventory/product_form.dart';
@@ -13,6 +14,7 @@ import '../inventory/product_list_screen.dart';
 import '../more/more_screen.dart';
 import '../payments/payment_form.dart';
 import '../purchases/purchase_builder_screen.dart';
+import '../reports/reports_screen.dart';
 import '../sales/invoice_builder_screen.dart';
 import '../sales/invoice_list_tab.dart';
 import '../suppliers/supplier_form.dart';
@@ -35,10 +37,10 @@ class _AppShellState extends State<AppShell> {
     'More'
   ];
   static const _icons = [
-    Icons.home_rounded,
-    Icons.receipt_long_rounded,
-    Icons.inventory_2_rounded,
-    Icons.people_alt_rounded,
+    Icons.home_filled,
+    Icons.receipt_long_outlined,
+    Icons.inventory_2_outlined,
+    Icons.bar_chart_rounded,
     Icons.more_horiz_rounded,
   ];
 
@@ -178,7 +180,7 @@ class _AppShellState extends State<AppShell> {
             DashboardScreen(key: ValueKey('dashboard-$_dataVersion')),
             InvoiceListTab(key: ValueKey('invoices-$_dataVersion')),
             ProductListTab(key: ValueKey('products-$_dataVersion')),
-            PartiesTab(key: ValueKey('parties-$_dataVersion')),
+            ReportsScreen(key: ValueKey('reports-$_dataVersion')),
             MoreTab(key: ValueKey('more-$_dataVersion')),
           ],
         ),

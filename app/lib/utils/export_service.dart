@@ -6,7 +6,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/foundation.dart';
 import '../core/models.dart';
-import '../core/money.dart';
 
 class ExportService {
   /// Export sales invoices to Excel
@@ -205,14 +204,5 @@ class ExportService {
 
   static String _formatAmount(int paise) {
     return (paise / 100).toStringAsFixed(2);
-  }
-
-  static String _formatDate(String date) {
-    try {
-      final dt = DateTime.parse(date);
-      return '${dt.day}/${dt.month}/${dt.year}';
-    } catch (_) {
-      return date;
-    }
   }
 }

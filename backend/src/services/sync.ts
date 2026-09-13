@@ -1,17 +1,20 @@
-import { store } from '../store.js';
+import { prisma } from './db.js';
 
-export function enqueueSync(input: {
+export async function enqueueSync(input: {
   businessId: string;
   entity: string;
   entityId: string;
   op: 'upsert' | 'delete';
   payload: string;
 }) {
-  return store.enqueueSync({
-    businessId: input.businessId,
-    entity: input.entity,
-    entityId: input.entityId,
-    op: input.op,
-    payload: input.payload,
+  return await prisma.syncQueueItem.create({
+    data: {
+      businessId: input.businessId,
+      entity: input.entity,
+      entityId: input.entityId,
+      op: input.op,
+      payload: input.payload,
+      status: 'pending',
+    },
   });
 }

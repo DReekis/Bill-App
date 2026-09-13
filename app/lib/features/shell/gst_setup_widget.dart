@@ -6,7 +6,6 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
-import 'business_edit_screen.dart';
 
 class GSTSetupCard extends StatefulWidget {
   const GSTSetupCard({super.key, this.business});
@@ -84,8 +83,8 @@ class _GSTSetupCardState extends State<GSTSetupCard> {
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: StitchColors.primaryContainer.withOpacity(0.5),
-              border: Border.all(color: StitchColors.primary.withOpacity(0.3)),
+              color: StitchColors.primaryContainer.withValues(alpha: 0.5),
+              border: Border.all(color: StitchColors.primary.withValues(alpha: 0.3)),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -97,7 +96,7 @@ class _GSTSetupCardState extends State<GSTSetupCard> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: StitchColors.primary.withOpacity(0.2),
+                        color: StitchColors.primary.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(Icons.receipt_rounded,

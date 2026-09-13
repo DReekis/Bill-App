@@ -1,18 +1,20 @@
 import { hashPassword, verifyPassword } from '../lib/crypto.js';
 import { signAccessToken } from '../lib/jwt.js';
-import { store } from '../store.js';
+import { prisma } from './db.js';
 
 export async function registerUser(input: { name: string; email: string; password: string }) {
-  const existing = store.findUserByEmail(input.email);
+  const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) {
     throw new Error('USER_EXISTS');
   }
 
-  const user = store.createUser({
-    name: input.name,
-    email: input.email,
-    passwordHash: await hashPassword(input.password),
-    role: 'owner',
+  const user = await prisma.user.create({
+    data: {
+      name: input.name,
+      email: input.email,
+      passwordHash: await hashPassword(input.password),
+      role: 'owner',
+    },
   });
 
   const token = signAccessToken({ sub: user.id, email: user.email, role: user.role });
@@ -20,7 +22,7 @@ export async function registerUser(input: { name: string; email: string; passwor
 }
 
 export async function loginUser(input: { email: string; password: string }) {
-  const user = store.findUserByEmail(input.email);
+  const user = await prisma.user.findUnique({ where: { email: input.email } });
   if (!user) {
     throw new Error('INVALID_CREDENTIALS');
   }

@@ -1,26 +1,23 @@
 import 'dart:convert';
-
 import 'api_client.dart';
+import 'models.dart';
 
 class SyncService {
   const SyncService(this._client);
 
   final ApiClient _client;
 
-  Future<bool> pushSync(
-      {required String businessId,
-      required String entity,
-      required String entityId,
-      required String op,
-      required Map<String, dynamic> payload}) async {
+  Future<void> push(SyncRecord record) async {
     final response = await _client.post('/api/v1/sync/push', {
-      'businessId': businessId,
-      'entity': entity,
-      'entityId': entityId,
-      'op': op,
-      'payload': jsonEncode(payload),
+      'businessId': record.businessId.toString(),
+      'entity': record.entity,
+      'entityId': record.entityId,
+      'op': record.op,
+      'payload': record.payload,
     });
 
-    return response.statusCode == 202 || response.statusCode == 200;
+    if (response.statusCode >= 400) {
+      throw Exception(jsonDecode(response.body)['error'] ?? 'Sync failed');
+    }
   }
 }
