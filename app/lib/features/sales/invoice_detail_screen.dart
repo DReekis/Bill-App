@@ -10,6 +10,7 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
 import '../payments/payment_form.dart';
+import 'sales_return_form.dart';
 
 class InvoiceDetailScreen extends StatefulWidget {
   const InvoiceDetailScreen({super.key, required this.invoiceId});
@@ -182,6 +183,20 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                   ),
                 ),
               ]),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(foregroundColor: StitchColors.error),
+                  onPressed: () {
+                    final inv = invoice;
+                    if (inv == null) return;
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => SalesReturnForm(invoice: inv))).then((_) => _load());
+                  },
+                  icon: const Icon(Icons.assignment_return_outlined, size: 18),
+                  label: const Text('Record Sales Return'),
+                ),
+              ),
               if (outstanding > 0) ...[
                 const SizedBox(height: 12),
                 SizedBox(

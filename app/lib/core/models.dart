@@ -313,6 +313,99 @@ class InvoiceLine {
         taxable: (map['taxable'] as num?)?.toInt() ?? 0,
         tax: (map['tax'] as num?)?.toInt() ?? 0,
       );
+
+  InvoiceLine copyWith({double? quantity}) => InvoiceLine(
+        productId: productId,
+        name: name,
+        hsn: hsn,
+        gstRate: gstRate,
+        quantity: quantity ?? this.quantity,
+        price: price,
+        discount: discount,
+        discountPercent: discountPercent,
+        taxable: taxable,
+        tax: tax,
+      );
+}
+
+class Quotation {
+  Quotation({
+    this.id,
+    this.businessId,
+    required this.number,
+    this.customerId,
+    this.customerName,
+    required this.date,
+    this.expiryDate,
+    this.gstType = 'gst',
+    this.subtotal = 0,
+    this.discount = 0,
+    this.taxable = 0,
+    this.cgst = 0,
+    this.sgst = 0,
+    this.igst = 0,
+    this.total = 0,
+    this.status = 'Open',
+    this.notes,
+    this.lines = const [],
+  });
+  final int? id;
+  final int? businessId;
+  String number;
+  int? customerId;
+  String? customerName;
+  String date;
+  String? expiryDate;
+  String gstType;
+  int subtotal;
+  int discount;
+  int taxable;
+  int cgst;
+  int sgst;
+  int igst;
+  int total;
+  String status;
+  String? notes;
+  List<InvoiceLine> lines;
+
+  Map<String, Object?> toMap() => {
+        'business_id': businessId,
+        'number': number,
+        'customer_id': customerId,
+        'customer_name': customerName,
+        'date': date,
+        'expiry_date': expiryDate,
+        'gst_type': gstType,
+        'subtotal': subtotal,
+        'discount': discount,
+        'taxable': taxable,
+        'cgst': cgst,
+        'sgst': sgst,
+        'igst': igst,
+        'total': total,
+        'status': status,
+        'notes': notes,
+      };
+
+  static Quotation fromMap(Map<String, Object?> map) => Quotation(
+        id: map['id'] as int?,
+        businessId: map['business_id'] as int?,
+        number: map['number'] as String? ?? '',
+        customerId: map['customer_id'] as int?,
+        customerName: map['customer_name'] as String?,
+        date: map['date'] as String? ?? '',
+        expiryDate: map['expiry_date'] as String?,
+        gstType: map['gst_type'] as String? ?? 'gst',
+        subtotal: (map['subtotal'] as num?)?.toInt() ?? 0,
+        discount: (map['discount'] as num?)?.toInt() ?? 0,
+        taxable: (map['taxable'] as num?)?.toInt() ?? 0,
+        cgst: (map['cgst'] as num?)?.toInt() ?? 0,
+        sgst: (map['sgst'] as num?)?.toInt() ?? 0,
+        igst: (map['igst'] as num?)?.toInt() ?? 0,
+        total: (map['total'] as num?)?.toInt() ?? 0,
+        status: map['status'] as String? ?? 'Open',
+        notes: map['notes'] as String?,
+      );
 }
 
 class Invoice {
@@ -667,6 +760,74 @@ class AuditEntry {
       );
 }
 
+class TransactionReturn {
+  TransactionReturn({
+    this.id,
+    this.businessId,
+    required this.number,
+    this.invoiceId,
+    this.partyId,
+    this.partyName,
+    required this.partyType,
+    required this.date,
+    this.subtotal = 0,
+    this.taxable = 0,
+    this.tax = 0,
+    this.total = 0,
+    this.reason,
+    this.status = 'Finalized',
+    this.lines = const [],
+  });
+  final int? id;
+  final int? businessId;
+  String number;
+  int? invoiceId;
+  int? partyId;
+  String? partyName;
+  String partyType; // 'customer' or 'supplier'
+  String date;
+  int subtotal;
+  int taxable;
+  int tax;
+  int total;
+  String? reason;
+  String status;
+  List<InvoiceLine> lines;
+
+  Map<String, Object?> toMap() => {
+        'business_id': businessId,
+        'number': number,
+        'invoice_id': invoiceId,
+        'party_id': partyId,
+        'party_name': partyName,
+        'party_type': partyType,
+        'date': date,
+        'subtotal': subtotal,
+        'taxable': taxable,
+        'tax': tax,
+        'total': total,
+        'reason': reason,
+        'status': status,
+      };
+
+  static TransactionReturn fromMap(Map<String, Object?> map) => TransactionReturn(
+        id: map['id'] as int?,
+        businessId: map['business_id'] as int?,
+        number: map['number'] as String? ?? '',
+        invoiceId: map['invoice_id'] as int?,
+        partyId: map['party_id'] as int?,
+        partyName: map['party_name'] as String?,
+        partyType: map['party_type'] as String? ?? 'customer',
+        date: map['date'] as String? ?? '',
+        subtotal: (map['subtotal'] as num?)?.toInt() ?? 0,
+        taxable: (map['taxable'] as num?)?.toInt() ?? 0,
+        tax: (map['tax'] as num?)?.toInt() ?? 0,
+        total: (map['total'] as num?)?.toInt() ?? 0,
+        reason: map['reason'] as String?,
+        status: map['status'] as String? ?? 'Finalized',
+      );
+}
+
 class SyncRecord {
   SyncRecord({
     this.id,
@@ -765,3 +926,12 @@ const List<String> businessIndustries = [
   'Freelancer',
   'Other',
 ];
+
+class SearchResult {
+  SearchResult({required this.type, required this.id, required this.title, this.subtitle, this.amount});
+  final String type;
+  final int id;
+  final String title;
+  final String? subtitle;
+  final int? amount;
+}

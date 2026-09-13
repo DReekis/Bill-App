@@ -8,9 +8,24 @@ import '../core/dates.dart';
 import '../core/models.dart';
 import '../core/money.dart';
 
-Future<Uint8List> buildInvoicePdf({
+Future<Uint8List> buildDocumentPdf({
   required Business business,
-  required Invoice invoice,
+  required String title,
+  required String number,
+  required String date,
+  String? dueDate,
+  required String? partyName,
+  required List<InvoiceLine> lines,
+  required int subtotal,
+  required int discount,
+  required int taxable,
+  required int igst,
+  required int cgst,
+  required int sgst,
+  required int roundOff,
+  required int total,
+  required int outstandingPaise,
+  String? notes,
 }) async {
   final doc = pw.Document();
   final mono = pw.Font.helvetica();
@@ -39,10 +54,10 @@ Future<Uint8List> buildInvoicePdf({
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
-              pw.Text('TAX INVOICE',
+              pw.Text(title.toUpperCase(),
                   style: pw.TextStyle(font: bold, fontSize: 20, color: navy)),
               pw.SizedBox(height: 2),
-              pw.Text(invoice.number, style: pw.TextStyle(font: mono, fontSize: 11)),
+              pw.Text(number, style: pw.TextStyle(font: mono, fontSize: 11)),
             ],
           ),
         ],
@@ -57,17 +72,17 @@ Future<Uint8List> buildInvoicePdf({
               pw.Text('Billed to',
                   style: pw.TextStyle(font: bold, fontSize: 9, color: PdfColors.grey700)),
               pw.SizedBox(height: 3),
-              pw.Text(invoice.customerName ?? 'Walk-in customer',
+              pw.Text(partyName ?? 'Walk-in customer',
                   style: pw.TextStyle(font: bold, fontSize: 11)),
             ],
           ),
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
-              pw.Text('Invoice date: ${displayDate(invoice.date)}',
+              pw.Text('Date: ${displayDate(date)}',
                   style: pw.TextStyle(font: mono, fontSize: 9)),
-              if (invoice.dueDate != null)
-                pw.Text('Due date: ${displayDate(invoice.dueDate)}',
+              if (dueDate != null)
+                pw.Text('Due date: ${displayDate(dueDate)}',
                     style: pw.TextStyle(font: mono, fontSize: 9)),
             ],
           ),
@@ -77,8 +92,8 @@ Future<Uint8List> buildInvoicePdf({
   pw.Widget itemsTable() {
     final headers = ['#', 'Item', 'HSN', 'Qty', 'Price', 'Disc.', 'Taxable', 'GST', 'Tax'];
     final data = <List<String>>[];
-    for (var i = 0; i < invoice.lines.length; i++) {
-      final l = invoice.lines[i];
+    for (var i = 0; i < lines.length; i++) {
+      final l = lines[i];
       data.add([
         '${i + 1}',
         l.name,
@@ -117,19 +132,19 @@ Future<Uint8List> buildInvoicePdf({
           ]),
         );
     final rows = <pw.Widget>[
-      row('Subtotal', money(invoice.subtotal)),
-      if (invoice.discount > 0) row('Discount', '-${money(invoice.discount)}'),
-      row('Taxable value', money(invoice.taxable)),
-      if (invoice.igst > 0)
-        row('IGST', money(invoice.igst))
+      row('Subtotal', money(subtotal)),
+      if (discount > 0) row('Discount', '-${money(discount)}'),
+      row('Taxable value', money(taxable)),
+      if (igst > 0)
+        row('IGST', money(igst))
       else ...[
-        if (invoice.cgst > 0) row('CGST', money(invoice.cgst)),
-        if (invoice.sgst > 0) row('SGST', money(invoice.sgst)),
+        if (cgst > 0) row('CGST', money(cgst)),
+        if (sgst > 0) row('SGST', money(sgst)),
       ],
-      if (invoice.roundOff != 0)
-        row('Round off', '${invoice.roundOff > 0 ? '+' : '-'}${money(invoice.roundOff.abs())}'),
+      if (roundOff != 0)
+        row('Round off', '${roundOff > 0 ? '+' : '-'}${money(roundOff.abs())}'),
       pw.Divider(thickness: 0.7),
-      row('TOTAL', money(invoice.total), boldRow: true),
+      row('TOTAL', money(total), boldRow: true),
     ];
     return pw.Container(
       width: 230,
@@ -164,8 +179,8 @@ Future<Uint8List> buildInvoicePdf({
       itemsTable(),
       totals(),
       pw.SizedBox(height: 20),
-      if (invoice.notes != null && invoice.notes!.isNotEmpty)
-        pw.Text('Note: ${invoice.notes}',
+      if (notes != null && notes!.isNotEmpty)
+        pw.Text('Note: $notes',
             style: pw.TextStyle(font: mono, fontSize: 9, color: PdfColors.grey700)),
       pw.SizedBox(height: 24),
       pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
@@ -174,10 +189,10 @@ Future<Uint8List> buildInvoicePdf({
         pw.Padding(
           padding: const pw.EdgeInsets.only(right: 40),
           child: pw.Column(children: [
-            pw.Text('Amount due: ${money(invoice.outstanding.paise)}',
+            pw.Text('Amount due: ${money(outstandingPaise)}',
                 style: pw.TextStyle(font: bold, fontSize: 11, color: navy)),
             pw.SizedBox(height: 2),
-            pw.Text('in words: ${_amountInWords(invoice.outstanding.paise)}',
+            pw.Text('in words: ${_amountInWords(outstandingPaise)}',
                 style: pw.TextStyle(font: mono, fontSize: 7, color: PdfColors.grey600)),
           ]),
         ),
@@ -187,6 +202,74 @@ Future<Uint8List> buildInvoicePdf({
 
   return doc.save();
 }
+
+Future<Uint8List> buildInvoicePdf({
+  required Business business,
+  required Invoice invoice,
+}) => buildDocumentPdf(
+  business: business,
+  title: 'Tax Invoice',
+  number: invoice.number,
+  date: invoice.date,
+  dueDate: invoice.dueDate,
+  partyName: invoice.customerName,
+  lines: invoice.lines,
+  subtotal: invoice.subtotal,
+  discount: invoice.discount,
+  taxable: invoice.taxable,
+  igst: invoice.igst,
+  cgst: invoice.cgst,
+  sgst: invoice.sgst,
+  roundOff: invoice.roundOff,
+  total: invoice.total,
+  outstandingPaise: invoice.outstanding.paise,
+  notes: invoice.notes,
+);
+
+Future<Uint8List> buildQuotationPdf({
+  required Business business,
+  required Quotation quotation,
+}) => buildDocumentPdf(
+  business: business,
+  title: 'Estimate',
+  number: quotation.number,
+  date: quotation.date,
+  expiryDate: quotation.expiryDate, // Map dueDate to expiryDate in buildDocumentPdf
+  partyName: quotation.customerName,
+  lines: quotation.lines,
+  subtotal: quotation.subtotal,
+  discount: quotation.discount,
+  taxable: quotation.taxable,
+  igst: quotation.igst,
+  cgst: quotation.cgst,
+  sgst: quotation.sgst,
+  roundOff: 0,
+  total: quotation.total,
+  outstandingPaise: quotation.total,
+  notes: quotation.notes,
+);
+
+Future<Uint8List> buildReturnPdf({
+  required Business business,
+  required TransactionReturn ret,
+}) => buildDocumentPdf(
+  business: business,
+  title: ret.partyType == 'customer' ? 'Credit Note' : 'Debit Note',
+  number: ret.number,
+  date: ret.date,
+  partyName: ret.partyName,
+  lines: ret.lines,
+  subtotal: ret.subtotal,
+  discount: 0,
+  taxable: ret.taxable,
+  igst: 0,
+  cgst: 0,
+  sgst: 0,
+  roundOff: 0,
+  total: ret.total,
+  outstandingPaise: 0,
+  notes: ret.reason,
+);
 
 Future<void> printInvoice({
   required Business business,

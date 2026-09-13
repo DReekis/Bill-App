@@ -6,6 +6,7 @@ class Session extends ChangeNotifier {
   String? mobile;
   String? token;
   int? businessId;
+  String currentUser = 'Owner';
   bool _locked = true;
 
   static const _kMobile = 'session.mobile';
@@ -13,6 +14,7 @@ class Session extends ChangeNotifier {
   static const _kBusinessId = 'session.businessId';
   static const _kPinHash = 'session.pin';
   static const _kOnboarded = 'session.onboarded';
+  static const _kCurrentUser = 'session.currentUser';
 
   bool get hasPin => (_prefs?.getString(_kPinHash) ?? '').isNotEmpty;
   bool get locked => _locked && hasPin;
@@ -25,6 +27,7 @@ class Session extends ChangeNotifier {
     mobile = _prefs!.getString(_kMobile);
     token = _prefs!.getString(_kToken);
     businessId = _prefs!.getInt(_kBusinessId);
+    currentUser = _prefs!.getString(_kCurrentUser) ?? 'Owner';
     _locked = true; // stays locked only when a PIN exists — see `locked`
     notifyListeners();
   }
@@ -103,10 +106,19 @@ class Session extends ChangeNotifier {
     await _prefs!.remove(_kToken);
     await _prefs!.remove(_kBusinessId);
     await _prefs!.remove(_kOnboarded);
+    await _prefs!.remove(_kCurrentUser);
     mobile = null;
     token = null;
     businessId = null;
+    currentUser = 'Owner';
     _locked = false;
+    notifyListeners();
+  }
+
+  Future<void> switchUser(String name) async {
+    _prefs ??= await SharedPreferences.getInstance();
+    currentUser = name;
+    await _prefs!.setString(_kCurrentUser, name);
     notifyListeners();
   }
 }

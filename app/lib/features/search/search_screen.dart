@@ -4,7 +4,6 @@ import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
 import '../../data/repositories.dart';
-import '../../theme/stitch_theme.dart';
 import '../sales/invoice_detail_screen.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -50,8 +49,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 return ListTile(
                   leading: Icon(switch (r.type) {
                     'customer' => Icons.person_outline,
-                    'product' => Icons.inventory_2_outline,
-                    'invoice' => Icons.receipt_long_outline,
+                    'product' => Icons.inventory_2_outlined,
+                    'invoice' => Icons.receipt_long_outlined,
                     _ => Icons.search,
                   }),
                   title: Text(r.title),

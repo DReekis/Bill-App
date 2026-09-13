@@ -831,6 +831,270 @@ class Repository {
     return invoice;
   }
 
+  Future<int> finalizeQuotation(Quotation quote) async {
+    final db = await _database;
+    final id = await db.transaction<int>((txn) async {
+      final qId = await txn.insert('quotations', quote.toMap()..['business_id'] = quote.businessId ?? session.businessId);
+      for (final line in quote.lines) {
+        await txn.insert('quotation_items', line.toMap()..['quotation_id'] = qId);
+      }
+      return qId;
+    });
+    await _audit(quote.businessId ?? session.businessId!,
+        action: 'create', entity: 'quotation', entityId: id);
+    return id;
+  }
+
+  Future<List<Quotation>> quotations(int businessId) async {
+    final db = await _database;
+    final rows = await db.query('quotations',
+        where: 'business_id = ?', whereArgs: [businessId],
+        orderBy: 'date DESC, id DESC');
+    return rows.map(Quotation.fromMap).toList();
+  }
+
+  Future<Quotation?> quotation(int businessId, int id) async {
+    final db = await _database;
+    final rows = await db.query('quotations',
+        where: 'business_id = ? AND id = ?', whereArgs: [businessId, id], limit: 1);
+    if (rows.isEmpty) return null;
+    final quote = Quotation.fromMap(rows.first);
+    final items = await db.query('quotation_items',
+        where: 'quotation_id = ?', whereArgs: [id], orderBy: 'id ASC');
+    quote.lines = items.map(InvoiceLine.fromMap).toList();
+    return quote;
+  }
+
+  Future<int> finalizeReturn(TransactionReturn ret) async {
+    final db = await _database;
+    final id = await db.transaction<int>((txn) async {
+      final bizId = ret.businessId ?? session.businessId!;
+      final retId = await txn.insert('returns', ret.toMap()..['business_id'] = bizId);
+
+      for (final line in ret.lines) {
+        await txn.insert('return_items', line.toMap()..['return_id'] = retId);
+
+        if (line.productId != null) {
+          final product = await txn.query('products',
+              where: 'id = ?', whereArgs: [line.productId], limit: 1);
+          if (product.isNotEmpty) {
+            final current = (product.first['stock'] as num?)?.toDouble() ?? 0;
+            // Sales Return increases stock, Purchase Return decreases it
+            final change = ret.partyType == 'customer' ? line.quantity : -line.quantity;
+            final next = current + change;
+
+            await txn.update('products', {'stock': next},
+                where: 'id = ?', whereArgs: [line.productId]);
+
+            await txn.insert('stock_moves', {
+              'business_id': bizId,
+              'product_id': line.productId,
+              'change_qty': change,
+              'qty_after': next,
+              'move_type': ret.partyType == 'customer' ? 'sale_return' : 'purchase_return',
+              'ref_type': 'return',
+              'ref_id': retId,
+              'date': ret.date,
+            });
+          }
+        }
+      }
+
+      final partyAccount = ret.partyType == 'customer'
+          ? 'customer:${ret.partyId ?? 0}'
+          : 'supplier:${ret.partyId ?? 0}';
+
+      if (ret.partyType == 'customer') {
+        // Sales Return: Revenue down, Customer balance down
+        await txn.insert('ledger', {
+          'business_id': bizId,
+          'date': ret.date,
+          'account': 'income:sales_return',
+          'debit': ret.taxable,
+          'credit': 0,
+          'ref_type': 'return',
+          'ref_id': retId,
+          'note': 'Sales Return ${ret.number}',
+        });
+        if (ret.tax > 0) {
+          await txn.insert('ledger', {
+            'business_id': bizId,
+            'date': ret.date,
+            'account': 'gst:output',
+            'debit': ret.tax,
+            'credit': 0,
+            'ref_type': 'return',
+            'ref_id': retId,
+            'note': 'GST Reversal ${ret.number}',
+          });
+        }
+        await txn.insert('ledger', {
+          'business_id': bizId,
+          'date': ret.date,
+          'account': partyAccount,
+          'debit': 0,
+          'credit': ret.total,
+          'ref_type': 'return',
+          'ref_id': retId,
+          'note': 'Credit Note ${ret.number}',
+        });
+      } else {
+        // Purchase Return: Supplier balance down, Purchases down
+        await txn.insert('ledger', {
+          'business_id': bizId,
+          'date': ret.date,
+          'account': partyAccount,
+          'debit': ret.total,
+          'credit': 0,
+          'ref_type': 'return',
+          'ref_id': retId,
+          'note': 'Debit Note ${ret.number}',
+        });
+        await txn.insert('ledger', {
+          'business_id': bizId,
+          'date': ret.date,
+          'account': 'purchases',
+          'debit': 0,
+          'credit': ret.taxable + ret.tax,
+          'ref_type': 'return',
+          'ref_id': retId,
+          'note': 'Purchase Return ${ret.number}',
+        });
+      }
+
+      return retId;
+    });
+    await _audit(ret.businessId ?? session.businessId!,
+        action: 'create', entity: 'return', entityId: id);
+    return id;
+  }
+
+  Future<List<TransactionReturn>> returns(int businessId) async {
+    final db = await _database;
+    final rows = await db.query('returns',
+        where: 'business_id = ?', whereArgs: [businessId],
+        orderBy: 'date DESC, id DESC');
+    return rows.map(TransactionReturn.fromMap).toList();
+  }
+
+  Future<TransactionReturn?> returnDetails(int businessId, int id) async {
+    final db = await _database;
+    final rows = await db.query('returns',
+        where: 'business_id = ? AND id = ?', whereArgs: [businessId, id], limit: 1);
+    if (rows.isEmpty) return null;
+    final ret = TransactionReturn.fromMap(rows.first);
+    final items = await db.query('return_items',
+        where: 'return_id = ?', whereArgs: [id], orderBy: 'id ASC');
+    ret.lines = items.map(InvoiceLine.fromMap).toList();
+    return ret;
+  }
+
+  Future<void> markQuotationConverted(int businessId, int id, int invoiceId) async {
+    final db = await _database;
+    await db.update('quotations', {
+      'status': 'Converted',
+      'notes': 'Converted to Invoice ID: $invoiceId'
+    }, where: 'business_id = ? AND id = ?', whereArgs: [businessId, id]);
+  }
+
+  Future<List<SearchResult>> globalSearch(int businessId, String query) async {
+    if (query.trim().isEmpty) return [];
+    final db = await _database;
+    final List<SearchResult> results = [];
+    final q = '%$query%';
+
+    final custs = await db.query('customers',
+        where: 'business_id = ? AND (name LIKE ? OR phone LIKE ?)',
+        whereArgs: [businessId, q, q], limit: 5);
+    results.addAll(custs.map((r) => SearchResult(
+        type: 'customer', id: r['id'] as int, title: r['name'] as String, subtitle: r['phone'] as String?)));
+
+    final prods = await db.query('products',
+        where: 'business_id = ? AND (name LIKE ? OR sku LIKE ? OR barcode LIKE ?)',
+        whereArgs: [businessId, q, q, q], limit: 5);
+    results.addAll(prods.map((r) => SearchResult(
+        type: 'product', id: r['id'] as int, title: r['name'] as String, subtitle: 'Stock: ${r['stock']}')));
+
+    final invs = await db.query('invoices',
+        where: 'business_id = ? AND (number LIKE ? OR customer_name LIKE ?)',
+        whereArgs: [businessId, q, q], limit: 5);
+    results.addAll(invs.map((r) => SearchResult(
+        type: 'invoice', id: r['id'] as int, title: r['number'] as String, subtitle: r['customer_name'] as String?, amount: r['total'] as int?)));
+
+    return results;
+  }
+
+  Future<Map<String, int>> balanceSheet(int businessId) async {
+    final db = await _database;
+    final Map<String, int> sheet = {};
+
+    // Assets
+    final cash = await db.rawQuery("SELECT COALESCE(SUM(debit - credit), 0) AS s FROM ledger WHERE business_id = ? AND account = 'cash'", [businessId]);
+    final bank = await db.rawQuery("SELECT COALESCE(SUM(debit - credit), 0) AS s FROM ledger WHERE business_id = ? AND account = 'bank'", [businessId]);
+    final receivables = await db.rawQuery("SELECT COALESCE(SUM(debit - credit), 0) AS s FROM ledger WHERE business_id = ? AND account LIKE 'customer:%'", [businessId]);
+    final stock = await db.rawQuery("SELECT COALESCE(SUM(stock * cost_average), 0) AS s FROM products WHERE business_id = ?", [businessId]);
+
+    sheet['cash'] = (cash.first['s'] as num).toInt();
+    sheet['bank'] = (bank.first['s'] as num).toInt();
+    sheet['receivables'] = (receivables.first['s'] as num).toInt();
+    sheet['stock'] = (stock.first['s'] as num).toInt();
+    sheet['totalAssets'] = sheet['cash']! + sheet['bank']! + sheet['receivables']! + sheet['stock']!;
+
+    // Liabilities
+    final payables = await db.rawQuery("SELECT COALESCE(SUM(credit - debit), 0) AS s FROM ledger WHERE business_id = ? AND account LIKE 'supplier:%'", [businessId]);
+    sheet['payables'] = (payables.first['s'] as num).toInt();
+    sheet['totalLiabilities'] = sheet['payables']!;
+
+    // Equity (Net Worth)
+    sheet['equity'] = sheet['totalAssets']! - sheet['totalLiabilities']!;
+
+    return sheet;
+  }
+
+  Future<Map<String, int>> profitAndLossReport(int businessId, String fromDate, String toDate) async {
+    final db = await _database;
+    Future<int> sumLedger(String account, {bool isDebit = true}) async {
+      final col = isDebit ? 'debit - credit' : 'credit - debit';
+      final rows = await db.rawQuery(
+          'SELECT COALESCE(SUM($col), 0) AS s FROM ledger WHERE business_id = ? AND account = ? AND date >= ? AND date <= ?',
+          [businessId, account, fromDate, toDate]);
+      return (rows.first['s'] as num).toInt();
+    }
+
+    final sales = await db.rawQuery(
+        "SELECT COALESCE(SUM(credit - debit), 0) AS s FROM ledger WHERE business_id = ? AND account = 'income:sales' AND date >= ? AND date <= ?",
+        [businessId, fromDate, toDate]);
+    final salesReturn = await sumLedger('income:sales_return', isDebit: true);
+    final cogs = await sumLedger('cogs', isDebit: true);
+
+    final rows = await db.rawQuery(
+        "SELECT category, SUM(amount) AS s FROM expenses WHERE business_id = ? AND date >= ? AND date <= ? AND category != 'Purchase' GROUP BY category",
+        [businessId, fromDate, toDate]);
+    final Map<String, int> expenseMap = {};
+    int totalExpenses = 0;
+    for (final r in rows) {
+      final cat = r['category'] as String;
+      final amt = (r['s'] as num).toInt();
+      expenseMap[cat] = amt;
+      totalExpenses += amt;
+    }
+
+    final netSales = (sales.first['s'] as num).toInt() - salesReturn;
+    final grossProfit = netSales - cogs;
+    final netProfit = grossProfit - totalExpenses;
+
+    return {
+      'grossSales': (sales.first['s'] as num).toInt(),
+      'salesReturn': salesReturn,
+      'netSales': netSales,
+      'cogs': cogs,
+      'grossProfit': grossProfit,
+      ...expenseMap,
+      'totalExpenses': totalExpenses,
+      'netProfit': netProfit,
+    };
+  }
+
   Future<List<Payment>> payments(int businessId) async {
     final db = await _database;
     final rows = await db.query('payments',
@@ -945,6 +1209,7 @@ class Repository {
 
     final salesToday = await sumOf('invoices', 'total', 'business_id = ? AND date = ?', [businessId, date]);
     final taxableToday = await sumOf('invoices', 'taxable', 'business_id = ? AND date = ?', [businessId, date]);
+    final returnsToday = await sumOf('returns', 'taxable', "business_id = ? AND date = ? AND party_type = 'customer'", [businessId, date]);
     final purchasesToday = await sumOf('expenses', 'amount', "business_id = ? AND date = ? AND category = 'Purchase'", [businessId, date]);
     final expensesToday = await sumOf('expenses', 'amount', "business_id = ? AND date = ? AND category != 'Purchase'", [businessId, date]);
     final cogsToday = await sumOf('ledger', 'debit', "business_id = ? AND date = ? AND account = 'cogs'", [businessId, date]);
@@ -964,7 +1229,8 @@ class Repository {
     final receivablePaise = receivables.isEmpty ? 0 : (receivables.first['s'] as num).toInt();
     return {
       'salesToday': salesToday,
-      'taxableToday': taxableToday,
+      'taxableToday': taxableToday - returnsToday,
+      'returnsToday': returnsToday,
       'purchasesToday': purchasesToday,
       'expensesToday': expensesToday,
       'cogsToday': cogsToday,
@@ -975,6 +1241,37 @@ class Repository {
       'bank': bank.isEmpty ? 0 : (bank.first['s'] as num).toInt(),
       'stockValue': stockValue.isEmpty ? 0 : (stockValue.first['s'] as num).toInt(),
     };
+  }
+
+  Future<List<double>> dailyPerformance(int businessId, String metric, {int days = 7}) async {
+    final db = await _database;
+    final List<double> data = [];
+    final now = DateTime.now();
+    for (var i = days - 1; i >= 0; i--) {
+      final d = isoDate(now.subtract(Duration(days: i)));
+      if (metric == 'sales') {
+        final rows = await db.rawQuery(
+            'SELECT COALESCE(SUM(total), 0) AS s FROM invoices WHERE business_id = ? AND date = ?',
+            [businessId, d]);
+        data.add((rows.first['s'] as num).toDouble() / 100);
+      } else if (metric == 'profit') {
+        final rev = await db.rawQuery(
+            'SELECT COALESCE(SUM(taxable), 0) AS s FROM invoices WHERE business_id = ? AND date = ?',
+            [businessId, d]);
+        final ret = await db.rawQuery(
+            "SELECT COALESCE(SUM(taxable), 0) AS s FROM returns WHERE business_id = ? AND date = ? AND party_type = 'customer'",
+            [businessId, d]);
+        final cogs = await db.rawQuery(
+            "SELECT COALESCE(SUM(debit), 0) AS s FROM ledger WHERE business_id = ? AND date = ? AND account = 'cogs'",
+            [businessId, d]);
+        final exp = await db.rawQuery(
+            "SELECT COALESCE(SUM(amount), 0) AS s FROM expenses WHERE business_id = ? AND date = ? AND category != 'Purchase'",
+            [businessId, d]);
+        final profit = (rev.first['s'] as num) - (ret.first['s'] as num) - (cogs.first['s'] as num) - (exp.first['s'] as num);
+        data.add(profit.toDouble() / 100);
+      }
+    }
+    return data;
   }
 
   Future<int> lowStockCount(int businessId) async {

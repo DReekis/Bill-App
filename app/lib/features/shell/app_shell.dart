@@ -6,7 +6,6 @@ import '../../sync/sync_engine.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../customers/customer_form.dart';
-import '../customers/parties_tab.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../expenses/expense_form.dart';
 import '../inventory/product_form.dart';

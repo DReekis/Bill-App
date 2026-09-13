@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
+import '../../data/app_database.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import 'package:provider/provider.dart';

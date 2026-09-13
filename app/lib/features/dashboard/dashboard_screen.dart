@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/dates.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../sync/sync_engine.dart';
 import '../../theme/stitch_theme.dart';
-import '../../utils/widgets.dart';
 import '../customers/customer_form.dart';
 import '../expenses/expense_form.dart';
 import '../inventory/product_form.dart';
 import '../payments/payment_form.dart';
 import '../purchases/purchase_builder_screen.dart';
 import '../sales/invoice_builder_screen.dart';
+import '../sales/quotation_builder_screen.dart';
+import '../suppliers/supplier_form.dart';
+import '../search/search_screen.dart';
+import '../reports/reports_menu_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -26,6 +28,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, int>? totals;
   List<Invoice>? recent;
   Business? business;
+  List<double> salesHistory = [];
+  List<double> profitHistory = [];
   int low = 0;
   int out = 0;
 
@@ -39,6 +43,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final biz = await repo.getBusiness(businessId);
     final lowCount = await repo.lowStockCount(businessId);
     final outCount = await repo.outOfStockCount(businessId);
+    final sHist = await repo.dailyPerformance(businessId, 'sales', days: 7);
+    final pHist = await repo.dailyPerformance(businessId, 'profit', days: 7);
+
     await SyncEngine.instance.refreshPending();
     if (!mounted) return;
     setState(() {
@@ -47,6 +54,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       business = biz;
       low = lowCount;
       out = outCount;
+      salesHistory = sHist;
+      profitHistory = pHist;
     });
   }
 
@@ -80,8 +89,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .push(MaterialPageRoute(
                 builder: (_) => const PurchaseBuilderScreen()))
             .then((_) => _load());
+      case 'Estimate':
+        nav
+            .push(MaterialPageRoute(
+                builder: (_) => const QuotationBuilderScreen()))
+            .then((_) => _load());
       case 'Reports':
-        showAppMessage(context, 'Opening Reports...');
+        nav.push(MaterialPageRoute(builder: (_) => const ReportsMenuScreen()));
       default:
         showModalBottomSheet<void>(
             context: context,
@@ -114,6 +128,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       profitToday: profitToday,
       low: low,
       out: out,
+      salesHistory: salesHistory,
+      profitHistory: profitHistory,
       onQuick: _quick,
       onRefresh: _load,
     );
@@ -127,6 +143,8 @@ class _ReferenceDashboard extends StatelessWidget {
     required this.profitToday,
     required this.low,
     required this.out,
+    required this.salesHistory,
+    required this.profitHistory,
     required this.onQuick,
     required this.onRefresh,
   });
@@ -136,6 +154,8 @@ class _ReferenceDashboard extends StatelessWidget {
   final int profitToday;
   final int low;
   final int out;
+  final List<double> salesHistory;
+  final List<double> profitHistory;
   final ValueChanged<String> onQuick;
   final Future<void> Function() onRefresh;
 
@@ -191,7 +211,7 @@ class _ReferenceDashboard extends StatelessWidget {
             ),
             const Spacer(),
             IconButton(
-                onPressed: () {},
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen())),
                 icon: const Icon(Icons.search_rounded, size: 26, color: StitchColors.textPrimary)),
             Stack(children: [
               IconButton(
@@ -271,15 +291,17 @@ class _ReferenceDashboard extends StatelessWidget {
             Expanded(
                 child: _OverviewCard(
                     label: 'Revenue',
-                    value: '₹12.4L',
-                    change: '8.2% vs last month',
+                    value: formatPaise(totals?['taxableToday'] ?? 0),
+                    change: '7-day trend',
+                    data: salesHistory,
                     color: const Color(0xFF00C853))),
             const SizedBox(width: 16),
             Expanded(
                 child: _OverviewCard(
                     label: 'Net Profit',
-                    value: '₹3.2L',
-                    change: '5.4% vs last month',
+                    value: formatPaise(profitToday),
+                    change: '7-day trend',
+                    data: profitHistory,
                     color: const Color(0xFF00C853))),
           ]),
           const SizedBox(height: 32),
@@ -298,7 +320,7 @@ class _ReferenceDashboard extends StatelessWidget {
               _ReferenceAction(Icons.shopping_cart_outlined, 'Create Sale', 'New Sale', onQuick, primary: true),
               _ReferenceAction(Icons.shopping_bag_outlined, 'Add Purchase', 'Purchase', onQuick),
               _ReferenceAction(Icons.inventory_2_outlined, 'Add Product', 'Product', onQuick),
-              _ReferenceAction(Icons.receipt_long_outlined, 'Create Invoice', 'New Sale', onQuick),
+              _ReferenceAction(Icons.description_outlined, 'Estimate', 'Estimate', onQuick),
               _ReferenceAction(Icons.arrow_downward_rounded, 'Payment In', 'Payment In', onQuick),
               _ReferenceAction(Icons.arrow_upward_rounded, 'Payment Out', 'Payment Out', onQuick),
               _ReferenceAction(Icons.pie_chart_outline_rounded, 'Reports', 'Reports', onQuick),
@@ -408,8 +430,14 @@ class _SnapshotValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Expanded(
           child: Column(children: [
-        Text(label,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12, fontWeight: FontWeight.w500)),
+                            const Text(
+                              'Sales',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                              ),
+                            ),
         const SizedBox(height: 8),
         Text(value,
             style: const TextStyle(
@@ -440,9 +468,10 @@ class _SnapshotValue extends StatelessWidget {
 
 class _OverviewCard extends StatelessWidget {
   const _OverviewCard(
-      {required this.label, required this.value, required this.change, required this.color});
+      {required this.label, required this.value, required this.change, required this.color, required this.data});
   final String label, value, change;
   final Color color;
+  final List<double> data;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -481,16 +510,19 @@ class _OverviewCard extends StatelessWidget {
                   fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(height: 12),
-        SizedBox(height: 40, width: double.infinity, child: CustomPaint(painter: _SparklinePainter(color: color))),
+        SizedBox(height: 40, width: double.infinity, child: CustomPaint(painter: _SparklinePainter(color: color, data: data))),
       ]));
 }
 
 class _SparklinePainter extends CustomPainter {
-  _SparklinePainter({required this.color});
+  _SparklinePainter({required this.color, required this.data});
   final Color color;
+  final List<double> data;
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -504,11 +536,26 @@ class _SparklinePainter extends CustomPainter {
         colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0.0)],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
-    final path = Path()
-      ..moveTo(0, size.height * 0.8)
-      ..quadraticBezierTo(size.width * 0.2, size.height * 0.9, size.width * 0.3, size.height * 0.6)
-      ..quadraticBezierTo(size.width * 0.45, size.height * 0.3, size.width * 0.6, size.height * 0.7)
-      ..quadraticBezierTo(size.width * 0.8, size.height * 0.9, size.width, size.height * 0.2);
+    final path = Path();
+    final double stepX = size.width / (data.length - 1);
+
+    double maxVal = data.reduce((a, b) => a > b ? a : b);
+    double minVal = data.reduce((a, b) => a < b ? a : b);
+    if (maxVal == minVal) {
+      maxVal += 1;
+      minVal -= 1;
+    }
+    final double range = maxVal - minVal;
+
+    for (var i = 0; i < data.length; i++) {
+      final x = i * stepX;
+      final y = size.height - ((data[i] - minVal) / range * size.height * 0.8 + size.height * 0.1);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
 
     final fillPath = Path.from(path)
       ..lineTo(size.width, size.height)
@@ -520,7 +567,7 @@ class _SparklinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
 class _ReferenceAction extends StatelessWidget {

@@ -242,6 +242,81 @@ class AppDatabase {
     ''');
 
     await db.execute('''
+      CREATE TABLE quotations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER,
+        number TEXT NOT NULL,
+        customer_id INTEGER,
+        customer_name TEXT,
+        date TEXT NOT NULL,
+        expiry_date TEXT,
+        gst_type TEXT DEFAULT 'gst',
+        subtotal INTEGER DEFAULT 0,
+        discount INTEGER DEFAULT 0,
+        taxable INTEGER DEFAULT 0,
+        cgst INTEGER DEFAULT 0,
+        sgst INTEGER DEFAULT 0,
+        igst INTEGER DEFAULT 0,
+        total INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'Open',
+        notes TEXT
+      )
+    ''');
+
+    await db.execute(
+        'CREATE UNIQUE INDEX idx_quotations_number ON quotations (business_id, number)');
+
+    await db.execute('''
+      CREATE TABLE quotation_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        quotation_id INTEGER NOT NULL,
+        product_id INTEGER,
+        name TEXT,
+        hsn TEXT,
+        gst_rate INTEGER DEFAULT 0,
+        quantity REAL DEFAULT 0,
+        price INTEGER DEFAULT 0,
+        discount INTEGER DEFAULT 0,
+        taxable INTEGER DEFAULT 0,
+        tax INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE returns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER,
+        number TEXT NOT NULL,
+        invoice_id INTEGER,
+        party_id INTEGER,
+        party_name TEXT,
+        party_type TEXT,
+        date TEXT NOT NULL,
+        subtotal INTEGER DEFAULT 0,
+        taxable INTEGER DEFAULT 0,
+        tax INTEGER DEFAULT 0,
+        total INTEGER DEFAULT 0,
+        reason TEXT,
+        status TEXT DEFAULT 'Finalized'
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE return_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_id INTEGER NOT NULL,
+        product_id INTEGER,
+        name TEXT,
+        hsn TEXT,
+        gst_rate INTEGER DEFAULT 0,
+        quantity REAL DEFAULT 0,
+        price INTEGER DEFAULT 0,
+        taxable INTEGER DEFAULT 0,
+        tax INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
       CREATE TABLE sync_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         business_id INTEGER,
@@ -287,6 +362,10 @@ class AppDatabase {
     await db.delete('customers');
     await db.delete('suppliers');
     await db.delete('audit_log');
+    await db.delete('quotations');
+    await db.delete('quotation_items');
+    await db.delete('returns');
+    await db.delete('return_items');
     await db.delete('businesses');
   }
 }
