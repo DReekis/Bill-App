@@ -4,13 +4,7 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="19504417-cf6f-455d-b9af-3bfa2290415d" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/app/test/app_gate_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/test/app_gate_test.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/test/core/billing_engine_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/test/core/billing_engine_test.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/test/core/money_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/test/core/money_test.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/test/data/repository_db_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/test/data/repository_db_test.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/test/widget_test.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/test/widget_test.dart" afterDir="false" />
-    </list>
+    <list default="true" id="19504417-cf6f-455d-b9af-3bfa2290415d" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -32,23 +26,26 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
-    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
-    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
-    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;E:/Bill App&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;templates.modelproviders.configurable&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "git-widget-placeholder": "main",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "E:/Bill App",
+    "project.structure.last.edited": "Project",
+    "project.structure.proportion": "0.0",
+    "project.structure.side.proportion": "0.0",
+    "settings.editor.selected.configurable": "com.android.studio.ml.McpConfigurable"
   }
-}</component>
+}]]></component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
       <changelist id="19504417-cf6f-455d-b9af-3bfa2290415d" name="Changes" comment="" />
