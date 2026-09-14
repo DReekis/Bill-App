@@ -42,23 +42,23 @@ class _PLReportScreenState extends State<PLReportScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _Header('Operating Revenue'),
-                _Row('Gross Sales', data!['grossSales']!),
-                _Row('Sales Returns', -(data!['salesReturn']!), isNegative: true),
+                _buildHeader('Operating Revenue'),
+                _buildRow('Gross Sales', data!['grossSales']!),
+                _buildRow('Sales Returns', -(data!['salesReturn']!), isNegative: true),
                 const Divider(),
-                _Row('Net Revenue', data!['netSales']!, isBold: true),
+                _buildRow('Net Revenue', data!['netSales']!, isBold: true),
                 const SizedBox(height: 24),
-                _Header('Cost of Goods Sold'),
-                _Row('COGS', data!['cogs']!, isNegative: true),
+                _buildHeader('Cost of Goods Sold'),
+                _buildRow('COGS', data!['cogs']!, isNegative: true),
                 const Divider(),
-                _Row('GROSS PROFIT', data!['grossProfit']!, isBold: true, color: StitchColors.primary),
+                _buildRow('GROSS PROFIT', data!['grossProfit']!, isBold: true, color: StitchColors.primary),
                 const SizedBox(height: 32),
-                _Header('Operating Expenses'),
+                _buildHeader('Operating Expenses'),
                 ...data!.entries
                     .where((e) => !['grossSales', 'salesReturn', 'netSales', 'cogs', 'grossProfit', 'totalExpenses', 'netProfit'].contains(e.key))
-                    .map((e) => _Row(e.key, e.value)),
+                    .map((e) => _buildRow(e.key, e.value)),
                 const Divider(),
-                _Row('Total Expenses', data!['totalExpenses']!, isBold: true),
+                _buildRow('Total Expenses', data!['totalExpenses']!, isBold: true),
                 const SizedBox(height: 40),
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -79,12 +79,12 @@ class _PLReportScreenState extends State<PLReportScreen> {
     );
   }
 
-  Widget _Header(String title) => Padding(
+  Widget _buildHeader(String title) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: StitchColors.textSecondary)),
       );
 
-  Widget _Row(String label, int value, {bool isBold = false, bool isNegative = false, Color? color}) => Padding(
+  Widget _buildRow(String label, int value, {bool isBold = false, bool isNegative = false, Color? color}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,

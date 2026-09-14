@@ -179,7 +179,7 @@ Future<Uint8List> buildDocumentPdf({
       itemsTable(),
       totals(),
       pw.SizedBox(height: 20),
-      if (notes != null && notes!.isNotEmpty)
+      if (notes != null && notes.isNotEmpty)
         pw.Text('Note: $notes',
             style: pw.TextStyle(font: mono, fontSize: 9, color: PdfColors.grey700)),
       pw.SizedBox(height: 24),
@@ -234,7 +234,7 @@ Future<Uint8List> buildQuotationPdf({
   title: 'Estimate',
   number: quotation.number,
   date: quotation.date,
-  expiryDate: quotation.expiryDate, // Map dueDate to expiryDate in buildDocumentPdf
+  dueDate: quotation.expiryDate, // Map dueDate to expiryDate in buildDocumentPdf
   partyName: quotation.customerName,
   lines: quotation.lines,
   subtotal: quotation.subtotal,

@@ -37,18 +37,18 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _SectionHeader('ASSETS'),
-                _Row('Cash in Hand', data!['cash']!),
-                _Row('Bank Accounts', data!['bank']!),
-                _Row('Inventory (Stock Value)', data!['stock']!),
-                _Row('Sundry Debtors (Receivables)', data!['receivables']!),
+                _buildSectionHeader('ASSETS'),
+                _buildRow('Cash in Hand', data!['cash']!),
+                _buildRow('Bank Accounts', data!['bank']!),
+                _buildRow('Inventory (Stock Value)', data!['stock']!),
+                _buildRow('Sundry Debtors (Receivables)', data!['receivables']!),
                 const Divider(thickness: 1.5, color: StitchColors.primary),
-                _Row('Total Assets', data!['totalAssets']!, isTotal: true),
+                _buildRow('Total Assets', data!['totalAssets']!, isTotal: true),
                 const SizedBox(height: 32),
-                _SectionHeader('LIABILITIES'),
-                _Row('Sundry Creditors (Payables)', data!['payables']!),
+                _buildSectionHeader('LIABILITIES'),
+                _buildRow('Sundry Creditors (Payables)', data!['payables']!),
                 const Divider(thickness: 1.5, color: StitchColors.error),
-                _Row('Total Liabilities', data!['totalLiabilities']!, isTotal: true),
+                _buildRow('Total Liabilities', data!['totalLiabilities']!, isTotal: true),
                 const SizedBox(height: 32),
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -70,12 +70,12 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
     );
   }
 
-  Widget _SectionHeader(String title) => Padding(
+  Widget _buildSectionHeader(String title) => Padding(
         padding: const EdgeInsets.only(bottom: 12, top: 8),
         child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: StitchColors.textSecondary, letterSpacing: 1.2)),
       );
 
-  Widget _Row(String label, int value, {bool isTotal = false}) => Padding(
+  Widget _buildRow(String label, int value, {bool isTotal = false}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
