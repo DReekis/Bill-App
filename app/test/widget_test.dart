@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:pricepilot_bill/core/money.dart';
-import 'package:pricepilot_bill/utils/widgets.dart';
+import 'package:billket/core/money.dart';
+import 'package:billket/utils/widgets.dart';
 
 void main() {
   testWidgets('MoneyText renders Indian-formatted amount', (WidgetTester tester) async {

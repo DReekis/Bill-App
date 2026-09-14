@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:pricepilot_bill/core/billing_engine.dart';
-import 'package:pricepilot_bill/core/money.dart';
+import 'package:billket/core/billing_engine.dart';
+import 'package:billket/core/money.dart';
 
 void main() {
   group('BillingEngine.calculateLine', () {
