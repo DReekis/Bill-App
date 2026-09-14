@@ -172,7 +172,7 @@ Future<Uint8List> buildDocumentPdf({
       pw.SizedBox(height: 14),
     ]),
     footer: (context) => pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-      pw.Text('Raised using PricePilot Bill', style: pw.TextStyle(font: mono, fontSize: 8, color: PdfColors.grey600)),
+      pw.Text('Raised using Billket', style: pw.TextStyle(font: mono, fontSize: 8, color: PdfColors.grey600)),
       pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: pw.TextStyle(font: mono, fontSize: 8, color: PdfColors.grey600)),
     ]),
     build: (context) => [

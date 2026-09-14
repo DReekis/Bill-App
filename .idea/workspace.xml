@@ -6,9 +6,16 @@
   <component name="ChangeListManager">
     <list default="true" id="19504417-cf6f-455d-b9af-3bfa2290415d" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/reports/balance_sheet_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/reports/balance_sheet_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/reports/pl_report_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/reports/pl_report_screen.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/.dart_tool/package_config.json" beforeDir="false" afterPath="$PROJECT_DIR$/app/.dart_tool/package_config.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/.dart_tool/package_graph.json" beforeDir="false" afterPath="$PROJECT_DIR$/app/.dart_tool/package_graph.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/android/app/src/main/AndroidManifest.xml" beforeDir="false" afterPath="$PROJECT_DIR$/app/android/app/src/main/AndroidManifest.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/android/gradle.properties" beforeDir="false" afterPath="$PROJECT_DIR$/app/android/gradle.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/build/c4619ef6237c489ba80fad479872df87/_composite.stamp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/build/c4619ef6237c489ba80fad479872df87/gen_dart_plugin_registrant.stamp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/build/c4619ef6237c489ba80fad479872df87/gen_localizations.stamp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/lib/features/more/more_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/more/more_screen.dart" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/lib/utils/pdf_invoice.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/utils/pdf_invoice.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/pubspec.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/app/pubspec.yaml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

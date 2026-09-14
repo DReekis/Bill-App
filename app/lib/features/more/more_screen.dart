@@ -99,7 +99,7 @@ class _MoreTabState extends State<MoreTab> {
       const SizedBox(height: 18),
       const Padding(
         padding: EdgeInsets.symmetric(horizontal: 4, vertical: 30),
-        child: Text('PricePilot Bill • local-first', style: TextStyle(fontSize: 11, color: StitchColors.textTertiary)),
+        child: Text('Billket • local-first', style: TextStyle(fontSize: 11, color: StitchColors.textTertiary)),
       ),
     ]);
   }
@@ -298,8 +298,8 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
         await temp.writeAsBytes(await file.readAsBytes());
         await Share.shareXFiles(
           [XFile(temp.path, mimeType: 'application/octet-stream', name: 'ledger_pilot_backup.db')],
-          subject: 'PricePilot Bill backup',
-          text: 'Your PricePilot Bill data backup. Keep it safe.',
+          subject: 'Billket backup',
+          text: 'Your Billket data backup. Keep it safe.',
         );
       } else {
         if (mounted) showAppMessage(context, 'Database file not found yet.', error: true);

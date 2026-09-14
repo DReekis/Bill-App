@@ -698,7 +698,7 @@
       "languageVersion": "3.2"
     },
     {
-      "name": "pricepilot_bill",
+      "name": "billket",
       "rootUri": "../",
       "packageUri": "lib/",
       "languageVersion": "3.0"

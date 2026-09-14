@@ -1,10 +1,10 @@
 {
   "roots": [
-    "pricepilot_bill"
+    "billket"
   ],
   "packages": [
     {
-      "name": "pricepilot_bill",
+      "name": "billket",
       "version": "0.0.0",
       "dependencies": [
         "auto_size_text",

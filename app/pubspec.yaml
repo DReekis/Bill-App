@@ -1,5 +1,5 @@
-name: pricepilot_bill
-description: PricePilot Bill business billing application.
+name: billket
+description: Billket business billing application.
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
