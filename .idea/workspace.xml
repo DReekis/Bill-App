@@ -5,28 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="19504417-cf6f-455d-b9af-3bfa2290415d" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/app/lib/features/more/import_screen.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/lib/features/purchases/purchase_order_builder_screen.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/lib/features/reports/bank_transfer_form.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/lib/features/sales/delivery_challan_builder_screen.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/lib/features/sales/sales_order_builder_screen.dart" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/lib/features/shell/transaction_history_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/.dart_tool/package_config.json" beforeDir="false" afterPath="$PROJECT_DIR$/app/.dart_tool/package_config.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/.dart_tool/package_graph.json" beforeDir="false" afterPath="$PROJECT_DIR$/app/.dart_tool/package_graph.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/core/models.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/core/models.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/core/session.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/core/session.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/data/app_database.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/data/app_database.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/data/repositories.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/data/repositories.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/dashboard/dashboard_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/dashboard/dashboard_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/inventory/product_form.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/inventory/product_form.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/more/more_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/more/more_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/reports/reports_menu_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/reports/reports_menu_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/features/sales/invoice_builder_screen.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/features/sales/invoice_builder_screen.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/lib/utils/widgets.dart" beforeDir="false" afterPath="$PROJECT_DIR$/app/lib/utils/widgets.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/pubspec.lock" beforeDir="false" afterPath="$PROJECT_DIR$/app/pubspec.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/pubspec.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/app/pubspec.yaml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
