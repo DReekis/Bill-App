@@ -48,14 +48,24 @@ class AppDatabase {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         owner_name TEXT,
-        gstin TEXT,
+        business_phone TEXT,
+        email TEXT,
+        address TEXT,
         state TEXT,
         city TEXT,
+        pin_code TEXT,
+        country TEXT DEFAULT 'India',
+        logo TEXT,
+        signature TEXT,
+        website TEXT,
+        gstin TEXT,
+        pan TEXT,
         industry TEXT,
-        invoice_prefix TEXT DEFAULT 'INV',
         tax_registered INTEGER DEFAULT 0,
-        allow_negative_stock INTEGER DEFAULT 0,
+        composition_scheme INTEGER DEFAULT 0,
+        invoice_prefix TEXT DEFAULT 'INV',
         invoice_sequence INTEGER DEFAULT 0,
+        allow_negative_stock INTEGER DEFAULT 0,
         fy_start TEXT DEFAULT '2026-04-01',
         currency TEXT DEFAULT 'INR'
       )
@@ -67,15 +77,22 @@ class AppDatabase {
         business_id INTEGER,
         name TEXT NOT NULL,
         phone TEXT,
+        whatsapp TEXT,
         email TEXT,
         billing_address TEXT,
         shipping_address TEXT,
         gstin TEXT,
+        pan TEXT,
         state TEXT,
+        city TEXT,
+        pin TEXT,
         opening_balance INTEGER DEFAULT 0,
         credit_limit INTEGER DEFAULT 0,
         payment_terms INTEGER DEFAULT 0,
+        customer_type TEXT DEFAULT 'Retail',
+        customer_group TEXT,
         notes TEXT,
+        loyalty_points INTEGER DEFAULT 0,
         inactive INTEGER DEFAULT 0
       )
     ''');
@@ -86,12 +103,15 @@ class AppDatabase {
         business_id INTEGER,
         name TEXT NOT NULL,
         phone TEXT,
+        whatsapp TEXT,
         email TEXT,
         address TEXT,
         gstin TEXT,
+        pan TEXT,
         state TEXT,
         opening_balance INTEGER DEFAULT 0,
         credit_period INTEGER DEFAULT 0,
+        supplier_group TEXT,
         notes TEXT,
         inactive INTEGER DEFAULT 0
       )
@@ -103,7 +123,9 @@ class AppDatabase {
         business_id INTEGER,
         name TEXT NOT NULL,
         sku TEXT,
+        item_code TEXT,
         category TEXT,
+        brand TEXT,
         hsn TEXT,
         barcode TEXT,
         unit TEXT DEFAULT 'pc',
@@ -111,11 +133,17 @@ class AppDatabase {
         purchase_price INTEGER DEFAULT 0,
         sale_price INTEGER DEFAULT 0,
         wholesale_price INTEGER DEFAULT 0,
+        retail_price INTEGER DEFAULT 0,
         mrp INTEGER DEFAULT 0,
+        min_selling_price INTEGER DEFAULT 0,
         stock INTEGER DEFAULT 0,
         cost_average INTEGER DEFAULT 0,
         low_stock_threshold INTEGER DEFAULT 5,
         tax_included INTEGER DEFAULT 0,
+        has_batch INTEGER DEFAULT 0,
+        has_serial INTEGER DEFAULT 0,
+        image_path TEXT,
+        description TEXT,
         inactive INTEGER DEFAULT 0
       )
     ''');
@@ -317,6 +345,131 @@ class AppDatabase {
     ''');
 
     await db.execute('''
+      CREATE TABLE sales_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER,
+        number TEXT NOT NULL,
+        customer_id INTEGER,
+        customer_name TEXT,
+        date TEXT NOT NULL,
+        due_date TEXT,
+        status TEXT DEFAULT 'Pending',
+        total INTEGER DEFAULT 0,
+        notes TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE sales_order_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL,
+        product_id INTEGER,
+        name TEXT,
+        quantity REAL DEFAULT 0,
+        price INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE purchase_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER,
+        number TEXT NOT NULL,
+        supplier_id INTEGER,
+        supplier_name TEXT,
+        date TEXT NOT NULL,
+        expected_date TEXT,
+        status TEXT DEFAULT 'Draft',
+        total INTEGER DEFAULT 0,
+        notes TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE purchase_order_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL,
+        product_id INTEGER,
+        name TEXT,
+        quantity REAL DEFAULT 0,
+        price INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE delivery_challans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER,
+        number TEXT NOT NULL,
+        customer_id INTEGER,
+        customer_name TEXT,
+        date TEXT NOT NULL,
+        address TEXT,
+        transport_details TEXT,
+        status TEXT DEFAULT 'Pending'
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE delivery_challan_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        challan_id INTEGER NOT NULL,
+        product_id INTEGER,
+        name TEXT,
+        quantity REAL DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE bank_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER,
+        bank_name TEXT NOT NULL,
+        account_name TEXT,
+        account_number TEXT,
+        opening_balance INTEGER DEFAULT 0,
+        inactive INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE unit_conversions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER,
+        product_id INTEGER NOT NULL,
+        from_unit TEXT NOT NULL,
+        to_unit TEXT NOT NULL,
+        multiplier REAL NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE batches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER,
+        product_id INTEGER NOT NULL,
+        batch_number TEXT NOT NULL,
+        mfg_date TEXT,
+        expiry_date TEXT,
+        quantity REAL DEFAULT 0,
+        purchase_price INTEGER DEFAULT 0,
+        sale_price INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE serial_numbers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER,
+        product_id INTEGER NOT NULL,
+        serial_number TEXT NOT NULL,
+        status TEXT DEFAULT 'Available',
+        purchase_ref TEXT,
+        sale_ref TEXT
+      )
+    ''');
+
+    await db.execute('''
       CREATE TABLE sync_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         business_id INTEGER,
@@ -366,6 +519,16 @@ class AppDatabase {
     await db.delete('quotation_items');
     await db.delete('returns');
     await db.delete('return_items');
+    await db.delete('sales_orders');
+    await db.delete('sales_order_items');
+    await db.delete('purchase_orders');
+    await db.delete('purchase_order_items');
+    await db.delete('delivery_challans');
+    await db.delete('delivery_challan_items');
+    await db.delete('bank_accounts');
+    await db.delete('unit_conversions');
+    await db.delete('batches');
+    await db.delete('serial_numbers');
     await db.delete('businesses');
   }
 }

@@ -7,7 +7,16 @@ class Session extends ChangeNotifier {
   String? token;
   int? businessId;
   String currentUser = 'Owner';
+  String currentRole = 'Admin';
   bool _locked = true;
+
+  bool can(String action) {
+    if (currentRole == 'Admin' || currentRole == 'Owner') return true;
+    if (currentRole == 'Salesman') {
+      return ['create_invoice', 'view_products'].contains(action);
+    }
+    return false;
+  }
 
   static const _kMobile = 'session.mobile';
   static const _kToken = 'session.token';
@@ -121,4 +130,11 @@ class Session extends ChangeNotifier {
     await _prefs!.setString(_kCurrentUser, name);
     notifyListeners();
   }
+
+  void switchRole(String role) {
+    currentRole = role;
+    notifyListeners();
+  }
+
+  void refresh() => notifyListeners();
 }

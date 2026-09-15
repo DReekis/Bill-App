@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/models.dart';
-import '../../core/money.dart';
 import '../../core/session.dart';
+import '../../data/app_database.dart';
 import '../../data/repositories.dart';
-import '../../theme/stitch_theme.dart';
-import '../sales/invoice_detail_screen.dart';
 
 class TransactionHistoryScreen extends StatefulWidget {
   const TransactionHistoryScreen({super.key});
@@ -51,7 +49,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> wit
         title: const Text('Orders & Estimates', style: TextStyle(fontWeight: FontWeight.w800)),
         bottom: TabBar(
           controller: _tab,
-          isScrollControlled: true,
           tabs: const [
             Tab(text: 'Estimates'),
             Tab(text: 'Sales Orders'),
@@ -74,7 +71,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> wit
 
   Future<void> _convertQuotation(dynamic item) async {
     final q = item as Quotation;
-    final bizId = context.read<Session>().businessId!;
     try {
       final number = 'INV-FROM-Q-${DateTime.now().millisecondsSinceEpoch}';
       await Repository.instance.convertQuotationToInvoice(q.id!, invoiceNumber: number);

@@ -63,6 +63,7 @@ dependencies:
   url_launcher_windows: 3.1.4
   excel: 2.1.0
   csv: 6.0.0
+  file_picker: 8.1.7
 
 dev_dependencies:
   flutter_lints: 4.0.0

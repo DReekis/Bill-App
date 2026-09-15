@@ -6,9 +6,7 @@ import '../../core/money.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
 import '../../data/repositories.dart';
-import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
-import '../customers/customer_form.dart';
 
 class SalesOrderBuilderScreen extends StatefulWidget {
   const SalesOrderBuilderScreen({super.key});
@@ -100,7 +98,7 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      app_bar: AppBar(title: const Text('New Sales Order')),
+      appBar: AppBar(title: const Text('New Sales Order')),
       body: Column(
         children: [
           Padding(

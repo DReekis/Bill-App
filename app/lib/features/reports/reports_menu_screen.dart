@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../theme/stitch_theme.dart';
+import '../shell/transaction_history_screen.dart';
 import 'day_book_screen.dart';
 import 'balance_sheet_screen.dart';
 import 'pl_report_screen.dart';
+import 'bank_transfer_form.dart';
 
 class ReportsMenuScreen extends StatelessWidget {
   const ReportsMenuScreen({super.key});
@@ -14,6 +16,13 @@ class ReportsMenuScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _ReportTile(
+            icon: Icons.assignment_outlined,
+            title: 'Orders & Estimates',
+            subtitle: 'Pending and converted quotes',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionHistoryScreen())),
+          ),
+          const SizedBox(height: 16),
           _ReportTile(
             icon: Icons.auto_stories_outlined,
             title: 'Day Book',
@@ -33,6 +42,13 @@ class ReportsMenuScreen extends StatelessWidget {
             title: 'Profit & Loss',
             subtitle: 'Income Statement',
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PLReportScreen())),
+          ),
+          const SizedBox(height: 16),
+          _ReportTile(
+            icon: Icons.swap_horiz_rounded,
+            title: 'Bank Transfer',
+            subtitle: 'Move funds between accounts',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BankTransferForm())),
           ),
         ],
       ),

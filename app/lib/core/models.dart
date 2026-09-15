@@ -5,47 +5,77 @@ class Business {
     this.id,
     required this.name,
     this.ownerName,
-    this.gstin,
+    this.phone,
+    this.email,
+    this.address,
     this.state,
     this.city,
+    this.pinCode,
+    this.country = 'India',
+    this.logoPath,
+    this.signaturePath,
+    this.website,
+    this.gstin,
+    this.pan,
     this.industry,
-    this.invoicePrefix = 'INV',
     this.taxRegistered = false,
-    this.allowNegativeStock = false,
+    this.isComposition = false,
+    this.invoicePrefix = 'INV',
     this.invoiceSequence = 0,
+    this.allowNegativeStock = false,
     this.fyStart = '2026-04-01',
     this.currency = 'INR',
+    this.decimalPlaces = 2,
   });
 
   final int? id;
   String name;
   String? ownerName;
-  String? gstin;
+  String? phone;
+  String? email;
+  String? address;
   String? state;
   String? city;
+  String? pinCode;
+  String country;
+  String? logoPath;
+  String? signaturePath;
+  String? website;
+  String? gstin;
+  String? pan;
   String? industry;
-  String invoicePrefix;
   bool taxRegistered;
-  bool allowNegativeStock;
+  bool isComposition;
+  String invoicePrefix;
   int invoiceSequence;
+  bool allowNegativeStock;
   String fyStart;
   String currency;
+  int decimalPlaces;
 
   int get nextSequence => invoiceSequence + 1;
-
-  Money get openingCapital => const Money(0);
 
   Map<String, Object?> toMap() => {
         'name': name,
         'owner_name': ownerName,
-        'gstin': gstin,
+        'business_phone': phone,
+        'email': email,
+        'address': address,
         'state': state,
         'city': city,
+        'pin_code': pinCode,
+        'country': country,
+        'logo': logoPath,
+        'signature': signaturePath,
+        'website': website,
+        'gstin': gstin,
+        'pan': pan,
         'industry': industry,
-        'invoice_prefix': invoicePrefix,
         'tax_registered': taxRegistered ? 1 : 0,
-        'allow_negative_stock': allowNegativeStock ? 1 : 0,
+        'composition_scheme': isComposition ? 1 : 0,
+        'invoice_prefix': invoicePrefix,
         'invoice_sequence': invoiceSequence,
+        'allow_negative_stock': allowNegativeStock ? 1 : 0,
         'fy_start': fyStart,
         'currency': currency,
       };
@@ -54,14 +84,24 @@ class Business {
         id: map['id'] as int?,
         name: map['name'] as String? ?? '',
         ownerName: map['owner_name'] as String?,
-        gstin: map['gstin'] as String?,
+        phone: map['business_phone'] as String?,
+        email: map['email'] as String?,
+        address: map['address'] as String?,
         state: map['state'] as String?,
         city: map['city'] as String?,
+        pinCode: map['pin_code'] as String?,
+        country: map['country'] as String? ?? 'India',
+        logoPath: map['logo'] as String?,
+        signaturePath: map['signature'] as String?,
+        website: map['website'] as String?,
+        gstin: map['gstin'] as String?,
+        pan: map['pan'] as String?,
         industry: map['industry'] as String?,
-        invoicePrefix: map['invoice_prefix'] as String? ?? 'INV',
         taxRegistered: (map['tax_registered'] as int? ?? 0) == 1,
+        isComposition: (map['composition_scheme'] as int? ?? 0) == 1,
+        invoicePrefix: map['invoice_prefix'] as String? ?? 'INV',
+        invoiceSequence: (map['invoice_sequence'] as num?)?.toInt() ?? 0,
         allowNegativeStock: (map['allow_negative_stock'] as int? ?? 0) == 1,
-        invoiceSequence: map['invoice_sequence'] as int? ?? 0,
         fyStart: map['fy_start'] as String? ?? '2026-04-01',
         currency: map['currency'] as String? ?? 'INR',
       );
@@ -72,29 +112,43 @@ class Customer {
     this.id,
     required this.name,
     this.phone,
+    this.whatsapp,
     this.email,
     this.billingAddress,
     this.shippingAddress,
     this.gstin,
+    this.pan,
     this.state,
+    this.city,
+    this.pin,
     this.openingBalance = 0,
     this.creditLimit = 0,
     this.paymentTermsDays = 0,
+    this.type = 'Retail',
+    this.group,
     this.notes,
+    this.loyaltyPoints = 0,
     this.inactive = false,
   });
   final int? id;
   String name;
   String? phone;
+  String? whatsapp;
   String? email;
   String? billingAddress;
   String? shippingAddress;
   String? gstin;
+  String? pan;
   String? state;
+  String? city;
+  String? pin;
   int openingBalance;
   int creditLimit;
   int paymentTermsDays;
+  String type;
+  String? group;
   String? notes;
+  int loyaltyPoints = 0;
   bool inactive;
 
   Map<String, Object?> toMap() => {
@@ -109,6 +163,7 @@ class Customer {
         'credit_limit': creditLimit,
         'payment_terms': paymentTermsDays,
         'notes': notes,
+        'loyalty_points': loyaltyPoints,
         'inactive': inactive ? 1 : 0,
       };
 
@@ -125,6 +180,7 @@ class Customer {
         creditLimit: (map['credit_limit'] as num?)?.toInt() ?? 0,
         paymentTermsDays: (map['payment_terms'] as num?)?.toInt() ?? 0,
         notes: map['notes'] as String?,
+        loyaltyPoints: (map['loyalty_points'] as num?)?.toInt() ?? 0,
         inactive: (map['inactive'] as int? ?? 0) == 1,
       );
 }
@@ -134,24 +190,30 @@ class Supplier {
     this.id,
     required this.name,
     this.phone,
+    this.whatsapp,
     this.email,
     this.address,
     this.gstin,
+    this.pan,
     this.state,
     this.openingBalance = 0,
     this.creditPeriodDays = 0,
+    this.group,
     this.notes,
     this.inactive = false,
   });
   final int? id;
   String name;
   String? phone;
+  String? whatsapp;
   String? email;
   String? address;
   String? gstin;
+  String? pan;
   String? state;
   int openingBalance;
   int creditPeriodDays;
+  String? group;
   String? notes;
   bool inactive;
 
@@ -188,37 +250,53 @@ class Product {
     this.id,
     required this.name,
     this.sku,
-    this.category,
-    this.hsn,
+    this.itemCode,
     this.barcode,
+    this.category,
+    this.brand,
+    this.hsn,
     this.unit = 'pc',
     this.gstRate = 0,
     this.purchasePrice = 0,
     this.salePrice = 0,
     this.wholesalePrice = 0,
+    this.retailPrice = 0,
     this.mrp = 0,
+    this.minSellingPrice = 0,
     this.stock = 0,
     this.costAverage = 0,
     this.lowStockThreshold = 5,
     this.taxIncluded = false,
+    this.hasBatch = false,
+    this.hasSerial = false,
+    this.imagePath,
+    this.description,
     this.inactive = false,
   });
   final int? id;
   String name;
   String? sku;
-  String? category;
-  String? hsn;
+  String? itemCode;
   String? barcode;
+  String? category;
+  String? brand;
+  String? hsn;
   String unit;
   int gstRate;
   int purchasePrice;
   int salePrice;
   int wholesalePrice;
+  int retailPrice;
   int mrp;
+  int minSellingPrice;
   int stock;
   int costAverage;
   int lowStockThreshold;
   bool taxIncluded;
+  bool hasBatch;
+  bool hasSerial;
+  String? imagePath;
+  String? description;
   bool inactive;
 
   bool get low => stock > 0 && stock <= lowStockThreshold;
@@ -227,7 +305,9 @@ class Product {
   Map<String, Object?> toMap() => {
         'name': name,
         'sku': sku,
+        'item_code': itemCode,
         'category': category,
+        'brand': brand,
         'hsn': hsn,
         'barcode': barcode,
         'unit': unit,
@@ -235,11 +315,17 @@ class Product {
         'purchase_price': purchasePrice,
         'sale_price': salePrice,
         'wholesale_price': wholesalePrice,
+        'retail_price': retailPrice,
         'mrp': mrp,
+        'min_selling_price': minSellingPrice,
         'stock': stock,
         'cost_average': costAverage,
         'low_stock_threshold': lowStockThreshold,
         'tax_included': taxIncluded ? 1 : 0,
+        'has_batch': hasBatch ? 1 : 0,
+        'has_serial': hasSerial ? 1 : 0,
+        'image_path': imagePath,
+        'description': description,
         'inactive': inactive ? 1 : 0,
       };
 
@@ -247,19 +333,27 @@ class Product {
         id: map['id'] as int?,
         name: map['name'] as String? ?? '',
         sku: map['sku'] as String?,
-        category: map['category'] as String?,
-        hsn: map['hsn'] as String?,
+        itemCode: map['item_code'] as String?,
         barcode: map['barcode'] as String?,
+        category: map['category'] as String?,
+        brand: map['brand'] as String?,
+        hsn: map['hsn'] as String?,
         unit: map['unit'] as String? ?? 'pc',
         gstRate: (map['gst_rate'] as num?)?.toInt() ?? 0,
         purchasePrice: (map['purchase_price'] as num?)?.toInt() ?? 0,
         salePrice: (map['sale_price'] as num?)?.toInt() ?? 0,
         wholesalePrice: (map['wholesale_price'] as num?)?.toInt() ?? 0,
+        retailPrice: (map['retail_price'] as num?)?.toInt() ?? 0,
         mrp: (map['mrp'] as num?)?.toInt() ?? 0,
+        minSellingPrice: (map['min_selling_price'] as num?)?.toInt() ?? 0,
         stock: (map['stock'] as num?)?.toInt() ?? 0,
         costAverage: (map['cost_average'] as num?)?.toInt() ?? 0,
         lowStockThreshold: (map['low_stock_threshold'] as num?)?.toInt() ?? 5,
         taxIncluded: (map['tax_included'] as int? ?? 0) == 1,
+        hasBatch: (map['has_batch'] as int? ?? 0) == 1,
+        hasSerial: (map['has_serial'] as int? ?? 0) == 1,
+        imagePath: map['image_path'] as String?,
+        description: map['description'] as String?,
         inactive: (map['inactive'] as int? ?? 0) == 1,
       );
 }
@@ -276,6 +370,9 @@ class InvoiceLine {
     this.discountPercent = 0,
     this.taxable = 0,
     this.tax = 0,
+    this.unit,
+    this.batchNumber,
+    this.serialNumber,
   });
   final int? productId;
   String name;
@@ -287,6 +384,9 @@ class InvoiceLine {
   double discountPercent;
   int taxable;
   int tax;
+  String? unit;
+  String? batchNumber;
+  String? serialNumber;
 
   Map<String, Object?> toMap() => {
         'product_id': productId,
@@ -299,6 +399,7 @@ class InvoiceLine {
         'discount_percent': discountPercent,
         'taxable': taxable,
         'tax': tax,
+        'unit': unit,
       };
 
   static InvoiceLine fromMap(Map<String, Object?> map) => InvoiceLine(
@@ -312,6 +413,7 @@ class InvoiceLine {
         discountPercent: (map['discount_percent'] as num?)?.toDouble() ?? 0,
         taxable: (map['taxable'] as num?)?.toInt() ?? 0,
         tax: (map['tax'] as num?)?.toInt() ?? 0,
+        unit: map['unit'] as String?,
       );
 
   InvoiceLine copyWith({double? quantity}) => InvoiceLine(
@@ -325,6 +427,9 @@ class InvoiceLine {
         discountPercent: discountPercent,
         taxable: taxable,
         tax: tax,
+        unit: unit,
+        batchNumber: batchNumber,
+        serialNumber: serialNumber,
       );
 }
 
@@ -347,6 +452,7 @@ class Quotation {
     this.total = 0,
     this.status = 'Open',
     this.notes,
+    this.isProforma = false,
     this.lines = const [],
   });
   final int? id;
@@ -366,6 +472,7 @@ class Quotation {
   int total;
   String status;
   String? notes;
+  bool isProforma = false;
   List<InvoiceLine> lines;
 
   Map<String, Object?> toMap() => {
@@ -385,6 +492,7 @@ class Quotation {
         'total': total,
         'status': status,
         'notes': notes,
+        'is_proforma': isProforma ? 1 : 0,
       };
 
   static Quotation fromMap(Map<String, Object?> map) => Quotation(
@@ -405,6 +513,7 @@ class Quotation {
         total: (map['total'] as num?)?.toInt() ?? 0,
         status: map['status'] as String? ?? 'Open',
         notes: map['notes'] as String?,
+        isProforma: (map['is_proforma'] as int? ?? 0) == 1,
       );
 }
 
@@ -433,6 +542,8 @@ class Invoice {
     this.paymentMode,
     this.status = 'Finalized',
     this.notes,
+    this.irn,
+    this.isRecurring = false,
     this.lines = const [],
   });
   final int? id;
@@ -458,6 +569,8 @@ class Invoice {
   String? paymentMode;
   String status;
   String? notes;
+  String? irn;
+  bool isRecurring = false;
   List<InvoiceLine> lines;
 
   Money get outstanding => Money(total - amountPaid);
@@ -487,6 +600,8 @@ class Invoice {
         'payment_mode': paymentMode,
         'status': status,
         'notes': notes,
+        'irn': irn,
+        'is_recurring': isRecurring ? 1 : 0,
       };
 
   static Invoice fromMap(Map<String, Object?> map) => Invoice(
@@ -513,6 +628,316 @@ class Invoice {
         paymentMode: map['payment_mode'] as String?,
         status: map['status'] as String? ?? 'Finalized',
         notes: map['notes'] as String?,
+        irn: map['irn'] as String?,
+        isRecurring: (map['is_recurring'] as int? ?? 0) == 1,
+      );
+}
+
+class SalesOrder {
+  SalesOrder({
+    this.id,
+    this.businessId,
+    required this.number,
+    this.customerId,
+    this.customerName,
+    required this.date,
+    this.dueDate,
+    this.status = 'Pending',
+    this.total = 0,
+    this.notes,
+    this.lines = const [],
+  });
+  final int? id;
+  final int? businessId;
+  String number;
+  int? customerId;
+  String? customerName;
+  String date;
+  String? dueDate;
+  String status;
+  int total;
+  String? notes;
+  List<InvoiceLine> lines;
+
+  Map<String, Object?> toMap() => {
+        'business_id': businessId,
+        'number': number,
+        'customer_id': customerId,
+        'customer_name': customerName,
+        'date': date,
+        'due_date': dueDate,
+        'status': status,
+        'total': total,
+        'notes': notes,
+      };
+
+  static SalesOrder fromMap(Map<String, Object?> map) => SalesOrder(
+        id: map['id'] as int?,
+        businessId: map['business_id'] as int?,
+        number: map['number'] as String? ?? '',
+        customerId: map['customer_id'] as int?,
+        customerName: map['customer_name'] as String?,
+        date: map['date'] as String? ?? '',
+        dueDate: map['due_date'] as String?,
+        status: map['status'] as String? ?? 'Pending',
+        total: (map['total'] as num?)?.toInt() ?? 0,
+        notes: map['notes'] as String?,
+      );
+}
+
+class PurchaseOrder {
+  PurchaseOrder({
+    this.id,
+    this.businessId,
+    required this.number,
+    this.supplierId,
+    this.supplierName,
+    required this.date,
+    this.expectedDate,
+    this.status = 'Draft',
+    this.total = 0,
+    this.notes,
+    this.lines = const [],
+  });
+  final int? id;
+  final int? businessId;
+  String number;
+  int? supplierId;
+  String? supplierName;
+  String date;
+  String? expectedDate;
+  String status;
+  int total;
+  String? notes;
+  List<InvoiceLine> lines;
+
+  Map<String, Object?> toMap() => {
+        'business_id': businessId,
+        'number': number,
+        'supplier_id': supplierId,
+        'supplier_name': supplierName,
+        'date': date,
+        'expected_date': expectedDate,
+        'status': status,
+        'total': total,
+        'notes': notes,
+      };
+
+  static PurchaseOrder fromMap(Map<String, Object?> map) => PurchaseOrder(
+        id: map['id'] as int?,
+        businessId: map['business_id'] as int?,
+        number: map['number'] as String? ?? '',
+        supplierId: map['supplier_id'] as int?,
+        supplierName: map['supplier_name'] as String?,
+        date: map['date'] as String? ?? '',
+        expectedDate: map['expected_date'] as String?,
+        status: map['status'] as String? ?? 'Draft',
+        total: (map['total'] as num?)?.toInt() ?? 0,
+        notes: map['notes'] as String?,
+      );
+}
+
+class DeliveryChallan {
+  DeliveryChallan({
+    this.id,
+    this.businessId,
+    required this.number,
+    this.customerId,
+    this.customerName,
+    required this.date,
+    this.address,
+    this.transportDetails,
+    this.status = 'Pending',
+    this.lines = const [],
+  });
+  final int? id;
+  final int? businessId;
+  String number;
+  int? customerId;
+  String? customerName;
+  String date;
+  String? address;
+  String? transportDetails;
+  String status;
+  List<InvoiceLine> lines;
+
+  Map<String, Object?> toMap() => {
+        'business_id': businessId,
+        'number': number,
+        'customer_id': customerId,
+        'customer_name': customerName,
+        'date': date,
+        'address': address,
+        'transport_details': transportDetails,
+        'status': status,
+      };
+
+  static DeliveryChallan fromMap(Map<String, Object?> map) => DeliveryChallan(
+        id: map['id'] as int?,
+        businessId: map['business_id'] as int?,
+        number: map['number'] as String? ?? '',
+        customerId: map['customer_id'] as int?,
+        customerName: map['customer_name'] as String?,
+        date: map['date'] as String? ?? '',
+        address: map['address'] as String?,
+        transportDetails: map['transport_details'] as String?,
+        status: map['status'] as String? ?? 'Pending',
+      );
+}
+
+class BankAccount {
+  BankAccount({
+    this.id,
+    this.businessId,
+    required this.bankName,
+    this.accountName,
+    this.accountNumber,
+    this.openingBalance = 0,
+    this.inactive = false,
+  });
+  final int? id;
+  final int? businessId;
+  String bankName;
+  String? accountName;
+  String? accountNumber;
+  int openingBalance;
+  bool inactive;
+
+  Map<String, Object?> toMap() => {
+        'business_id': businessId,
+        'bank_name': bankName,
+        'account_name': accountName,
+        'account_number': accountNumber,
+        'opening_balance': openingBalance,
+        'inactive': inactive ? 1 : 0,
+      };
+
+  static BankAccount fromMap(Map<String, Object?> map) => BankAccount(
+        id: map['id'] as int?,
+        businessId: map['business_id'] as int?,
+        bankName: map['bank_name'] as String? ?? '',
+        accountName: map['account_name'] as String?,
+        accountNumber: map['account_number'] as String?,
+        openingBalance: (map['opening_balance'] as num?)?.toInt() ?? 0,
+        inactive: (map['inactive'] as int? ?? 0) == 1,
+      );
+}
+
+class UnitConversion {
+  UnitConversion({
+    this.id,
+    this.businessId,
+    required this.productId,
+    required this.fromUnit,
+    required this.toUnit,
+    required this.multiplier,
+  });
+  final int? id;
+  final int? businessId;
+  int productId;
+  String fromUnit;
+  String toUnit;
+  double multiplier;
+
+  Map<String, Object?> toMap() => {
+        'business_id': businessId,
+        'product_id': productId,
+        'from_unit': fromUnit,
+        'to_unit': toUnit,
+        'multiplier': multiplier,
+      };
+
+  static UnitConversion fromMap(Map<String, Object?> map) => UnitConversion(
+        id: map['id'] as int?,
+        businessId: map['business_id'] as int?,
+        productId: (map['product_id'] as num?)?.toInt() ?? 0,
+        fromUnit: map['from_unit'] as String? ?? '',
+        toUnit: map['to_unit'] as String? ?? '',
+        multiplier: (map['multiplier'] as num?)?.toDouble() ?? 1,
+      );
+}
+
+class Batch {
+  Batch({
+    this.id,
+    this.businessId,
+    required this.productId,
+    required this.batchNumber,
+    this.mfgDate,
+    this.expiryDate,
+    this.quantity = 0,
+    this.purchasePrice = 0,
+    this.salePrice = 0,
+  });
+  final int? id;
+  final int? businessId;
+  int productId;
+  String batchNumber;
+  String? mfgDate;
+  String? expiryDate;
+  double quantity;
+  int purchasePrice;
+  int salePrice;
+
+  Map<String, Object?> toMap() => {
+        'business_id': businessId,
+        'product_id': productId,
+        'batch_number': batchNumber,
+        'mfg_date': mfgDate,
+        'expiry_date': expiryDate,
+        'quantity': quantity,
+        'purchase_price': purchasePrice,
+        'sale_price': salePrice,
+      };
+
+  static Batch fromMap(Map<String, Object?> map) => Batch(
+        id: map['id'] as int?,
+        businessId: map['business_id'] as int?,
+        productId: (map['product_id'] as num?)?.toInt() ?? 0,
+        batchNumber: map['batch_number'] as String? ?? '',
+        mfgDate: map['mfg_date'] as String?,
+        expiryDate: map['expiry_date'] as String?,
+        quantity: (map['quantity'] as num?)?.toDouble() ?? 0,
+        purchasePrice: (map['purchase_price'] as num?)?.toInt() ?? 0,
+        salePrice: (map['sale_price'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class SerialNumber {
+  SerialNumber({
+    this.id,
+    this.businessId,
+    required this.productId,
+    required this.serialNumber,
+    this.status = 'Available',
+    this.purchaseRef,
+    this.saleRef,
+  });
+  final int? id;
+  final int? businessId;
+  int productId;
+  String serialNumber;
+  String status;
+  String? purchaseRef;
+  String? saleRef;
+
+  Map<String, Object?> toMap() => {
+        'business_id': businessId,
+        'product_id': productId,
+        'serial_number': serialNumber,
+        'status': status,
+        'purchase_ref': purchaseRef,
+        'sale_ref': saleRef,
+      };
+
+  static SerialNumber fromMap(Map<String, Object?> map) => SerialNumber(
+        id: map['id'] as int?,
+        businessId: map['business_id'] as int?,
+        productId: (map['product_id'] as num?)?.toInt() ?? 0,
+        serialNumber: map['serial_number'] as String? ?? '',
+        status: map['status'] as String? ?? 'Available',
+        purchaseRef: map['purchase_ref'] as String?,
+        saleRef: map['sale_ref'] as String?,
       );
 }
 
@@ -934,4 +1359,11 @@ class SearchResult {
   final String title;
   final String? subtitle;
   final int? amount;
+}
+
+class ReminderTemplate {
+  ReminderTemplate({this.id, required this.name, required this.message});
+  final int? id;
+  final String name;
+  final String message;
 }

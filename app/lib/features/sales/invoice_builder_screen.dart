@@ -20,13 +20,15 @@ class InvoiceBuilderScreen extends StatefulWidget {
 }
 
 class _LineEdit {
-  _LineEdit({required this.product, required this.qty, required this.price, required this.discountPercent, required this.gstRate, required this.taxIncluded});
+  _LineEdit({required this.product, required this.qty, required this.price, required this.discountPercent, required this.gstRate, required this.taxIncluded, this.batch, this.serial});
   final Product product;
   double qty;
   int price;
   double discountPercent;
   int gstRate;
   bool taxIncluded;
+  String? batch;
+  String? serial;
 }
 
 class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
@@ -330,6 +332,8 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           discountPercent: l.discountPercent,
           taxable: calc.taxable.paise,
           tax: calc.tax.paise,
+          batchNumber: l.batch,
+          serialNumber: l.serial,
         ));
       }
       final amountPaid = _toPaise(paidController.text);
@@ -697,6 +701,22 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(line.product.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
             const SizedBox(height: 14),
+            if (line.product.hasBatch) ...[
+              AppTextField(
+                controller: TextEditingController(text: line.batch),
+                label: 'Batch number',
+                onChanged: (v) => line.batch = v,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (line.product.hasSerial) ...[
+              AppTextField(
+                controller: TextEditingController(text: line.serial),
+                label: 'Serial / IMEI',
+                onChanged: (v) => line.serial = v,
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(children: [
               Expanded(child: TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: inputDecoration('Quantity'))),
               const SizedBox(width: 12),

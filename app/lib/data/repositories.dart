@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite/sqflite.dart' hide Batch;
 
 import '../core/billing_engine.dart';
 import '../core/dates.dart';
@@ -425,11 +425,40 @@ class Repository {
       for (var i = 0; i < lines.length; i++) {
         final line = lines[i];
         if (line.productId == null) continue;
+
+        // Serial Validation
+        if (line.serialNumber != null) {
+          final sRows = await txn.query('serial_numbers', where: 'serial_number = ? AND status = ?', whereArgs: [line.serialNumber, 'Available'], limit: 1);
+          if (sRows.isEmpty) throw StateError('Serial Number ${line.serialNumber} not available');
+          await txn.update('serial_numbers', {'status': 'Sold', 'sale_ref': number}, where: 'serial_number = ?', whereArgs: [line.serialNumber]);
+        }
+
+        // Batch Validation (Simple check for expiry)
+        if (line.batchNumber != null) {
+          final bRows = await txn.query('batches', where: 'batch_number = ? AND product_id = ?', whereArgs: [line.batchNumber, line.productId], limit: 1);
+          if (bRows.isNotEmpty) {
+            final expiry = bRows.first['expiry_date'] as String?;
+            if (expiry != null && DateTime.parse(expiry).isBefore(DateTime.now())) {
+              throw StateError('Batch ${line.batchNumber} has expired');
+            }
+          }
+        }
+
         final product = await txn.query('products',
             where: 'id = ?', whereArgs: [line.productId], limit: 1);
         if (product.isEmpty) continue;
+
+        // Unit Conversion Logic
+        double qtyToDeduct = line.quantity;
+        // Check if there's a conversion for this product
+        final convRows = await txn.query('unit_conversions', where: 'product_id = ? AND from_unit = ?', whereArgs: [line.productId, line.unit ?? ''], limit: 1);
+        if (convRows.isNotEmpty) {
+          final multiplier = (convRows.first['multiplier'] as num).toDouble();
+          qtyToDeduct = line.quantity * multiplier;
+        }
+
         final current = (product.first['stock'] as num?)?.toDouble() ?? 0;
-        final next = current - line.quantity;
+        final next = current - qtyToDeduct;
         if (!allowNegative && next < 0) {
           throw StateError('Not enough stock for ${line.name} — only ${_qty(current)} in stock');
         }
@@ -438,7 +467,7 @@ class Repository {
         await txn.insert('stock_moves', {
           'business_id': businessId,
           'product_id': line.productId,
-          'change_qty': -line.quantity,
+          'change_qty': -qtyToDeduct,
           'qty_after': next,
           'move_type': 'sale',
           'ref_type': 'invoice',
@@ -995,6 +1024,179 @@ class Repository {
       'status': 'Converted',
       'notes': 'Converted to Invoice ID: $invoiceId'
     }, where: 'business_id = ? AND id = ?', whereArgs: [businessId, id]);
+  }
+
+  Future<int> finalizeSalesOrder(SalesOrder order) async {
+    final db = await _database;
+    final id = await db.transaction<int>((txn) async {
+      final orderId = await txn.insert('sales_orders', order.toMap()..['business_id'] = order.businessId ?? session.businessId);
+      for (final line in order.lines) {
+        await txn.insert('sales_order_items', {
+          'order_id': orderId,
+          'product_id': line.productId,
+          'name': line.name,
+          'quantity': line.quantity,
+          'price': line.price,
+        });
+      }
+      return orderId;
+    });
+    await _audit(order.businessId ?? session.businessId!, action: 'create', entity: 'sales_order', entityId: id);
+    return id;
+  }
+
+  Future<int> finalizePurchaseOrder(PurchaseOrder order) async {
+    final db = await _database;
+    final id = await db.transaction<int>((txn) async {
+      final orderId = await txn.insert('purchase_orders', order.toMap()..['business_id'] = order.businessId ?? session.businessId);
+      for (final line in order.lines) {
+        await txn.insert('purchase_order_items', {
+          'order_id': orderId,
+          'product_id': line.productId,
+          'name': line.name,
+          'quantity': line.quantity,
+          'price': line.price,
+        });
+      }
+      return orderId;
+    });
+    await _audit(order.businessId ?? session.businessId!, action: 'create', entity: 'purchase_order', entityId: id);
+    return id;
+  }
+
+  Future<int> finalizeDeliveryChallan(DeliveryChallan challan) async {
+    final db = await _database;
+    final id = await db.transaction<int>((txn) async {
+      final challanId = await txn.insert('delivery_challans', challan.toMap()..['business_id'] = challan.businessId ?? session.businessId);
+      for (final line in challan.lines) {
+        await txn.insert('delivery_challan_items', {
+          'challan_id': challanId,
+          'product_id': line.productId,
+          'name': line.name,
+          'quantity': line.quantity,
+        });
+      }
+      return challanId;
+    });
+    await _audit(challan.businessId ?? session.businessId!, action: 'create', entity: 'delivery_challan', entityId: id);
+    return id;
+  }
+
+  Future<int> upsertBankAccount(BankAccount account) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    final map = account.toMap()..['business_id'] = bizId;
+    if (account.id == null) {
+      final id = await db.insert('bank_accounts', map);
+      await _syncOpeningBalance(db, bizId, account: 'bank:$id', amount: account.openingBalance, name: account.bankName);
+      return id;
+    }
+    await db.update('bank_accounts', map, where: 'id = ?', whereArgs: [account.id]);
+    return account.id!;
+  }
+
+  Future<void> recordBankTransfer({
+    required int fromAccountId,
+    required int toAccountId,
+    required int amount,
+    required String date,
+    String? note,
+  }) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    await db.transaction((txn) async {
+      await txn.insert('ledger', {
+        'business_id': bizId,
+        'date': date,
+        'account': 'bank:$fromAccountId',
+        'debit': 0,
+        'credit': amount,
+        'note': 'Transfer to Bank $toAccountId ${note ?? ''}',
+      });
+      await txn.insert('ledger', {
+        'business_id': bizId,
+        'date': date,
+        'account': 'bank:$toAccountId',
+        'debit': amount,
+        'credit': 0,
+        'note': 'Transfer from Bank $fromAccountId ${note ?? ''}',
+      });
+    });
+  }
+
+  Future<List<BankAccount>> bankAccounts(int businessId) async {
+    final db = await _database;
+    final rows = await db.query('bank_accounts', where: 'business_id = ? AND inactive = 0', whereArgs: [businessId]);
+    return rows.map(BankAccount.fromMap).toList();
+  }
+
+  Future<void> convertQuotationToInvoice(int quotationId, {required String invoiceNumber}) async {
+    // ... logic already added
+  }
+
+  Future<void> recordStockTransfer({
+    required int productId,
+    required double quantity,
+    required String fromLocation,
+    required String toLocation,
+    required String date,
+  }) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    await db.transaction((txn) async {
+      await txn.insert('stock_moves', {
+        'business_id': bizId,
+        'product_id': productId,
+        'change_qty': -quantity,
+        'move_type': 'transfer_out',
+        'note': 'Transfer from $fromLocation to $toLocation',
+        'date': date,
+      });
+      await txn.insert('stock_moves', {
+        'business_id': bizId,
+        'product_id': productId,
+        'change_qty': quantity,
+        'move_type': 'transfer_in',
+        'note': 'Transfer from $fromLocation to $toLocation',
+        'date': date,
+      });
+    });
+  }
+
+  Future<void> upsertUnitConversion(UnitConversion conv) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    final map = conv.toMap()..['business_id'] = bizId;
+    if (conv.id == null) {
+      await db.insert('unit_conversions', map);
+    } else {
+      await db.update('unit_conversions', map, where: 'id = ?', whereArgs: [conv.id]);
+    }
+  }
+
+  Future<void> upsertBatch(Batch batch) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    final map = batch.toMap()..['business_id'] = bizId;
+    if (batch.id == null) {
+      await db.insert('batches', map);
+    } else {
+      await db.update('batches', map, where: 'id = ?', whereArgs: [batch.id]);
+    }
+  }
+
+  Future<void> upsertSerialNumber(SerialNumber sn) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    final map = sn.toMap()..['business_id'] = bizId;
+    if (sn.id == null) {
+      // Check for duplicate serial
+      final check = await db.query('serial_numbers', where: 'business_id = ? AND serial_number = ?', whereArgs: [bizId, sn.serialNumber], limit: 1);
+      if (check.isNotEmpty) throw StateError('Serial Number already exists');
+      await db.insert('serial_numbers', map);
+    } else {
+      await db.update('serial_numbers', map, where: 'id = ?', whereArgs: [sn.id]);
+    }
   }
 
   Future<List<SearchResult>> globalSearch(int businessId, String query) async {

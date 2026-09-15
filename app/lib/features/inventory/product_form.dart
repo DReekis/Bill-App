@@ -29,10 +29,16 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
   final _purchasePrice = TextEditingController();
   final _salePrice = TextEditingController();
   final _wholesale = TextEditingController();
+  final _retail = TextEditingController();
   final _mrp = TextEditingController();
+  final _minSelling = TextEditingController();
+  final _brand = TextEditingController();
+  final _description = TextEditingController();
   String? unit;
   int gstRate = 0;
   bool taxIncluded = false;
+  bool hasBatch = false;
+  bool hasSerial = false;
   bool saving = false;
 
   @override
@@ -41,17 +47,23 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
     unit = widget.product?.unit ?? 'pc';
     gstRate = widget.product?.gstRate ?? 0;
     taxIncluded = widget.product?.taxIncluded ?? false;
+    hasBatch = widget.product?.hasBatch ?? false;
+    hasSerial = widget.product?.hasSerial ?? false;
     final p = widget.product;
     if (p != null) {
       _name.text = p.name;
       _sku.text = p.sku ?? '';
+      _brand.text = p.brand ?? '';
       _category.text = p.category ?? '';
       _hsn.text = p.hsn ?? '';
       _barcode.text = p.barcode ?? '';
       _purchasePrice.text = _rupees(p.purchasePrice);
       _salePrice.text = _rupees(p.salePrice);
       _wholesale.text = _rupees(p.wholesalePrice);
+      _retail.text = _rupees(p.retailPrice);
       _mrp.text = _rupees(p.mrp);
+      _minSelling.text = _rupees(p.minSellingPrice);
+      _description.text = p.description ?? '';
     }
   }
 
@@ -72,6 +84,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
         id: widget.product?.id,
         name: _name.text.trim(),
         sku: _sku.text.trim().isEmpty ? null : _sku.text.trim().toUpperCase(),
+        brand: _brand.text.trim().isEmpty ? null : _brand.text.trim(),
         category: _category.text.trim().isEmpty ? null : _category.text.trim(),
         hsn: _hsn.text.trim().isEmpty ? null : _hsn.text.trim(),
         barcode: _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
@@ -80,8 +93,13 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
         purchasePrice: _toPaise(_purchasePrice.text),
         salePrice: _toPaise(_salePrice.text),
         wholesalePrice: _toPaise(_wholesale.text),
+        retailPrice: _toPaise(_retail.text),
         mrp: _toPaise(_mrp.text),
+        minSellingPrice: _toPaise(_minSelling.text),
         taxIncluded: taxIncluded,
+        hasBatch: hasBatch,
+        hasSerial: hasSerial,
+        description: _description.text.trim(),
         stock: widget.product?.stock ?? 0,
         costAverage: widget.product?.costAverage ?? _toPaise(_purchasePrice.text),
         lowStockThreshold: widget.product?.lowStockThreshold ?? 5,
@@ -116,30 +134,34 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
             AppTextField(controller: _name, label: 'Product / item name *'),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: AppTextField(controller: _sku, label: 'SKU')),
+              Expanded(child: AppTextField(controller: _brand, label: 'Brand')),
               const SizedBox(width: 12),
-              Expanded(child: AppTextField(controller: _barcode, label: 'Barcode')),
+              Expanded(child: AppTextField(controller: _sku, label: 'SKU')),
             ]),
             const SizedBox(height: 12),
             Row(children: [
               Expanded(child: AppTextField(controller: _category, label: 'Category')),
               const SizedBox(width: 12),
+              Expanded(child: AppTextField(controller: _barcode, label: 'Barcode')),
+            ]),
+            const SizedBox(height: 12),
+            Row(children: [
               Expanded(child: AppTextField(controller: _hsn, label: 'HSN code')),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: unit,
+                  decoration: inputDecoration('Unit'),
+                  items: ['pc', 'kg', 'g', 'l', 'ml', 'm', 'box', 'dozen', 'bottle', 'pack']
+                      .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                      .toList(),
+                  onChanged: (v) => unit = v,
+                ),
+              ),
             ]),
             const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: unit,
-                    decoration: inputDecoration('Unit'),
-                    items: ['pc', 'kg', 'g', 'l', 'ml', 'm', 'box', 'dozen', 'bottle', 'pack']
-                        .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-                        .toList(),
-                    onChanged: (v) => unit = v,
-                  ),
-                ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<int>(
                     initialValue: gstRate,
@@ -154,6 +176,16 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
                     onChanged: (v) => gstRate = v ?? 0,
                   ),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: CheckboxListTile(
+                    value: taxIncluded,
+                    onChanged: (v) => setState(() => taxIncluded = v ?? false),
+                    title: const Text('Tax-incl.', style: TextStyle(fontSize: 13)),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -166,18 +198,38 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
             Row(children: [
               Expanded(child: AppAmountField(controller: _wholesale, label: 'Wholesale price')),
               const SizedBox(width: 12),
-              Expanded(child: AppAmountField(controller: _mrp, label: 'MRP')),
+              Expanded(child: AppAmountField(controller: _retail, label: 'Retail price')),
             ]),
             const SizedBox(height: 12),
-            if (!editing)
-              CheckboxListTile(
-                value: taxIncluded,
-                onChanged: (v) => setState(() => taxIncluded = v ?? false),
-                title: const Text('Prices include GST (tax-inclusive)', style: TextStyle(fontSize: 13)),
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
+            Row(children: [
+              Expanded(child: AppAmountField(controller: _mrp, label: 'MRP')),
+              const SizedBox(width: 12),
+              Expanded(child: AppAmountField(controller: _minSelling, label: 'Min. selling price')),
+            ]),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: CheckboxListTile(
+                  value: hasBatch,
+                  onChanged: (v) => setState(() => hasBatch = v ?? false),
+                  title: const Text('Batch/Expiry', style: TextStyle(fontSize: 13)),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
               ),
-            const SizedBox(height: 16),
+              Expanded(
+                child: CheckboxListTile(
+                  value: hasSerial,
+                  onChanged: (v) => setState(() => hasSerial = v ?? false),
+                  title: const Text('Serial/IMEI', style: TextStyle(fontSize: 13)),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            AppTextField(controller: _description, label: 'Description', maxLines: 2),
+            const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: AsyncButton(loading: saving, label: editing ? 'Save changes' : 'Add product', onPressed: _save),

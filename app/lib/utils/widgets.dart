@@ -214,6 +214,7 @@ class AppTextField extends StatelessWidget {
     this.validator,
     this.maxLines = 1,
     this.onSubmitted,
+    this.onChanged,
   });
   final TextEditingController controller;
   final String label;
@@ -225,13 +226,15 @@ class AppTextField extends StatelessWidget {
   final String? Function(String?)? validator;
   final int maxLines;
   final ValueChanged<String>? onSubmitted;
+  final ValueChanged<String>? onChanged;
   @override
   Widget build(BuildContext context) => TextFormField(
         controller: controller,
-        keyboardType: keyboardType,
         obscureText: obscure,
+        keyboardType: keyboardType,
         maxLines: maxLines,
         onFieldSubmitted: onSubmitted,
+        onChanged: onChanged,
         inputFormatters: keyboardType == TextInputType.number
             ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))]
             : null,

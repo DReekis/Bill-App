@@ -7,13 +7,17 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../sync/sync_engine.dart';
 import '../../theme/stitch_theme.dart';
+import '../../utils/widgets.dart';
 import '../customers/customer_form.dart';
 import '../expenses/expense_form.dart';
 import '../inventory/product_form.dart';
 import '../payments/payment_form.dart';
 import '../purchases/purchase_builder_screen.dart';
+import '../purchases/purchase_order_builder_screen.dart';
+import '../sales/delivery_challan_builder_screen.dart';
 import '../sales/invoice_builder_screen.dart';
 import '../sales/quotation_builder_screen.dart';
+import '../sales/sales_order_builder_screen.dart';
 import '../suppliers/supplier_form.dart';
 import '../search/search_screen.dart';
 import '../reports/reports_menu_screen.dart';
@@ -66,7 +70,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _quick(String action) {
-    final businessId = context.read<Session>().businessId!;
+    final session = context.read<Session>();
+    if (action == 'Reports' && !session.can('view_reports')) {
+      showAppMessage(context, 'Access Denied', error: true);
+      return;
+    }
+    final businessId = session.businessId!;
     final nav = Navigator.of(context);
     switch (action) {
       case 'New Sale':
@@ -93,6 +102,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const QuotationBuilderScreen()))
+            .then((_) => _load());
+      case 'Sales Order':
+        nav
+            .push(MaterialPageRoute(
+                builder: (_) => const SalesOrderBuilderScreen()))
+            .then((_) => _load());
+      case 'Purchase Order':
+        nav
+            .push(MaterialPageRoute(
+                builder: (_) => const PurchaseOrderBuilderScreen()))
+            .then((_) => _load());
+      case 'Challan':
+        nav
+            .push(MaterialPageRoute(
+                builder: (_) => const DeliveryChallanBuilderScreen()))
             .then((_) => _load());
       case 'Reports':
         nav.push(MaterialPageRoute(builder: (_) => const ReportsMenuScreen()));
@@ -122,18 +146,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final profitToday = t == null
         ? 0
         : t['taxableToday']! - t['cogsToday']! - t['expensesToday']!;
-    return _ReferenceDashboard(
-      business: business,
-      totals: t,
-      profitToday: profitToday,
-      low: low,
-      out: out,
-      salesHistory: salesHistory,
-      profitHistory: profitHistory,
-      onQuick: _quick,
-      onRefresh: _load,
+    return Scaffold(
+      body: _ReferenceDashboard(
+        business: business,
+        totals: t,
+        profitToday: profitToday,
+        low: low,
+        out: out,
+        salesHistory: salesHistory,
+        profitHistory: profitHistory,
+        onQuick: _quick,
+        onRefresh: _load,
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddMenu(context),
+        backgroundColor: StitchColors.primary,
+        child: const Icon(Icons.add_rounded, color: Colors.white, size: 30),
+      ),
     );
   }
+
+  void _showAddMenu(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+            _actionItem(context, Icons.shopping_cart_outlined, 'Sale', 'New Sale'),
+            _actionItem(context, Icons.shopping_bag_outlined, 'Purchase', 'Purchase'),
+            _actionItem(context, Icons.description_outlined, 'Estimate', 'Estimate'),
+          ]),
+          const SizedBox(height: 20),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+            _actionItem(context, Icons.assignment_outlined, 'Order', 'Sales Order'),
+            _actionItem(context, Icons.local_shipping_outlined, 'Challan', 'Challan'),
+            _actionItem(context, Icons.person_add_outlined, 'Customer', 'Customer'),
+          ]),
+          const SizedBox(height: 20),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+            _actionItem(context, Icons.inventory_2_outlined, 'Product', 'Product'),
+            _actionItem(context, Icons.payments_outlined, 'Payment In', 'Payment In'),
+            _actionItem(context, Icons.outbox_outlined, 'Payment Out', 'Payment Out'),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _actionItem(BuildContext context, IconData icon, String label, String action) => InkWell(
+        onTap: () {
+          Navigator.pop(context);
+          _quick(action);
+        },
+        child: Column(children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: StitchColors.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
+            child: Icon(icon, color: StitchColors.primary),
+          ),
+          const SizedBox(height: 8),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        ]),
+      );
 }
 
 class _ReferenceDashboard extends StatelessWidget {
@@ -321,9 +396,9 @@ class _ReferenceDashboard extends StatelessWidget {
               _ReferenceAction(Icons.shopping_bag_outlined, 'Add Purchase', 'Purchase', onQuick),
               _ReferenceAction(Icons.inventory_2_outlined, 'Add Product', 'Product', onQuick),
               _ReferenceAction(Icons.description_outlined, 'Estimate', 'Estimate', onQuick),
-              _ReferenceAction(Icons.arrow_downward_rounded, 'Payment In', 'Payment In', onQuick),
-              _ReferenceAction(Icons.arrow_upward_rounded, 'Payment Out', 'Payment Out', onQuick),
-              _ReferenceAction(Icons.pie_chart_outline_rounded, 'Reports', 'Reports', onQuick),
+              _ReferenceAction(Icons.assignment_outlined, 'Sales Order', 'Sales Order', onQuick),
+              _ReferenceAction(Icons.local_shipping_outlined, 'Challan', 'Challan', onQuick),
+              _ReferenceAction(Icons.list_alt_outlined, 'Orders', 'Reports', onQuick), // Reusing Reports for now or adding a specific one
               _ReferenceAction(Icons.grid_view_rounded, 'More', 'More', onQuick),
             ],
           ),

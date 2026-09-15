@@ -13,6 +13,7 @@ import '../../utils/widgets.dart';
 import '../reports/reports_screen.dart';
 import '../shell/audit_log_screen.dart';
 import '../shell/business_edit_screen.dart';
+import 'import_screen.dart';
 
 export '../customers/parties_tab.dart' show PartiesTab;
 
@@ -84,6 +85,7 @@ class _MoreTabState extends State<MoreTab> {
       ),
       const SizedBox(height: 18),
       _menuTile(context, Icons.bar_chart_rounded, 'Reports & analytics', () => nav(const ReportsScreen())),
+      _menuTile(context, Icons.upload_file_rounded, 'Bulk import', () => nav(const ImportScreen())),
       _menuTile(context, Icons.history_rounded, 'Audit log', () => nav(const AuditLogScreen())),
       _menuTile(context, Icons.cloud_sync_rounded, 'Data sync', () => _syncMenu(context, sync), trailing: sync.pendingCount != null && sync.pendingCount! > 0
           ? Text('${sync.pendingCount} pending', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.warning))
@@ -95,6 +97,12 @@ class _MoreTabState extends State<MoreTab> {
         Icons.lock_rounded,
         session.hasPin ? 'App lock · PIN set' : 'App lock (set PIN)',
         () => _pinSettings(context),
+      ),
+      _menuTile(
+        context,
+        Icons.admin_panel_settings_rounded,
+        'Role: ${session.currentRole}',
+        () => _switchRole(context, session),
       ),
       const SizedBox(height: 18),
       const Padding(
@@ -143,6 +151,32 @@ class _MoreTabState extends State<MoreTab> {
           if (context.mounted) showAppMessage(context, message);
         },
       ),
+    );
+  }
+
+  void _switchRole(BuildContext context, Session session) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => Column(mainAxisSize: MainAxisSize.min, children: [
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: Text('Switch Role (Testing)', style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        ListTile(
+          title: const Text('Admin / Owner'),
+          onTap: () {
+            session.switchRole('Admin');
+            Navigator.pop(context);
+          },
+        ),
+        ListTile(
+          title: const Text('Salesman'),
+          onTap: () {
+            session.switchRole('Salesman');
+            Navigator.pop(context);
+          },
+        ),
+      ]),
     );
   }
 
