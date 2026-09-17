@@ -175,14 +175,34 @@ void main() {
       price: 2000000,
     );
 
+    // Export sale
+    final expCustomer = await repo.upsertCustomer(Customer(
+      name: 'Global Client Dubai',
+      state: 'Foreign',
+    ));
+    await makeSale(
+      customerId: expCustomer,
+      customerName: 'Global Client Dubai',
+      productId: pId,
+      productName: 'Smartphone',
+      hsn: '8517',
+      gstRate: 18,
+      qty: 1,
+      price: 5000000,
+      customerState: 'Foreign',
+    );
+
     final gstr1 = await repo.getGstr1Data(businessId);
     final b2bSection = gstr1.firstWhere((s) => s.code == 'B2B');
     final b2csSection = gstr1.firstWhere((s) => s.code == 'B2CS');
+    final expSection = gstr1.firstWhere((s) => s.code == 'EXP');
 
     expect(b2bSection.count, 1);
     expect(b2bSection.taxableAmount, 4000000);
     expect(b2csSection.count, 1);
     expect(b2csSection.taxableAmount, 2000000);
+    expect(expSection.count, 1);
+    expect(expSection.taxableAmount, 5000000);
   });
 
   test('HsnSummary groups invoice items by HSN and tax rate', () async {

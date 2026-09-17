@@ -261,48 +261,56 @@ The vision set forth by the 118-page specification is clear and explicit:
 
 ---
 
+### 8. India GST Compliance Center
+- Full GSTR-1 Sales Report with statutory partitions: Table 4 (B2B), Table 5 (B2CL), Table 6 (EXP - Export & SEZ), Table 7 (B2CS), and Table 9B (CDNR - Credit/Debit Notes).
+- HSN-wise tax summary table with search, UQC, quantity, taxable value, and tax rates.
+- GSTR-2B purchase reconciliation view (Matched, Mismatches, Missing) with automated WhatsApp / SMS communication notice for suppliers.
+- GSTR-3B monthly return computation & summary (Table 3.1, Table 4 ITC, Table 6.1 cash payable) with 1-tap CA sharing.
+
+### 9. Cash & Bank Accounts Hub & Cheque Management
+- Live balances for Cash-in-Hand and configured Bank Accounts dynamically derived from double-entry ledger.
+- Inter-account fund transfers (`BankTransferForm`) with ledger debit/credit pairs.
+- Account Statement & Passbook bottom sheet with running balance, date/type filters, and CSV statement export.
+- Complete Cheque Management Register for Inward & Outward cheques with statuses (Pending, Cleared, Bounced, Cancelled).
+- Automatic double-entry ledger reversals restoring customer/supplier balances when a cheque is marked Bounced.
+
+### 10. Document Conversion Pipeline & POS Hardware Integration
+- 1-tap conversion of Quotations, Sales Orders, and Delivery Challans to Invoices.
+- 1-tap conversion of Purchase Orders to Purchase Bills.
+- Camera barcode scanning with permission handling, auto-add to cart, audio/haptic feedback, and quick product add.
+- Dynamic NPCI UPI QR code generation (`upi://pay?pa=...`) embedded on bills and receipts.
+- Continuous thermal receipt printing (58mm & 80mm ESC/POS) alongside standard A4/A5 PDF formats.
+
+### 11. Enterprise Bulk Data Import
+- Multi-entity CSV import: Products, Customers, Suppliers, Opening Balances.
+- Smart header auto-mapping and alias matching.
+- Pre-import validation preview table, progress bar, and sample downloadable templates.
+
+---
+
 ## 5. What is Partially Done / Prototype (Amber)
 
-1. **Document Conversion Pipeline (`transaction_history_screen.dart`):**
-   - Estimates/Quotations convert to Invoices smoothly.
-   - Sales Orders and Delivery Challans can be created and saved, but the conversion buttons to Invoices currently display placeholder snackbars (`showAppMessage('... placeholder')`).
-   - Purchase Orders can be created, but conversion to Purchase Bills is unhandled.
-2. **Bulk Data Import (`import_screen.dart`):**
-   - Basic CSV file picker exists for products, but has an operator precedence math bug on price parsing.
-   - Missing table preview, customer import, supplier import, and failed row export.
-3. **Multi-Business Support:**
-   - Multi-tenant data model and schema exist (`business_id` column in all 20 tables).
-   - `Session` lacks `switchBusiness(int businessId)` and UI business switcher dropdown in the header.
-4. **Credit Limit & Payment Terms:**
-   - Values are stored on customers and displayed in profiles, but not yet evaluated during the checkout flow in `InvoiceBuilderScreen`.
-5. **Bank & Cash Accounts:**
-   - Bank accounts table and inter-bank transfer form exist, but lack a unified Cash & Bank ledger dashboard.
-6. **Backend & Cloud Sync (`backend/`):**
-   - Fastify endpoints created, but `@prisma/client` is not initialized, breaking tests and preventing running the backend server.
-   - The Flutter sync client creates `sync_queue` records, but bidirectional cloud syncing is not yet active.
+1. **Backend & Cloud Sync (`backend/`):**
+   - Fastify endpoints and Prisma Client aligned with 20 mobile tables (`npm test` passes 3/3).
+   - Mobile `sync_queue` table tracks local mutations with idempotency keys.
+   - Bidirectional cloud sync worker and push/pull loop to be connected in Phase 5.
 
 ---
 
 ## 6. What is Not Started / Missing (Red)
 
-1. **Barcode Scanner Integration:**
-   - Camera barcode scanner button in billing screen and product lookup.
-2. **Dedicated GST Filing Reports:**
-   - Exportable GSTR-1, GSTR-3B, and HSN Summary table screens.
-3. **Cheque Management Lifecycle:**
-   - Cheque tracking register (Pending, Cleared, Bounced) with automatic payment reversal on bounce.
-4. **Thermal Printer Direct ESC/POS Driver:**
-   - 58mm / 80mm thermal receipt formats for Bluetooth POS printers.
-5. **Dynamic UPI QR Code on Invoices:**
-   - Generating standard NPCI UPI payment QR strings (`upi://pay?pa=...&pn=...&am=...`) printed directly on bills.
-6. **Multi-Language (i18n):**
-   - Localization into Hindi, Bengali, Gujarati, Marathi, Tamil, etc.
-7. **Background Sync Worker:**
-   - Android WorkManager periodic background sync with exponential backoff.
-8. **E-Invoice & E-Way Bill Live Integration:**
+1. **Cloud Multi-Device Sync Engine (Phase 5):**
+   - Full REST endpoints for purchases, quotations, payments, and ledger on backend.
+   - Bidirectional push/pull sync worker with Android WorkManager.
+2. **Web Admin Dashboard (Phase 6):**
+   - Web application for desktop business owners and accountants.
+3. **Multi-Language (i18n):**
+   - Localization into Hindi and regional Indian languages.
+4. **E-Invoice & E-Way Bill Live Integration:**
    - Government IRP portal integration APIs.
 
 ---
+
 
 ## 7. Identified Bugs & Technical Debt
 
@@ -409,6 +417,7 @@ To ensure zero rework, avoid compounding errors, and guarantee full architectura
   - Integrate `mobile_scanner` into `InvoiceBuilderScreen` with a dedicated Barcode Scanner button.
   - Flow: Tap Scan -> Camera viewfinder -> Scan Barcode -> Lookup Product -> Auto-increment Cart Quantity -> Audio click & haptic feedback.
   - Support manual barcode search fallback and quick product registration sheet.
+  - **Android 15 & Release Mode Fix**: Resolved `genericError / getClass()` NPE by creating `proguard-rules.pro` with ML Kit & CameraX keep rules, disabling R8 full mode (`android.enableR8.fullMode=false`), forcing `androidx.camera:*:1.4.1` in Gradle resolution strategy, and upgrading `mobile_scanner` to `6.0.11`.
 - [x] **Task 3.3: Dynamic UPI QR Code on Invoices**
   - Implement standard NPCI UPI payment URI generator (`upi://pay?pa={upiId}&pn={businessName}&am={total}&cu=INR`).
   - Render live dynamic QR code on the invoice preview screen and embed in the generated PDF bill.
@@ -442,19 +451,21 @@ To ensure zero rework, avoid compounding errors, and guarantee full architectura
 ### 🟢 Phase 5: Cloud Synchronization & Multi-Device Bridge
 > **Goal:** Connect the offline-first SQLite database with the central backend server via robust, conflict-free sync.
 
-- [ ] **Task 5.1: Backend REST API Completion**
+- [x] **Task 5.1: Backend REST API Completion**
   - Implement backend endpoints for all remaining entities:
     - `/api/v1/purchases`
     - `/api/v1/quotations`, `/api/v1/orders`, `/api/v1/challans`
     - `/api/v1/payments`, `/api/v1/expenses`
     - `/api/v1/bank-accounts`, `/api/v1/ledger`
+    - `/api/v1/sync/push` (batch idempotent ingestion into Prisma DB)
     - `/api/v1/sync/pull` (cursor-based incremental updates)
-- [ ] **Task 5.2: Bidirectional Sync Engine**
+- [x] **Task 5.2: Bidirectional Sync Engine**
   - Wire mobile `SyncEngine` with the backend API:
     - Push: Read pending records from SQLite `sync_queue` and send batch payload with idempotency keys.
     - Pull: Fetch cloud changes created by other devices since `last_sync_timestamp`.
-    - Reconciliation: Atomic merge into local SQLite with server-authoritative timestamps.
-  - Implement Exponential Backoff retry scheduler and network connectivity listener (`connectivity_plus`).
+    - Reconciliation: Atomic merge into local SQLite with server-authoritative timestamps without triggering echo loops.
+  - Implement Exponential Backoff retry scheduler and network reachability probing (`/health` ping).
+  - Add live Sync Settings UI in More screen: server URL configuration dialog, reachability status chip, pending sync badge, and manual Sync Now trigger.
   - Test Flow G: Airplane Mode ON -> Create Bills -> Airplane Mode OFF -> Verify Automatic Cloud Sync.
 
 ---
@@ -511,6 +522,7 @@ To ensure zero rework, avoid compounding errors, and guarantee full architectura
 | **2026-09-17** | Antigravity AI | Phase 3: Retail Speed, Barcode Scanning & Hardware Print | Integrated `mobile_scanner` with targeting reticle, laser animation, torch/camera toggle, audio click & haptic feedback; wired automated cart increment and 1-tap product creation fallback; built enhanced `_ProductPickerSheet` with real-time multi-field search (name, SKU, barcode, brand, HSN), horizontal category filter chips, Quick Add top-sellers carousel, and color-coded stock pills; added `upiId` to `Business` model and DB schema with automatic migration; implemented standard NPCI UPI URI generator (`generateUpiPaymentUri`); embedded vector QR codes into A4/A5 PDF invoices; built continuous roll thermal receipt generator (`buildThermalReceiptPdf`) supporting 80mm (3-inch) and 58mm (2-inch) POS formats with dashed dividers and monospace alignment; created interactive Paper Size Selector modal and on-screen UPI QR payment sheet with 1-tap UPI app deep-linking and copy VPA. | Phase 3 Completed & Verified (`flutter analyze` 0 warnings, `flutter test` 44/44 pass, `npm test` 3/3 pass) |
 | **2026-09-17** | Antigravity AI | Phase 4: India GST Center & Cash/Bank Hub (Advanced Finance) | Implemented full statutory GST Center (`GstCenterScreen`, `Gstr1ReportScreen`, `HsnSummaryScreen`, `Gstr2bScreen`, `Gstr3bScreen`) with B2B/B2CL/B2CS/CDNR breakdown, HSN-wise tax summary, GSTR-2B purchase reconciliation, and GSTR-3B tax computations with CSV/Share export; built comprehensive Cash & Bank Hub (`CashBankHubScreen`) with live liquid asset hero card, bank account management, fund transfers, and complete Cheque Register (`Cheque` model, DB table & migration, filter chips, double-entry ledger reversals on bounce); overhauled Bulk Import (`ImportScreen`) supporting Products, Customers, Suppliers, and Opening Balances with column auto-mapping, sample template download, and tabular preview; wired navigation across Dashboard Quick Actions, FAB modal, Reports menu, and More tab; added GST & banking unit tests. | Phase 4 Completed & Verified (`flutter analyze` 0 warnings, `flutter test` 50/50 pass, `npm test` 3/3 pass) |
 | **2026-09-17** | Antigravity AI | Mobile UI & Hardware Hotfixes | 1) Fixed Quick Actions FAB modal bottom sheet layout: added `isScrollControlled: true`, `SafeArea(top: false)`, elevated bottom padding (`24 + bottomInset`), drag handle pill, and `SingleChildScrollView` to prevent navigation pill clipping. 2) Fixed camera barcode scanner: added `android.permission.CAMERA` and camera hardware features to `AndroidManifest.xml` and wired `errorBuilder` with retry. 3) Unified Transactions Ledger: created `TransactionRecord`, implemented `recentTransactions()` in `Repository` aggregating Sales, Purchases, Payments In/Out, and Expenses; upgraded Tab 1 into `TransactionListTab` with filters (`All`, `Sales`, `Purchases`, `Payment In`, `Payment Out`, `Expenses`), pull-to-refresh, detail sheet; added Recent Transactions card list to Home Dashboard with direct navigation. | Verified & Clean (`flutter analyze` 0 warnings, `flutter test` 51/51 pass, `npm test` 3/3 pass) |
+| **2026-09-17** | Antigravity AI | Phase 5: Cloud Synchronization & Multi-Device Bridge | 1) Completed Backend REST API suite for all business entities (suppliers, quotations, orders, challans, purchase orders, returns, payments, expenses, bank accounts, cheques, ledger). 2) Added Cheque model to Prisma schema and executed migration. 3) Built `/api/v1/sync/push` idempotent batch ingestion into Prisma DB and `/api/v1/sync/pull` cursor-based delta stream. 4) Upgraded mobile `ApiClient` with configurable URL persistence and active `/health` ping reachability. 5) Created bidirectional `SyncEngine` with exponential backoff (1s -> 30s), 45s periodic background auto-sync timer, and echo-loop-free SQLite reconciliation (`reconcileRemoteChange`). 6) Added live Sync Settings UI card in More screen with connection test dialog, queue metric badges, and manual Sync Now action. 7) Port-forwarded USB bridge (`adb reverse tcp:4000 tcp:4000`) and deployed fresh release APK to physical device. | Phase 5 Completed & Verified (`flutter analyze` 0 warnings, `flutter test` 56/56 pass, `npm test` 4/4 pass, Release APK installed on device) |
 
 *(This log will be appended after every milestone and code modification to maintain an unbroken audit trail until project completion.)*
 

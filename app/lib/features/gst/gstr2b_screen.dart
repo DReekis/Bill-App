@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models.dart';
 import '../../core/money.dart';
@@ -54,8 +56,40 @@ class _Gstr2bScreenState extends State<Gstr2bScreen> {
     }
   }
 
-  void _contactSupplier(String supplierName) {
-    showAppMessage(context, 'Opening communication channel with $supplierName');
+  Future<void> _contactSupplier(Gstr2bEntry item) async {
+    final bizId = context.read<Session>().businessId;
+    String phone = '';
+    if (bizId != null) {
+      final suppliers = await Repository.instance.suppliers(bizId);
+      for (final s in suppliers) {
+        if ((item.supplierGstin.isNotEmpty && s.gstin != null && s.gstin!.toLowerCase() == item.supplierGstin.toLowerCase()) ||
+            s.name.toLowerCase() == item.supplierName.toLowerCase()) {
+          phone = s.phone ?? '';
+          break;
+        }
+      }
+    }
+
+    final diffText = item.diffValue != 0 ? ' (Tax discrepancy: ${formatPaise(item.diffTax)})' : '';
+    final message = 'Dear ${item.supplierName},\n\n'
+        'Regarding Invoice #${item.invoiceNumber} dated ${item.invoiceDate} for ${formatPaise(item.invoiceValue)}$diffText:\n'
+        'This invoice status in our GSTR-2B is "${item.matchStatus}".\n'
+        'Kindly verify and file/rectify this invoice on the GST Portal so that we can claim eligible Input Tax Credit (ITC).\n\n'
+        'Thank you.';
+
+    if (phone.isNotEmpty) {
+      final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
+      final formattedPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
+      final uri = Uri.parse('https://wa.me/$formattedPhone?text=${Uri.encodeComponent(message)}');
+      try {
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          return;
+        }
+      } catch (_) {}
+    }
+
+    Share.share(message, subject: 'GST Notice: Invoice #${item.invoiceNumber} - ${item.supplierName}');
   }
 
   void _accept2b(Gstr2bEntry entry) {
@@ -307,7 +341,7 @@ class _Gstr2bScreenState extends State<Gstr2bScreen> {
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
                                   TextButton(
-                                    onPressed: () => _contactSupplier(item.supplierName),
+                                    onPressed: () => _contactSupplier(item),
                                     child: const Text('Contact Supplier', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                                   ),
                                   const SizedBox(width: 8),

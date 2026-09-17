@@ -192,7 +192,15 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen>
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('Barcode Scanner', style: TextStyle(fontWeight: FontWeight.w700)),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text(
+          'Barcode Scanner',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
+        ),
         actions: [
           IconButton(
             tooltip: 'Toggle Flashlight',

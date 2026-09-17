@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -102,7 +103,7 @@ class _MoreTabState extends State<MoreTab> {
       _menuTile(context, Icons.bar_chart_rounded, 'Reports & analytics', () => nav(const ReportsScreen())),
       _menuTile(context, Icons.upload_file_rounded, 'Bulk import', () => nav(const ImportScreen())),
       _menuTile(context, Icons.history_rounded, 'Audit log', () => nav(const AuditLogScreen())),
-      _menuTile(context, Icons.cloud_sync_rounded, 'Data sync', () => _syncMenu(context, sync), trailing: sync.pendingCount != null && sync.pendingCount! > 0
+      _menuTile(context, Icons.cloud_sync_rounded, 'Data sync', () => _syncMenu(context, sync), trailing: sync.pendingCount > 0
           ? Text('${sync.pendingCount} pending', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.warning))
           : null),
       _menuTile(context, Icons.backup_outlined, 'Backup & export', () => nav(const BackupExportScreen())),
@@ -198,29 +199,256 @@ class _MoreTabState extends State<MoreTab> {
   void _syncMenu(BuildContext context, SyncEngine sync) {
     showModalBottomSheet<void>(
       context: context,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Data sync', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          Text('${sync.pendingCount ?? 0} change(s) waiting to sync',
-              style: const TextStyle(fontSize: 13, color: StitchColors.textSecondary)),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () async {
-                Navigator.pop(context);
-                await sync.syncNow();
-                if (context.mounted) {
-                  showAppMessage(context, sync.pendingCount == 0 ? 'All changes synced' : '${sync.pendingCount} waiting to sync');
-                }
-              },
-              icon: const Icon(Icons.sync_rounded),
-              label: const Text('Sync now'),
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final isOnline = sync.isOnline;
+          final pending = sync.pendingCount;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: (isOnline ? StitchColors.success : StitchColors.warning)
+                              .withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isOnline ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+                          color: isOnline ? StitchColors.success : StitchColors.warning,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isOnline ? 'Cloud Sync Online' : 'Offline Mode (Local Safe)',
+                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                            ),
+                            Text(
+                              isOnline
+                                  ? 'Connected to backend server'
+                                  : 'Changes will sync automatically when reconnected',
+                              style: const TextStyle(fontSize: 12.5, color: StitchColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Check Connection',
+                        icon: const Icon(Icons.refresh_rounded, size: 20),
+                        onPressed: () async {
+                          await sync.checkConnectivity();
+                          setModalState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  // Server URL configuration card
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: StitchColors.surfaceVariant,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: StitchColors.outline),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.dns_rounded, size: 20, color: StitchColors.textSecondary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Backend Server URL',
+                                  style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                              Text(
+                                sync.apiClient.baseUrl,
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _editServerUrl(context, sync, setModalState),
+                          child: const Text('Edit'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // Sync queue metrics
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                          decoration: BoxDecoration(
+                            color: StitchColors.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: StitchColors.outline),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Pending Changes',
+                                  style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$pending item${pending == 1 ? '' : 's'}',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: pending > 0 ? StitchColors.warning : StitchColors.success,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                          decoration: BoxDecoration(
+                            color: StitchColors.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: StitchColors.outline),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Last Synced',
+                                  style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                              const SizedBox(height: 4),
+                              Text(
+                                sync.lastSyncedAt == null
+                                    ? 'Never'
+                                    : DateFormat('hh:mm a').format(sync.lastSyncedAt!),
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (sync.lastError != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: StitchColors.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline_rounded, size: 16, color: StitchColors.error),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              sync.lastError!,
+                              style: const TextStyle(fontSize: 11.5, color: StitchColors.error),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: FilledButton.icon(
+                      onPressed: sync.syncing
+                          ? null
+                          : () async {
+                              await sync.syncNow(force: true);
+                              setModalState(() {});
+                              if (context.mounted) {
+                                showAppMessage(
+                                  context,
+                                  sync.pendingCount == 0
+                                      ? 'All changes synchronized successfully'
+                                      : '${sync.pendingCount} change(s) remaining in queue',
+                                );
+                              }
+                            },
+                      icon: sync.syncing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.sync_rounded),
+                      label: Text(sync.syncing ? 'Synchronizing...' : 'Sync Now'),
+                    ),
+                  ),
+                ],
+              ),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _editServerUrl(BuildContext context, SyncEngine sync, StateSetter setModalState) {
+    final controller = TextEditingController(text: sync.apiClient.baseUrl);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Backend Server URL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter backend URL (e.g. http://10.0.2.2:4000 for emulator, or http://localhost:4000 via adb reverse).',
+              style: TextStyle(fontSize: 12.5, color: StitchColors.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Server URL',
+                prefixIcon: Icon(Icons.link_rounded),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
           ),
-        ]),
+          FilledButton(
+            onPressed: () async {
+              final newUrl = controller.text.trim();
+              if (newUrl.isNotEmpty) {
+                await sync.apiClient.setBaseUrl(newUrl);
+                await sync.checkConnectivity();
+                setModalState(() {});
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Save & Test'),
+          ),
+        ],
       ),
     );
   }

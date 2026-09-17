@@ -140,4 +140,42 @@ void main() {
     final custDebt = customerLedger.first['balance'] as num;
     expect(custDebt, 2000000); // Customer owes ₹20,000 again!
   });
+
+  test('accountLedger returns accurate chronological passbook entries', () async {
+    final bankId = await repo.upsertBankAccount(BankAccount(
+      bankName: 'Axis Bank',
+      accountNumber: '912010048291024',
+      openingBalance: 0,
+    ));
+
+    // 1. Transfer in ₹50,000 from cash to Axis Bank
+    await repo.recordTransfer(
+      fromAccount: 'cash',
+      toAccount: 'bank:$bankId',
+      amount: 5000000,
+      date: '2026-09-01',
+      note: 'Initial cash deposit',
+    );
+
+    // 2. Transfer out ₹12,000 from Axis Bank to cash
+    await repo.recordTransfer(
+      fromAccount: 'bank:$bankId',
+      toAccount: 'cash',
+      amount: 1200000,
+      date: '2026-09-02',
+      note: 'ATM cash withdrawal',
+    );
+
+    // Query passbook for Axis Bank
+    final bankPassbook = await repo.accountLedger(businessId, 'bank:$bankId');
+    expect(bankPassbook.length, 2);
+    // Most recent first:
+    expect(bankPassbook.first.credit, 1200000); // outflow
+    expect(bankPassbook.last.debit, 5000000);  // inflow
+
+    // Query passbook for Cash
+    final cashPassbook = await repo.accountLedger(businessId, 'cash');
+    expect(cashPassbook.length, 2);
+  });
 }
+

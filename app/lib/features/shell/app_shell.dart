@@ -143,7 +143,7 @@ class _AppShellState extends State<AppShell> {
                 Text(_titles[_index]),
                 const SizedBox(width: 12),
                 _SyncBadge(
-                    pending: sync.pendingCount ?? 0,
+                    pending: sync.pendingCount,
                     busy: sync.syncing,
                     onTap: _syncNow),
               ]),

@@ -1874,6 +1874,41 @@ class Repository {
     return rows.map(LedgerEntry.fromMap).toList();
   }
 
+  Future<List<LedgerEntry>> accountLedger(
+    int businessId,
+    String account, {
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final db = await _database;
+    final where = <String>['business_id = ?'];
+    final args = <Object?>[businessId];
+
+    if (account == 'bank') {
+      where.add("(account = 'bank' OR account LIKE 'bank:%')");
+    } else {
+      where.add('account = ?');
+      args.add(account);
+    }
+
+    if (from != null) {
+      where.add('date >= ?');
+      args.add(isoDate(from));
+    }
+    if (to != null) {
+      where.add('date <= ?');
+      args.add(isoDate(to));
+    }
+
+    final rows = await db.query(
+      'ledger',
+      where: where.join(' AND '),
+      whereArgs: args,
+      orderBy: 'date DESC, id DESC',
+    );
+    return rows.map(LedgerEntry.fromMap).toList();
+  }
+
   Future<List<StockMove>> stockMoves(int businessId, int productId) async {
     final db = await _database;
     final rows = await db.query('stock_moves',
@@ -1930,6 +1965,158 @@ class Repository {
       'attempts': attempts + 1,
       'last_error': error,
     }, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> reconcileRemoteChange(Map<String, dynamic> change) async {
+    final entity = (change['entity'] as String? ?? '').toLowerCase();
+    final payloadStr = change['payload'] as String?;
+    if (payloadStr == null || payloadStr.isEmpty) return;
+
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(payloadStr) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+
+    final db = await _database;
+    final bizId = session.businessId;
+    if (bizId == null) return;
+
+    switch (entity) {
+      case 'customer':
+      case 'customers':
+        final name = data['name'] as String? ?? '';
+        if (name.isEmpty) return;
+        final phone = data['phone'] as String?;
+        final existing = await db.query(
+          'customers',
+          where: 'business_id = ? AND (phone = ? OR name = ?)',
+          whereArgs: [bizId, phone ?? '', name],
+          limit: 1,
+        );
+        final map = {
+          'business_id': bizId,
+          'name': name,
+          'phone': phone,
+          'email': data['email'] as String?,
+          'gstin': data['gstin'] as String?,
+          'billing_address': data['billingAddress'] ?? data['billing_address'],
+          'city': data['city'] as String?,
+          'state': data['state'] as String?,
+          'opening_balance': (data['openingBalance'] ?? data['opening_balance'] ?? 0) is num
+              ? ((data['openingBalance'] ?? data['opening_balance'] ?? 0) as num).toInt()
+              : 0,
+        };
+        if (existing.isNotEmpty) {
+          await db.update('customers', map,
+              where: 'id = ?', whereArgs: [existing.first['id']]);
+        } else {
+          await db.insert('customers', map);
+        }
+        break;
+
+      case 'product':
+      case 'products':
+        final name = data['name'] as String? ?? '';
+        if (name.isEmpty) return;
+        final sku = data['sku'] as String?;
+        final barcode = data['barcode'] as String?;
+        final existing = await db.query(
+          'products',
+          where:
+              'business_id = ? AND ((sku IS NOT NULL AND sku = ?) OR (barcode IS NOT NULL AND barcode = ?) OR name = ?)',
+          whereArgs: [bizId, sku ?? '', barcode ?? '', name],
+          limit: 1,
+        );
+        final map = {
+          'business_id': bizId,
+          'name': name,
+          'sku': sku,
+          'barcode': barcode,
+          'category': data['category'] as String?,
+          'unit': data['unit'] as String? ?? 'pc',
+          'sale_price': (data['salePrice'] ?? data['sale_price'] ?? 0) is num
+              ? ((data['salePrice'] ?? data['sale_price'] ?? 0) as num).toInt()
+              : 0,
+          'purchase_price': (data['purchasePrice'] ?? data['purchase_price'] ?? 0) is num
+              ? ((data['purchasePrice'] ?? data['purchase_price'] ?? 0) as num).toInt()
+              : 0,
+          'stock': ((data['stock'] as num?)?.toDouble() ?? 0).round(),
+          'gst_rate': (data['gstRate'] ?? data['gst_rate'] ?? 0) is num
+              ? ((data['gstRate'] ?? data['gst_rate'] ?? 0) as num).toInt()
+              : 0,
+        };
+        if (existing.isNotEmpty) {
+          await db.update('products', map,
+              where: 'id = ?', whereArgs: [existing.first['id']]);
+        } else {
+          await db.insert('products', map);
+        }
+        break;
+
+      case 'supplier':
+      case 'suppliers':
+        final name = data['name'] as String? ?? '';
+        if (name.isEmpty) return;
+        final phone = data['phone'] as String?;
+        final existing = await db.query(
+          'suppliers',
+          where: 'business_id = ? AND (phone = ? OR name = ?)',
+          whereArgs: [bizId, phone ?? '', name],
+          limit: 1,
+        );
+        final map = {
+          'business_id': bizId,
+          'name': name,
+          'phone': phone,
+          'email': data['email'] as String?,
+          'gstin': data['gstin'] as String?,
+          'address': data['address'] as String?,
+          'opening_balance': (data['openingBalance'] ?? data['opening_balance'] ?? 0) is num
+              ? ((data['openingBalance'] ?? data['opening_balance'] ?? 0) as num).toInt()
+              : 0,
+        };
+        if (existing.isNotEmpty) {
+          await db.update('suppliers', map,
+              where: 'id = ?', whereArgs: [existing.first['id']]);
+        } else {
+          await db.insert('suppliers', map);
+        }
+        break;
+
+      case 'bank_account':
+      case 'bank_accounts':
+        final bankName = data['bankName'] ?? data['bank_name'] as String? ?? '';
+        final accNum = data['accountNumber'] ?? data['account_number'] as String?;
+        if (accNum != null && accNum.isNotEmpty) {
+          final existing = await db.query(
+            'bank_accounts',
+            where: 'business_id = ? AND account_number = ?',
+            whereArgs: [bizId, accNum],
+            limit: 1,
+          );
+          final map = {
+            'business_id': bizId,
+            'bank_name': bankName,
+            'account_name': data['accountName'] ?? data['account_name'],
+            'account_number': accNum,
+            'opening_balance': (data['openingBalance'] ?? data['opening_balance'] ?? 0) is num
+                ? ((data['openingBalance'] ?? data['opening_balance'] ?? 0) as num).toInt()
+                : 0,
+          };
+          if (existing.isNotEmpty) {
+            await db.update('bank_accounts', map,
+                where: 'id = ?', whereArgs: [existing.first['id']]);
+          } else {
+            await db.insert('bank_accounts', map);
+          }
+        }
+        break;
+
+      default:
+        break;
+    }
   }
 
   static String _qty(double q) =>
@@ -2233,13 +2420,18 @@ class Repository {
     final b2b = <Map<String, dynamic>>[];
     final b2cl = <Map<String, dynamic>>[];
     final b2cs = <Map<String, dynamic>>[];
+    final exp = <Map<String, dynamic>>[];
 
     for (final r in rows) {
       final gstin = (r['customer_gstin'] as String?)?.trim() ?? '';
       final total = (r['total'] as num?)?.toInt() ?? 0;
       final igst = (r['igst'] as num?)?.toInt() ?? 0;
+      final state = (r['customer_state'] as String?)?.trim().toLowerCase() ?? '';
+      final isExport = state == 'export' || state == 'outside india' || state == 'foreign' || state == '96' || state == 'sez';
 
-      if (gstin.length >= 15) {
+      if (isExport) {
+        exp.add(r);
+      } else if (gstin.length >= 15) {
         b2b.add(r);
       } else if (igst > 0 && total > 25000000) {
         b2cl.add(r);
@@ -2285,6 +2477,7 @@ class Repository {
     return [
       buildSection('B2B', '4A, 4B, 6B, 6C - B2B Invoices', 'Registered business clients with GSTIN', b2b),
       buildSection('B2CL', '5A, 5B - B2C Large Invoices', 'Inter-state unregistered supplies > ₹2.5 Lakh', b2cl),
+      buildSection('EXP', '6A, 6B - Export Invoices', 'Exports under LUT/bond or with tax payment & SEZ supplies', exp),
       buildSection('B2CS', '7 - B2C Small Invoices', 'Intra-state & small inter-state retail supplies', b2cs),
       buildSection('CDNR', '9B - Credit / Debit Notes', 'Registered & unregistered sales returns/refunds', retRows),
     ];

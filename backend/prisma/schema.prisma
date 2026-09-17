@@ -61,6 +61,7 @@ model Business {
   unitConversions    UnitConversion[]
   batches            Batch[]
   serialNumbers      SerialNumber[]
+  cheques            Cheque[]
   ledger             LedgerEntry[]
   syncQueue          SyncQueueItem[]
   auditLogs          AuditLog[]
@@ -522,4 +523,24 @@ model AuditLog {
   before     String?
   after      String?
   createdAt  DateTime  @default(now())
+}
+
+model Cheque {
+  id            String    @id @default(cuid())
+  businessId    String
+  business      Business  @relation(fields: [businessId], references: [id])
+  chequeNumber  String
+  bankName      String?
+  bankAccountId String?
+  partyType     String?
+  partyId       String?
+  partyName     String?
+  amount        Int       @default(0)
+  date          DateTime
+  clearingDate  DateTime?
+  type          String    @default("in")
+  status        String    @default("Pending")
+  bounceReason  String?
+  notes         String?
+  createdAt     DateTime  @default(now())
 }
