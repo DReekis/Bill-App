@@ -36,6 +36,7 @@ class AppDatabase {
       '${await getDatabasesPath()}/ledger_pilot.db',
       version: 1,
       onCreate: createSchema,
+      onOpen: _migrate,
     );
   }
 
@@ -45,9 +46,15 @@ class AppDatabase {
     final dir = await getApplicationSupportDirectory();
     _db = await ffi.databaseFactoryFfi.openDatabase(
       '${dir.path}/ledger_pilot.db',
-      options: ffi.OpenDatabaseOptions(version: 1, onCreate: createSchema),
+      options: ffi.OpenDatabaseOptions(version: 1, onCreate: createSchema, onOpen: _migrate),
     );
     return _db!;
+  }
+
+  static Future<void> _migrate(Database db) async {
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN upi_id TEXT;');
+    } catch (_) {}
   }
 
   /// Lets tests drive the real repository against an in-memory database.
@@ -73,6 +80,7 @@ class AppDatabase {
         gstin TEXT,
         pan TEXT,
         industry TEXT,
+        upi_id TEXT,
         tax_registered INTEGER DEFAULT 0,
         composition_scheme INTEGER DEFAULT 0,
         invoice_prefix TEXT DEFAULT 'INV',

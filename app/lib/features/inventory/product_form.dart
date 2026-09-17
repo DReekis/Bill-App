@@ -11,11 +11,13 @@ class ProductFormSheet extends StatefulWidget {
     required this.onSavedProduct,
     required this.businessId,
     this.product,
+    this.initialBarcode,
   });
   final Future<void> Function() onSaved;
   final ValueChanged<Product> onSavedProduct;
   final int businessId;
   final Product? product;
+  final String? initialBarcode;
   @override
   State<ProductFormSheet> createState() => _ProductFormSheetState();
 }
@@ -64,6 +66,8 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
       _mrp.text = _rupees(p.mrp);
       _minSelling.text = _rupees(p.minSellingPrice);
       _description.text = p.description ?? '';
+    } else if (widget.initialBarcode != null && widget.initialBarcode!.isNotEmpty) {
+      _barcode.text = widget.initialBarcode!;
     }
   }
 

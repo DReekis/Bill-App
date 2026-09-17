@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart' show IconData, Icons;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -7,6 +8,41 @@ import 'package:printing/printing.dart';
 import '../core/dates.dart';
 import '../core/models.dart';
 import '../core/money.dart';
+
+enum InvoicePaperSize {
+  a4('A4 Standard', 'Standard office / laser printing (210 × 297 mm)', Icons.description_outlined, PdfPageFormat.a4),
+  a5('A5 Compact', 'Half-page voucher format (148 × 210 mm)', Icons.receipt_long_outlined, PdfPageFormat.a5),
+  roll80mm('80mm Thermal (3-inch)', 'Counter POS continuous thermal receipt roll', Icons.point_of_sale_rounded, PdfPageFormat(80 * PdfPageFormat.mm, double.infinity, marginAll: 4 * PdfPageFormat.mm)),
+  roll58mm('58mm Thermal (2-inch)', 'Portable handheld mini thermal receipt roll', Icons.receipt_outlined, PdfPageFormat(58 * PdfPageFormat.mm, double.infinity, marginAll: 2.5 * PdfPageFormat.mm));
+
+  const InvoicePaperSize(this.label, this.description, this.icon, this.format);
+  final String label;
+  final String description;
+  final IconData icon;
+  final PdfPageFormat format;
+}
+
+String getBusinessUpiId(Business business) {
+  if (business.upiId != null && business.upiId!.trim().isNotEmpty) {
+    return business.upiId!.trim();
+  }
+  if (business.phone != null && business.phone!.trim().isNotEmpty) {
+    return '${business.phone!.trim()}@upi';
+  }
+  return 'merchant@upi';
+}
+
+String generateUpiPaymentUri({
+  required Business business,
+  required String invoiceNumber,
+  required int amountPaise,
+}) {
+  final vpa = getBusinessUpiId(business);
+  final payeeName = Uri.encodeComponent(business.name.trim());
+  final amount = (amountPaise / 100).toStringAsFixed(2);
+  final note = Uri.encodeComponent('Invoice $invoiceNumber');
+  return 'upi://pay?pa=$vpa&pn=$payeeName&am=$amount&cu=INR&tn=$note';
+}
 
 Future<Uint8List> buildDocumentPdf({
   required Business business,
@@ -26,6 +62,7 @@ Future<Uint8List> buildDocumentPdf({
   required int total,
   required int outstandingPaise,
   String? notes,
+  PdfPageFormat pageFormat = PdfPageFormat.a4,
 }) async {
   final doc = pw.Document();
   final mono = pw.Font.helvetica();
@@ -153,10 +190,19 @@ Future<Uint8List> buildDocumentPdf({
     );
   }
 
+  final upiUri = generateUpiPaymentUri(
+    business: business,
+    invoiceNumber: number,
+    amountPaise: outstandingPaise > 0 ? outstandingPaise : total,
+  );
+  final upiVpa = getBusinessUpiId(business);
+
   doc.addPage(pw.MultiPage(
-    pageTheme: const pw.PageTheme(
-      pageFormat: PdfPageFormat.a4,
-      margin: pw.EdgeInsets.all(32),
+    pageTheme: pw.PageTheme(
+      pageFormat: pageFormat,
+      margin: pageFormat == PdfPageFormat.a5
+          ? const pw.EdgeInsets.all(20)
+          : const pw.EdgeInsets.all(32),
     ),
     header: (context) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
       header(),
@@ -183,22 +229,267 @@ Future<Uint8List> buildDocumentPdf({
         pw.Text('Note: $notes',
             style: pw.TextStyle(font: mono, fontSize: 9, color: PdfColors.grey700)),
       pw.SizedBox(height: 24),
-      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-        pw.Text('Authorised Signatory\n\n\n\n${business.ownerName ?? business.name}',
-            style: pw.TextStyle(font: mono, fontSize: 9)),
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(right: 40),
-          child: pw.Column(children: [
-            pw.Text('Amount due: ${money(outstandingPaise)}',
-                style: pw.TextStyle(font: bold, fontSize: 11, color: navy)),
-            pw.SizedBox(height: 2),
-            pw.Text('in words: ${_amountInWords(outstandingPaise)}',
-                style: pw.TextStyle(font: mono, fontSize: 7, color: PdfColors.grey600)),
-          ]),
-        ),
-      ]),
+      pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: pw.CrossAxisAlignment.end,
+        children: [
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('Authorised Signatory', style: pw.TextStyle(font: mono, fontSize: 9, color: PdfColors.grey700)),
+              pw.SizedBox(height: 24),
+              pw.Text(business.ownerName ?? business.name, style: pw.TextStyle(font: bold, fontSize: 9)),
+            ],
+          ),
+          if (total > 0)
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(3),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.BarcodeWidget(
+                    barcode: pw.Barcode.qrCode(),
+                    data: upiUri,
+                    width: 58,
+                    height: 58,
+                  ),
+                ),
+                pw.SizedBox(height: 3),
+                pw.Text('Scan & Pay via UPI', style: pw.TextStyle(font: bold, fontSize: 7.5, color: navy)),
+                pw.Text(upiVpa, style: pw.TextStyle(font: mono, fontSize: 6, color: PdfColors.grey700)),
+              ],
+            ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(right: 20),
+            child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+              pw.Text('Amount due: ${money(outstandingPaise)}',
+                  style: pw.TextStyle(font: bold, fontSize: 11, color: navy)),
+              pw.SizedBox(height: 2),
+              pw.Text('in words: ${_amountInWords(outstandingPaise)}',
+                  style: pw.TextStyle(font: mono, fontSize: 7, color: PdfColors.grey600)),
+            ]),
+          ),
+        ],
+      ),
     ],
   ));
+
+  return doc.save();
+}
+
+Future<Uint8List> buildThermalReceiptPdf({
+  required Business business,
+  required String title,
+  required String number,
+  required String date,
+  String? dueDate,
+  required String? partyName,
+  required List<InvoiceLine> lines,
+  required int subtotal,
+  required int discount,
+  required int taxable,
+  required int igst,
+  required int cgst,
+  required int sgst,
+  required int roundOff,
+  required int total,
+  required int outstandingPaise,
+  String? notes,
+  required InvoicePaperSize paperSize,
+}) async {
+  final doc = pw.Document();
+  final mono = pw.Font.courier();
+  final bold = pw.Font.courierBold();
+  final is58mm = paperSize == InvoicePaperSize.roll58mm;
+  final fontSize = is58mm ? 7.5 : 8.5;
+  final smallFontSize = is58mm ? 6.5 : 7.5;
+  final titleFontSize = is58mm ? 11.0 : 13.0;
+
+  String money(int paise) => formatPaise(paise).replaceAll('₹', 'Rs.');
+
+  final upiUri = generateUpiPaymentUri(
+    business: business,
+    invoiceNumber: number,
+    amountPaise: outstandingPaise > 0 ? outstandingPaise : total,
+  );
+  final upiVpa = getBusinessUpiId(business);
+
+  pw.Widget dashedDivider([String char = '-']) => pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(vertical: 3),
+        child: pw.Text(
+          List.filled(is58mm ? 32 : 44, char).join(),
+          maxLines: 1,
+          style: pw.TextStyle(font: mono, fontSize: smallFontSize, color: PdfColors.grey700),
+        ),
+      );
+
+  pw.Widget thermalRow(String label, String value, {bool isBold = false, double? customSize}) => pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(vertical: 1),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(label, style: pw.TextStyle(font: isBold ? bold : mono, fontSize: customSize ?? fontSize)),
+            pw.Text(value, style: pw.TextStyle(font: isBold ? bold : mono, fontSize: customSize ?? fontSize)),
+          ],
+        ),
+      );
+
+  doc.addPage(
+    pw.Page(
+      pageFormat: paperSize.format,
+      margin: pw.EdgeInsets.all(is58mm ? 3 * PdfPageFormat.mm : 4 * PdfPageFormat.mm),
+      build: (context) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          // Header
+          pw.Center(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                pw.Text(
+                  business.name.toUpperCase(),
+                  textAlign: pw.TextAlign.center,
+                  style: pw.TextStyle(font: bold, fontSize: titleFontSize),
+                ),
+                if (business.address != null && business.address!.isNotEmpty) ...[
+                  pw.SizedBox(height: 1),
+                  pw.Text(business.address!, textAlign: pw.TextAlign.center, style: pw.TextStyle(font: mono, fontSize: smallFontSize)),
+                ],
+                if (business.phone != null && business.phone!.isNotEmpty) ...[
+                  pw.SizedBox(height: 1),
+                  pw.Text('Ph: ${business.phone!}', style: pw.TextStyle(font: mono, fontSize: smallFontSize)),
+                ],
+                if (business.gstin != null && business.gstin!.isNotEmpty) ...[
+                  pw.SizedBox(height: 1),
+                  pw.Text('GSTIN: ${business.gstin!}', style: pw.TextStyle(font: bold, fontSize: smallFontSize)),
+                ],
+              ],
+            ),
+          ),
+
+          dashedDivider('='),
+
+          // Doc details
+          thermalRow('DOC:', title.toUpperCase()),
+          thermalRow('NO:', number, isBold: true),
+          thermalRow('DATE:', displayDate(date)),
+          if (partyName != null && partyName.isNotEmpty)
+            thermalRow('CLIENT:', partyName),
+
+          dashedDivider('-'),
+
+          // Items
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('ITEM', style: pw.TextStyle(font: bold, fontSize: fontSize)),
+              pw.Text('AMT', style: pw.TextStyle(font: bold, fontSize: fontSize)),
+            ],
+          ),
+          pw.SizedBox(height: 2),
+
+          ...lines.map((l) {
+            final itemTotal = l.taxable + l.tax;
+            return pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(vertical: 2),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(l.name, style: pw.TextStyle(font: bold, fontSize: fontSize)),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        '  ${_qty(l.quantity)} x ${money(l.price)}${l.gstRate > 0 ? " (GST ${l.gstRate}%)" : ""}',
+                        style: pw.TextStyle(font: mono, fontSize: smallFontSize, color: PdfColors.grey800),
+                      ),
+                      pw.Text(money(itemTotal), style: pw.TextStyle(font: mono, fontSize: fontSize)),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          dashedDivider('-'),
+
+          // Totals
+          thermalRow('Subtotal:', money(subtotal)),
+          if (discount > 0)
+            thermalRow('Discount:', '-${money(discount)}'),
+          if (cgst > 0)
+            thermalRow('CGST:', money(cgst)),
+          if (sgst > 0)
+            thermalRow('SGST:', money(sgst)),
+          if (igst > 0)
+            thermalRow('IGST:', money(igst)),
+          if (roundOff != 0)
+            thermalRow('Round Off:', '${roundOff > 0 ? "+" : "-"}${money(roundOff.abs())}'),
+
+          dashedDivider('='),
+
+          thermalRow('NET TOTAL:', money(total), isBold: true, customSize: titleFontSize),
+
+          if (outstandingPaise > 0 && outstandingPaise != total)
+            thermalRow('DUE BALANCE:', money(outstandingPaise), isBold: true),
+
+          dashedDivider('-'),
+
+          // UPI Payment QR
+          if (total > 0) ...[
+            pw.SizedBox(height: 4),
+            pw.Center(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text('SCAN & PAY VIA UPI', style: pw.TextStyle(font: bold, fontSize: fontSize)),
+                  pw.SizedBox(height: 3),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(3),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.white,
+                      border: pw.Border.all(color: PdfColors.black, width: 0.5),
+                    ),
+                    child: pw.BarcodeWidget(
+                      barcode: pw.Barcode.qrCode(),
+                      data: upiUri,
+                      width: is58mm ? 65 : 85,
+                      height: is58mm ? 65 : 85,
+                    ),
+                  ),
+                  pw.SizedBox(height: 3),
+                  pw.Text('UPI ID: $upiVpa', style: pw.TextStyle(font: mono, fontSize: smallFontSize)),
+                  pw.Text('GPay | PhonePe | Paytm | BHIM', style: pw.TextStyle(font: mono, fontSize: smallFontSize, color: PdfColors.grey700)),
+                ],
+              ),
+            ),
+            dashedDivider('-'),
+          ],
+
+          // Footer
+          pw.Center(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                if (notes != null && notes.isNotEmpty) ...[
+                  pw.Text(notes, textAlign: pw.TextAlign.center, style: pw.TextStyle(font: mono, fontSize: smallFontSize)),
+                  pw.SizedBox(height: 2),
+                ],
+                pw.Text('Thank you! Visit again.', style: pw.TextStyle(font: bold, fontSize: smallFontSize)),
+                pw.SizedBox(height: 1),
+                pw.Text('Powered by Billket', style: pw.TextStyle(font: mono, fontSize: smallFontSize - 1, color: PdfColors.grey600)),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 6),
+        ],
+      ),
+    ),
+  );
 
   return doc.save();
 }
@@ -206,25 +497,51 @@ Future<Uint8List> buildDocumentPdf({
 Future<Uint8List> buildInvoicePdf({
   required Business business,
   required Invoice invoice,
-}) => buildDocumentPdf(
-  business: business,
-  title: 'Tax Invoice',
-  number: invoice.number,
-  date: invoice.date,
-  dueDate: invoice.dueDate,
-  partyName: invoice.customerName,
-  lines: invoice.lines,
-  subtotal: invoice.subtotal,
-  discount: invoice.discount,
-  taxable: invoice.taxable,
-  igst: invoice.igst,
-  cgst: invoice.cgst,
-  sgst: invoice.sgst,
-  roundOff: invoice.roundOff,
-  total: invoice.total,
-  outstandingPaise: invoice.outstanding.paise,
-  notes: invoice.notes,
-);
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+}) {
+  if (paperSize == InvoicePaperSize.roll58mm || paperSize == InvoicePaperSize.roll80mm) {
+    return buildThermalReceiptPdf(
+      business: business,
+      title: 'Tax Invoice',
+      number: invoice.number,
+      date: invoice.date,
+      dueDate: invoice.dueDate,
+      partyName: invoice.customerName,
+      lines: invoice.lines,
+      subtotal: invoice.subtotal,
+      discount: invoice.discount,
+      taxable: invoice.taxable,
+      igst: invoice.igst,
+      cgst: invoice.cgst,
+      sgst: invoice.sgst,
+      roundOff: invoice.roundOff,
+      total: invoice.total,
+      outstandingPaise: invoice.outstanding.paise,
+      notes: invoice.notes,
+      paperSize: paperSize,
+    );
+  }
+  return buildDocumentPdf(
+    business: business,
+    title: 'Tax Invoice',
+    number: invoice.number,
+    date: invoice.date,
+    dueDate: invoice.dueDate,
+    partyName: invoice.customerName,
+    lines: invoice.lines,
+    subtotal: invoice.subtotal,
+    discount: invoice.discount,
+    taxable: invoice.taxable,
+    igst: invoice.igst,
+    cgst: invoice.cgst,
+    sgst: invoice.sgst,
+    roundOff: invoice.roundOff,
+    total: invoice.total,
+    outstandingPaise: invoice.outstanding.paise,
+    notes: invoice.notes,
+    pageFormat: paperSize.format,
+  );
+}
 
 Future<Uint8List> buildQuotationPdf({
   required Business business,
@@ -274,17 +591,22 @@ Future<Uint8List> buildReturnPdf({
 Future<void> printInvoice({
   required Business business,
   required Invoice invoice,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
 }) async {
-  final bytes = await buildInvoicePdf(business: business, invoice: invoice);
-  await Printing.layoutPdf(onLayout: (_) async => bytes,
-      name: '${invoice.number}.pdf');
+  final bytes = await buildInvoicePdf(business: business, invoice: invoice, paperSize: paperSize);
+  await Printing.layoutPdf(
+    onLayout: (_) async => bytes,
+    name: '${invoice.number}.pdf',
+    format: paperSize.format,
+  );
 }
 
 Future<void> shareInvoice({
   required Business business,
   required Invoice invoice,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
 }) async {
-  final bytes = await buildInvoicePdf(business: business, invoice: invoice);
+  final bytes = await buildInvoicePdf(business: business, invoice: invoice, paperSize: paperSize);
   await Printing.sharePdf(bytes: bytes, filename: '${invoice.number}.pdf');
 }
 

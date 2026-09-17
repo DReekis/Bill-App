@@ -23,6 +23,7 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
   final _state = TextEditingController();
   final _city = TextEditingController();
   final _prefix = TextEditingController(text: 'INV');
+  final _upiId = TextEditingController();
   Business? business;
   bool saving = false;
   bool taxRegistered = true;
@@ -53,6 +54,7 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
         _state.text = b.state ?? '';
         _city.text = b.city ?? '';
         _prefix.text = b.invoicePrefix;
+        _upiId.text = b.upiId ?? '';
         taxRegistered = b.taxRegistered;
       }
     });
@@ -79,6 +81,7 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
           state: _state.text.trim().isEmpty ? null : _state.text.trim(),
           city: _city.text.trim().isEmpty ? null : _city.text.trim(),
           industry: 'Retail',
+          upiId: _upiId.text.trim().isEmpty ? null : _upiId.text.trim(),
           invoicePrefix: _prefix.text.trim().isEmpty ? 'INV' : _prefix.text.trim(),
           taxRegistered: taxRegistered,
           allowNegativeStock: true,
@@ -103,6 +106,7 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
           state: _state.text.trim().isEmpty ? null : _state.text.trim(),
           city: _city.text.trim().isEmpty ? null : _city.text.trim(),
           industry: b.industry,
+          upiId: _upiId.text.trim().isEmpty ? null : _upiId.text.trim(),
           invoicePrefix: _prefix.text.trim().isEmpty ? 'INV' : _prefix.text.trim(),
           taxRegistered: taxRegistered,
           allowNegativeStock: b.allowNegativeStock,
@@ -146,6 +150,8 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
                   const SizedBox(width: 12),
                   Expanded(child: AppTextField(controller: _city, label: 'City')),
                 ]),
+                const SizedBox(height: 12),
+                AppTextField(controller: _upiId, label: 'UPI VPA (for QR payment, e.g. store@upi)'),
                 const SizedBox(height: 8),
                 Card(
                   margin: const EdgeInsets.symmetric(vertical: 8),

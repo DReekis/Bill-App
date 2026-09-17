@@ -18,6 +18,7 @@ class Business {
     this.gstin,
     this.pan,
     this.industry,
+    this.upiId,
     this.taxRegistered = false,
     this.isComposition = false,
     this.invoicePrefix = 'INV',
@@ -44,6 +45,7 @@ class Business {
   String? gstin;
   String? pan;
   String? industry;
+  String? upiId;
   bool taxRegistered;
   bool isComposition;
   String invoicePrefix;
@@ -71,6 +73,7 @@ class Business {
         'gstin': gstin,
         'pan': pan,
         'industry': industry,
+        'upi_id': upiId,
         'tax_registered': taxRegistered ? 1 : 0,
         'composition_scheme': isComposition ? 1 : 0,
         'invoice_prefix': invoicePrefix,
@@ -97,6 +100,7 @@ class Business {
         gstin: map['gstin'] as String?,
         pan: map['pan'] as String?,
         industry: map['industry'] as String?,
+        upiId: map['upi_id'] as String?,
         taxRegistered: (map['tax_registered'] as int? ?? 0) == 1,
         isComposition: (map['composition_scheme'] as int? ?? 0) == 1,
         invoicePrefix: map['invoice_prefix'] as String? ?? 'INV',
