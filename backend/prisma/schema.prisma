@@ -42,6 +42,10 @@ model Business {
   allowNegativeStock Boolean            @default(false)
   fyStart            String             @default("2026-04-01")
   currency           String             @default("INR")
+  subscriptionTier   String             @default("pro")
+  subscriptionStatus String             @default("active")
+  subscriptionExpiresAt DateTime?
+  maxDevices         Int                @default(5)
   createdAt          DateTime           @default(now())
   ownerId            String?
   owner              User?              @relation(fields: [ownerId], references: [id])

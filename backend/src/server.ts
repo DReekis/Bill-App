@@ -1,4 +1,8 @@
 import Fastify from 'fastify';
+import fastifyCors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
+import fs from 'fs';
+import path from 'path';
 import { z } from 'zod';
 import { config } from './config.js';
 import { verifyAccessToken } from './lib/jwt.js';
@@ -6,8 +10,45 @@ import { registerUser, loginUser } from './services/auth.js';
 import { calculateInvoiceTotals } from './services/ledger.js';
 import { enqueueSync, pullSyncChanges } from './services/sync.js';
 import { prisma } from './services/db.js';
+import {
+  getAdminOverview,
+  listAdminBusinesses,
+  getAdminBusinessDetail,
+  updateBusinessSubscription,
+  listAdminUsers,
+  updateUserRole,
+  createDatabaseBackup,
+  listDatabaseBackups,
+  getSystemHealthTelemetry,
+  getSyncQueueInspector,
+  retrySyncQueueItem,
+  getAuditLogs,
+} from './services/admin.js';
 
 export const app = Fastify({ logger: config.nodeEnv !== 'production' });
+
+await app.register(fastifyCors, {
+  origin: true,
+  credentials: true,
+});
+
+const publicAdminDir = path.resolve(process.cwd(), 'public', 'admin');
+if (!fs.existsSync(publicAdminDir)) {
+  fs.mkdirSync(publicAdminDir, { recursive: true });
+}
+
+await app.register(fastifyStatic, {
+  root: publicAdminDir,
+  prefix: '/admin/',
+});
+
+app.get('/admin', async (_req, reply) => {
+  return reply.redirect('/admin/');
+});
+
+app.get('/', async (_req, reply) => {
+  return reply.redirect('/admin/');
+});
 
 const authRegisterSchema = z.object({
   name: z.string().min(2),
@@ -294,7 +335,14 @@ app.post('/api/v1/auth/login', async (request, reply) => {
 
 app.addHook('preHandler', async (request, reply) => {
   const authHeader = request.headers.authorization;
-  const isPublicRoute = request.url === '/health' || request.url.startsWith('/api/v1/auth/');
+  const url = request.url.split('?')[0];
+  const isPublicRoute =
+    url === '/health' ||
+    url.startsWith('/api/v1/auth/') ||
+    url === '/api/v1/admin/login' ||
+    url.startsWith('/admin') ||
+    url === '/' ||
+    url.startsWith('/public');
 
   if (isPublicRoute) return;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -819,6 +867,225 @@ app.get('/api/v1/sync/pull', async (request, reply) => {
 
   const result = await pullSyncChanges(businessId, since, limit);
   return reply.send(result);
+});
+
+// ==========================================
+// Phase 6: Web Admin Panel REST API Suite
+// ==========================================
+
+// Admin Authentication Login
+app.post('/api/v1/admin/login', async (request, reply) => {
+  const parsed = authLoginSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'Invalid login payload' });
+  }
+
+  try {
+    const result = await loginUser(parsed.data);
+    if (result.user.role !== 'owner' && result.user.role !== 'admin') {
+      return reply.code(403).send({ error: 'Access denied: Requires administrator privileges' });
+    }
+    return reply.send(result);
+  } catch (error) {
+    return reply.code(401).send({ error: 'Invalid email or password' });
+  }
+});
+
+// Admin Self Profile
+app.get('/api/v1/admin/me', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.sub },
+    select: { id: true, name: true, email: true, role: true, createdAt: true },
+  });
+  return reply.send(dbUser);
+});
+
+// Admin Overview Metrics
+app.get('/api/v1/admin/overview', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const overview = await getAdminOverview();
+  return reply.send(overview);
+});
+
+// Businesses Oversight
+app.get('/api/v1/admin/businesses', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const search = (request.query as any)?.search as string | undefined;
+  const list = await listAdminBusinesses(search);
+  return reply.send(list);
+});
+
+app.get('/api/v1/admin/businesses/:id', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const { id } = request.params as { id: string };
+  const detail = await getAdminBusinessDetail(id);
+  if (!detail) {
+    return reply.code(404).send({ error: 'Business not found' });
+  }
+  return reply.send(detail);
+});
+
+// Subscription & License Gate
+app.patch('/api/v1/admin/businesses/:id/subscription', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const { id } = request.params as { id: string };
+  const subSchema = z.object({
+    tier: z.enum(['free', 'trial', 'pro', 'enterprise']).optional(),
+    status: z.enum(['active', 'trial', 'grace_period', 'expired']).optional(),
+    expiresAt: z.string().nullable().optional(),
+    maxDevices: z.number().int().min(1).max(100).optional(),
+  });
+  const parsed = subSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'Invalid subscription payload', details: parsed.error.issues });
+  }
+
+  try {
+    const updated = await updateBusinessSubscription(id, parsed.data, user.sub);
+    return reply.send(updated);
+  } catch (err: any) {
+    return reply.code(400).send({ error: err.message });
+  }
+});
+
+// Users Management
+app.get('/api/v1/admin/users', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const users = await listAdminUsers();
+  return reply.send(users);
+});
+
+app.patch('/api/v1/admin/users/:id/role', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const { id } = request.params as { id: string };
+  const roleSchema = z.object({
+    role: z.enum(['owner', 'admin', 'manager', 'salesman', 'cashier', 'accountant', 'ca']),
+  });
+  const parsed = roleSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'Invalid role payload' });
+  }
+
+  try {
+    const updated = await updateUserRole(id, parsed.data.role, user.sub);
+    return reply.send(updated);
+  } catch (err: any) {
+    return reply.code(400).send({ error: err.message });
+  }
+});
+
+// System Health & Telemetry
+app.get('/api/v1/admin/health', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const health = await getSystemHealthTelemetry();
+  return reply.send(health);
+});
+
+// Cloud Backups
+app.post('/api/v1/admin/backups', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  try {
+    const backup = await createDatabaseBackup(user.sub);
+    return reply.code(201).send(backup);
+  } catch (err: any) {
+    return reply.code(500).send({ error: 'Backup creation failed', message: err.message });
+  }
+});
+
+app.get('/api/v1/admin/backups', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const backups = await listDatabaseBackups();
+  return reply.send(backups);
+});
+
+// Download Backup File
+app.get('/api/v1/admin/backups/:filename', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const { filename } = request.params as { filename: string };
+  // Security check: filename must match backup-*.db without directory traversal
+  if (!/^backup-[\w.-]+\.db$/.test(filename)) {
+    return reply.code(400).send({ error: 'Invalid backup filename' });
+  }
+  const targetPath = path.resolve(process.cwd(), 'backups', filename);
+  if (!fs.existsSync(targetPath)) {
+    return reply.code(404).send({ error: 'Backup file not found' });
+  }
+  const stream = fs.createReadStream(targetPath);
+  reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+  reply.header('Content-Type', 'application/octet-stream');
+  return reply.send(stream);
+});
+
+// Sync Queue Inspector & Retry
+app.get('/api/v1/admin/sync/queue', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const status = (request.query as any)?.status as string | undefined;
+  const limit = Math.min(Number((request.query as any)?.limit ?? 100), 500);
+  const items = await getSyncQueueInspector(status, limit);
+  return reply.send(items);
+});
+
+app.post('/api/v1/admin/sync/retry/:id', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const { id } = request.params as { id: string };
+  try {
+    const item = await retrySyncQueueItem(id);
+    return reply.send({ success: true, item });
+  } catch (err: any) {
+    return reply.code(400).send({ error: err.message });
+  }
+});
+
+// Audit Logs
+app.get('/api/v1/admin/audit-logs', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+    return reply.code(403).send({ error: 'Requires admin or owner role' });
+  }
+  const businessId = (request.query as any)?.businessId as string | undefined;
+  const limit = Math.min(Number((request.query as any)?.limit ?? 100), 500);
+  const logs = await getAuditLogs(limit, businessId);
+  return reply.send(logs);
 });
 
 const start = async () => {
