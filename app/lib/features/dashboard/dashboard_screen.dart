@@ -505,14 +505,14 @@ class _SnapshotValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Expanded(
           child: Column(children: [
-                            const Text(
-                              'Sales',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white,
-                              ),
-                            ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: Colors.white,
+          ),
+        ),
         const SizedBox(height: 8),
         Text(value,
             style: const TextStyle(

@@ -40,9 +40,9 @@ class _ImportScreenState extends State<ImportScreen> {
         final r = rows[i];
         try {
           if (r.length < 3) continue;
-          final name = r[0].toString();
-          final salePrice = (double.tryParse(r[1].toString()) ?? 0 * 100).round();
-          final stock = (double.tryParse(r[2].toString()) ?? 0).toInt();
+          final name = r[0].toString().trim();
+          final salePrice = ((double.tryParse(r[1].toString().trim()) ?? 0) * 100).round();
+          final stock = (double.tryParse(r[2].toString().trim()) ?? 0).toInt();
 
           await Repository.instance.upsertProduct(Product(
             name: name,

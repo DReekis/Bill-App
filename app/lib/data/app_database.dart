@@ -11,12 +11,24 @@ class AppDatabase {
 
   Database? _db;
   bool get _supportsSqlite =>
-      defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   Future<Database> get database async {
+    if (kIsWeb) return _connectWeb();
     if (_supportsSqlite) return _connect();
     return _connectFfi();
+  }
+
+  Future<Database> _connectWeb() async {
+    if (_db != null) return _db!;
+    ffi.sqfliteFfiInit();
+    _db = await ffi.databaseFactoryFfi.openDatabase(
+      ffi.inMemoryDatabasePath,
+      options: ffi.OpenDatabaseOptions(version: 1, onCreate: createSchema),
+    );
+    return _db!;
   }
 
   Future<Database> _connect() async {

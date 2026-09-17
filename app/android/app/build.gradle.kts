@@ -45,6 +45,8 @@ android {
                     storeFile = file(keystoreProperties["storeFile"] as String)
                     storePassword = keystoreProperties["storePassword"] as String
                 }
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }

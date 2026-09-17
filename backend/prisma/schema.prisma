@@ -8,140 +8,518 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  passwordHash String
-  role      String   @default("owner")
-  createdAt DateTime @default(now())
-  businesses Business[]
-  auditLogs AuditLog[]
-}
-
-model Business {
   id           String      @id @default(cuid())
   name         String
-  ownerName    String?
-  gstin        String?
-  city         String?
-  state        String?
-  currency     String      @default("INR")
+  email        String      @unique
+  passwordHash String
+  role         String      @default("owner") // owner, admin, manager, salesman, cashier, accountant, ca
   createdAt    DateTime    @default(now())
-  ownerId      String?
-  owner        User?       @relation(fields: [ownerId], references: [id])
-  customers    Customer[]
-  products     Product[]
-  invoices     Invoice[]
-  ledger       LedgerEntry[]
-  syncQueue    SyncQueueItem[]
+  businesses   Business[]
   auditLogs    AuditLog[]
 }
 
+model Business {
+  id                 String             @id @default(cuid())
+  name               String
+  ownerName          String?
+  phone              String?
+  email              String?
+  address            String?
+  state              String?
+  city               String?
+  pinCode            String?
+  country            String             @default("India")
+  logo               String?
+  signature          String?
+  website            String?
+  gstin              String?
+  pan                String?
+  industry           String?
+  taxRegistered      Boolean            @default(false)
+  compositionScheme  Boolean            @default(false)
+  invoicePrefix      String             @default("INV")
+  invoiceSequence    Int                @default(0)
+  allowNegativeStock Boolean            @default(false)
+  fyStart            String             @default("2026-04-01")
+  currency           String             @default("INR")
+  createdAt          DateTime           @default(now())
+  ownerId            String?
+  owner              User?              @relation(fields: [ownerId], references: [id])
+  customers          Customer[]
+  suppliers          Supplier[]
+  products           Product[]
+  invoices           Invoice[]
+  quotations         Quotation[]
+  salesOrders        SalesOrder[]
+  purchaseOrders     PurchaseOrder[]
+  deliveryChallans   DeliveryChallan[]
+  returns            Return[]
+  payments           Payment[]
+  expenses           Expense[]
+  stockMoves         StockMove[]
+  bankAccounts       BankAccount[]
+  unitConversions    UnitConversion[]
+  batches            Batch[]
+  serialNumbers      SerialNumber[]
+  ledger             LedgerEntry[]
+  syncQueue          SyncQueueItem[]
+  auditLogs          AuditLog[]
+}
+
 model Customer {
-  id              String   @id @default(cuid())
-  businessId      String
-  business        Business @relation(fields: [businessId], references: [id])
-  name            String
-  phone           String?
-  email           String?
-  gstin           String?
-  billingAddress  String?
-  city            String?
-  openingBalance  Int      @default(0)
-  createdAt       DateTime @default(now())
-  invoices        Invoice[]
+  id               String            @id @default(cuid())
+  businessId       String
+  business         Business          @relation(fields: [businessId], references: [id])
+  name             String
+  phone            String?
+  whatsapp         String?
+  email            String?
+  billingAddress   String?
+  shippingAddress  String?
+  gstin            String?
+  pan              String?
+  state            String?
+  city             String?
+  pin              String?
+  openingBalance   Int               @default(0)
+  creditLimit      Int               @default(0)
+  paymentTerms     Int               @default(0)
+  customerType     String            @default("Retail")
+  customerGroup    String?
+  notes            String?
+  loyaltyPoints    Int               @default(0)
+  inactive         Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  invoices         Invoice[]
+  quotations       Quotation[]
+  salesOrders      SalesOrder[]
+  deliveryChallans DeliveryChallan[]
+}
+
+model Supplier {
+  id             String          @id @default(cuid())
+  businessId     String
+  business       Business        @relation(fields: [businessId], references: [id])
+  name           String
+  phone          String?
+  whatsapp       String?
+  email          String?
+  address        String?
+  gstin          String?
+  pan            String?
+  state          String?
+  openingBalance Int             @default(0)
+  creditPeriod   Int             @default(0)
+  supplierGroup  String?
+  notes          String?
+  inactive       Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  purchaseOrders PurchaseOrder[]
 }
 
 model Product {
-  id              String   @id @default(cuid())
-  businessId      String
-  business        Business @relation(fields: [businessId], references: [id])
-  name            String
-  sku             String?
-  category        String?
-  hsn             String?
-  unit            String   @default("pc")
-  gstRate         Int      @default(0)
-  purchasePrice   Int      @default(0)
-  salePrice       Int      @default(0)
-  stock           Int      @default(0)
-  createdAt       DateTime @default(now())
-  invoiceItems    InvoiceItem[]
+  id                  String                @id @default(cuid())
+  businessId          String
+  business            Business              @relation(fields: [businessId], references: [id])
+  name                String
+  sku                 String?
+  itemCode            String?
+  category            String?
+  brand               String?
+  hsn                 String?
+  barcode             String?
+  unit                String                @default("pc")
+  gstRate             Int                   @default(0)
+  purchasePrice       Int                   @default(0)
+  salePrice           Int                   @default(0)
+  wholesalePrice      Int                   @default(0)
+  retailPrice         Int                   @default(0)
+  mrp                 Int                   @default(0)
+  minSellingPrice     Int                   @default(0)
+  stock               Float                 @default(0)
+  costAverage         Int                   @default(0)
+  lowStockThreshold   Int                   @default(5)
+  taxIncluded         Boolean               @default(false)
+  hasBatch            Boolean               @default(false)
+  hasSerial           Boolean               @default(false)
+  imagePath           String?
+  description         String?
+  inactive            Boolean               @default(false)
+  createdAt           DateTime              @default(now())
+  invoiceItems        InvoiceItem[]
+  quotationItems      QuotationItem[]
+  salesOrderItems     SalesOrderItem[]
+  purchaseOrderItems  PurchaseOrderItem[]
+  deliveryChallanItems DeliveryChallanItem[]
+  returnItems         ReturnItem[]
+  stockMoves          StockMove[]
+  unitConversions     UnitConversion[]
+  batches             Batch[]
+  serialNumbers       SerialNumber[]
 }
 
 model Invoice {
-  id              String        @id @default(cuid())
-  businessId      String
-  business        Business      @relation(fields: [businessId], references: [id])
-  number          String
-  customerId      String?
-  customer        Customer?     @relation(fields: [customerId], references: [id])
-  customerName    String
-  date            DateTime
-  dueDate         DateTime?
-  subtotal        Int           @default(0)
-  discount        Int           @default(0)
-  tax             Int           @default(0)
-  total           Int           @default(0)
-  status          String        @default("Finalized")
-  createdAt       DateTime      @default(now())
-  items           InvoiceItem[]
-  ledgerEntries   LedgerEntry[]
+  id            String        @id @default(cuid())
+  businessId    String
+  business      Business      @relation(fields: [businessId], references: [id])
+  number        String
+  customerId    String?
+  customer      Customer?     @relation(fields: [customerId], references: [id])
+  customerName  String
+  date          DateTime
+  dueDate       DateTime?
+  gstType       String        @default("gst")
+  subtotal      Int           @default(0)
+  discount      Int           @default(0)
+  discountType  String?
+  discountRate  Float         @default(0)
+  taxable       Int           @default(0)
+  tax           Int           @default(0)
+  cgst          Int           @default(0)
+  sgst          Int           @default(0)
+  igst          Int           @default(0)
+  cess          Int           @default(0)
+  roundOff      Int           @default(0)
+  total         Int           @default(0)
+  amountPaid    Int           @default(0)
+  paymentMode   String?
+  status        String        @default("Finalized")
+  notes         String?
+  irn           String?
+  isRecurring   Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  items         InvoiceItem[]
+  ledgerEntries LedgerEntry[]
+
+  @@unique([businessId, number])
 }
 
 model InvoiceItem {
-  id          String   @id @default(cuid())
-  invoiceId   String
-  invoice     Invoice  @relation(fields: [invoiceId], references: [id])
+  id              String   @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId       String?
+  product         Product? @relation(fields: [productId], references: [id])
+  name            String
+  hsn             String?
+  gstRate         Int      @default(0)
+  quantity        Float    @default(1)
+  price           Int      @default(0)
+  discount        Int      @default(0)
+  discountPercent Float    @default(0)
+  taxable         Int      @default(0)
+  tax             Int      @default(0)
+  unit            String?
+}
+
+model Quotation {
+  id           String          @id @default(cuid())
+  businessId   String
+  business     Business        @relation(fields: [businessId], references: [id])
+  number       String
+  customerId   String?
+  customer     Customer?       @relation(fields: [customerId], references: [id])
+  customerName String?
+  date         DateTime
+  expiryDate   DateTime?
+  gstType      String          @default("gst")
+  subtotal     Int             @default(0)
+  discount     Int             @default(0)
+  taxable      Int             @default(0)
+  cgst         Int             @default(0)
+  sgst         Int             @default(0)
+  igst         Int             @default(0)
+  total        Int             @default(0)
+  status       String          @default("Open")
+  notes        String?
+  isProforma   Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  items        QuotationItem[]
+
+  @@unique([businessId, number])
+}
+
+model QuotationItem {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   productId   String?
-  product     Product? @relation(fields: [productId], references: [id])
+  product     Product?  @relation(fields: [productId], references: [id])
   name        String
   hsn         String?
-  quantity    Float    @default(1)
-  price       Int      @default(0)
-  gstRate     Int      @default(0)
-  discount    Int      @default(0)
-  taxable     Int      @default(0)
-  tax         Int      @default(0)
+  gstRate     Int       @default(0)
+  quantity    Float     @default(1)
+  price       Int       @default(0)
+  discount    Int       @default(0)
+  taxable     Int       @default(0)
+  tax         Int       @default(0)
+}
+
+model SalesOrder {
+  id           String           @id @default(cuid())
+  businessId   String
+  business     Business         @relation(fields: [businessId], references: [id])
+  number       String
+  customerId   String?
+  customer     Customer?        @relation(fields: [customerId], references: [id])
+  customerName String?
+  date         DateTime
+  dueDate      DateTime?
+  status       String           @default("Pending")
+  total        Int              @default(0)
+  notes        String?
+  createdAt    DateTime         @default(now())
+  items        SalesOrderItem[]
+
+  @@unique([businessId, number])
+}
+
+model SalesOrderItem {
+  id        String     @id @default(cuid())
+  orderId   String
+  order     SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product?   @relation(fields: [productId], references: [id])
+  name      String
+  quantity  Float      @default(1)
+  price     Int        @default(0)
+}
+
+model PurchaseOrder {
+  id           String              @id @default(cuid())
+  businessId   String
+  business     Business            @relation(fields: [businessId], references: [id])
+  number       String
+  supplierId   String?
+  supplier     Supplier?           @relation(fields: [supplierId], references: [id])
+  supplierName String?
+  date         DateTime
+  expectedDate DateTime?
+  status       String              @default("Draft")
+  total        Int                 @default(0)
+  notes        String?
+  createdAt    DateTime            @default(now())
+  items        PurchaseOrderItem[]
+
+  @@unique([businessId, number])
+}
+
+model PurchaseOrderItem {
+  id        String        @id @default(cuid())
+  orderId   String
+  order     PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product?      @relation(fields: [productId], references: [id])
+  name      String
+  quantity  Float         @default(1)
+  price     Int           @default(0)
+}
+
+model DeliveryChallan {
+  id               String                @id @default(cuid())
+  businessId       String
+  business         Business              @relation(fields: [businessId], references: [id])
+  number           String
+  customerId       String?
+  customer         Customer?             @relation(fields: [customerId], references: [id])
+  customerName     String?
+  date             DateTime
+  address          String?
+  transportDetails String?
+  status           String                @default("Pending")
+  createdAt        DateTime              @default(now())
+  items            DeliveryChallanItem[]
+
+  @@unique([businessId, number])
+}
+
+model DeliveryChallanItem {
+  id        String          @id @default(cuid())
+  challanId String
+  challan   DeliveryChallan @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product?        @relation(fields: [productId], references: [id])
+  name      String
+  quantity  Float           @default(1)
+}
+
+model Return {
+  id         String       @id @default(cuid())
+  businessId String
+  business   Business     @relation(fields: [businessId], references: [id])
+  number     String
+  invoiceId  String?
+  partyId    String?
+  partyName  String?
+  partyType  String       @default("customer")
+  date       DateTime
+  subtotal   Int          @default(0)
+  taxable    Int          @default(0)
+  tax        Int          @default(0)
+  total      Int          @default(0)
+  reason     String?
+  status     String       @default("Finalized")
+  createdAt  DateTime     @default(now())
+  items      ReturnItem[]
+
+  @@unique([businessId, number])
+}
+
+model ReturnItem {
+  id        String   @id @default(cuid())
+  returnId  String
+  return    Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  name      String
+  hsn       String?
+  gstRate   Int      @default(0)
+  quantity  Float    @default(1)
+  price     Int      @default(0)
+  taxable   Int      @default(0)
+  tax       Int      @default(0)
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
+  partyType     String   @default("customer")
+  partyId       String?
+  partyName     String?
+  invoiceId     String?
+  invoiceNumber String?
+  amount        Int      @default(0)
+  mode          String   @default("Cash")
+  date          DateTime
+  reference     String?
+  type          String?  @default("in")
+  notes         String?
+  createdAt     DateTime @default(now())
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id])
+  category    String
+  amount      Int      @default(0)
+  mode        String   @default("Cash")
+  date        DateTime
+  description String?
+  vendor      String?
+  createdAt   DateTime @default(now())
+}
+
+model StockMove {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  changeQty  Float    @default(0)
+  qtyAfter   Float    @default(0)
+  moveType   String
+  refType    String?
+  refId      String?
+  date       DateTime
+  createdAt  DateTime @default(now())
+}
+
+model BankAccount {
+  id             String   @id @default(cuid())
+  businessId     String
+  business       Business @relation(fields: [businessId], references: [id])
+  bankName       String
+  accountName    String?
+  accountNumber  String?
+  openingBalance Int      @default(0)
+  inactive       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}
+
+model UnitConversion {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  fromUnit   String
+  toUnit     String
+  multiplier Float    @default(1)
+  createdAt  DateTime @default(now())
+}
+
+model Batch {
+  id            String    @id @default(cuid())
+  businessId    String
+  business      Business  @relation(fields: [businessId], references: [id])
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id])
+  batchNumber   String
+  mfgDate       DateTime?
+  expiryDate    DateTime?
+  quantity      Float     @default(0)
+  purchasePrice Int       @default(0)
+  salePrice     Int       @default(0)
+  createdAt     DateTime  @default(now())
+}
+
+model SerialNumber {
+  id           String   @id @default(cuid())
+  businessId   String
+  business     Business @relation(fields: [businessId], references: [id])
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id])
+  serialNumber String
+  status       String   @default("Available")
+  purchaseRef  String?
+  saleRef      String?
+  createdAt    DateTime @default(now())
 }
 
 model LedgerEntry {
-  id          String   @id @default(cuid())
-  businessId  String
-  business    Business @relation(fields: [businessId], references: [id])
-  invoiceId   String?
-  invoice     Invoice? @relation(fields: [invoiceId], references: [id])
-  account     String
-  debit       Int      @default(0)
-  credit      Int      @default(0)
-  note        String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id])
+  invoiceId  String?
+  invoice    Invoice? @relation(fields: [invoiceId], references: [id])
+  date       DateTime
+  account    String
+  debit      Int      @default(0)
+  credit     Int      @default(0)
+  refType    String?
+  refId      String?
+  note       String?
+  createdAt  DateTime @default(now())
 }
 
 model SyncQueueItem {
-  id          String   @id @default(cuid())
-  businessId  String
-  business    Business @relation(fields: [businessId], references: [id])
-  entity      String
-  entityId    String
-  op          String
-  payload     String
-  status      String   @default("pending")
-  attempts    Int      @default(0)
-  createdAt   DateTime @default(now())
-  syncedAt    DateTime?
+  id             String    @id @default(cuid())
+  businessId     String
+  business       Business  @relation(fields: [businessId], references: [id])
+  entity         String
+  entityId       String
+  op             String
+  payload        String?
+  idempotencyKey String?   @unique
+  status         String    @default("pending")
+  attempts       Int       @default(0)
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  syncedAt       DateTime?
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  businessId  String?
-  business    Business? @relation(fields: [businessId], references: [id])
-  actorId     String?
-  actor       User?    @relation(fields: [actorId], references: [id])
-  action      String
-  entity      String
-  entityId    String?
-  before      String?
-  after       String?
-  createdAt   DateTime @default(now())
+  id         String    @id @default(cuid())
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id])
+  actorId    String?
+  actor      User?     @relation(fields: [actorId], references: [id])
+  action     String
+  entity     String
+  entityId   String?
+  before     String?
+  after      String?
+  createdAt  DateTime  @default(now())
 }

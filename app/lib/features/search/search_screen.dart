@@ -4,6 +4,8 @@ import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
 import '../../data/repositories.dart';
+import '../customers/customer_detail_screen.dart';
+import '../../finance/stock_moves_screen.dart';
 import '../sales/invoice_detail_screen.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -59,6 +61,10 @@ class _SearchScreenState extends State<SearchScreen> {
                   onTap: () {
                     if (r.type == 'invoice') {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => InvoiceDetailScreen(invoiceId: r.id)));
+                    } else if (r.type == 'customer') {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => CustomerDetailScreen(customerId: r.id)));
+                    } else if (r.type == 'product') {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => StockMovesScreen(productId: r.id)));
                     }
                   },
                 );

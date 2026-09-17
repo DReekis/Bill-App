@@ -5,7 +5,7 @@ import { verifyAccessToken } from './lib/jwt.js';
 import { registerUser, loginUser } from './services/auth.js';
 import { calculateInvoiceTotals } from './services/ledger.js';
 import { enqueueSync } from './services/sync.js';
-import { store } from './store.js';
+import { prisma } from './services/db.js';
 export const app = Fastify({ logger: config.nodeEnv !== 'production' });
 const authRegisterSchema = z.object({
     name: z.string().min(2),
@@ -107,80 +107,116 @@ app.addHook('preHandler', async (request, reply) => {
     try {
         const token = authHeader.replace('Bearer ', '');
         const payload = verifyAccessToken(token);
-        request.headers.user = payload;
+        request.user = payload;
     }
     catch {
         return reply.code(401).send({ error: 'Invalid token' });
     }
 });
-app.get('/api/v1/businesses', async () => store.businesses);
+app.get('/api/v1/businesses', async (request) => {
+    const user = request.user;
+    return await prisma.business.findMany({
+        where: { ownerId: user.sub },
+    });
+});
 app.post('/api/v1/businesses', async (request, reply) => {
     const parsed = businessSchema.safeParse(request.body);
     if (!parsed.success) {
         return reply.code(400).send({ error: 'Invalid business payload' });
     }
-    const business = store.createBusiness(parsed.data);
+    const user = request.user;
+    const business = await prisma.business.create({
+        data: {
+            ...parsed.data,
+            ownerId: user.sub,
+        },
+    });
     return reply.code(201).send(business);
 });
 app.get('/api/v1/customers', async (request) => {
-    const businessId = String(request.headers['x-business-id'] ?? 'biz_1');
-    return store.listCustomers(businessId);
+    const businessId = String(request.headers['x-business-id']);
+    if (!businessId)
+        return [];
+    return await prisma.customer.findMany({
+        where: { businessId },
+    });
 });
 app.post('/api/v1/customers', async (request, reply) => {
     const parsed = customerSchema.safeParse(request.body);
     if (!parsed.success) {
         return reply.code(400).send({ error: 'Invalid customer payload' });
     }
-    const customer = store.createCustomer(parsed.data);
+    const customer = await prisma.customer.create({
+        data: parsed.data,
+    });
     return reply.code(201).send(customer);
 });
 app.get('/api/v1/products', async (request) => {
-    const businessId = String(request.headers['x-business-id'] ?? 'biz_1');
-    return store.listProducts(businessId);
+    const businessId = String(request.headers['x-business-id']);
+    if (!businessId)
+        return [];
+    return await prisma.product.findMany({
+        where: { businessId },
+    });
 });
 app.post('/api/v1/products', async (request, reply) => {
     const parsed = productSchema.safeParse(request.body);
     if (!parsed.success) {
         return reply.code(400).send({ error: 'Invalid product payload' });
     }
-    const product = store.createProduct(parsed.data);
+    const product = await prisma.product.create({
+        data: parsed.data,
+    });
     return reply.code(201).send(product);
 });
 app.get('/api/v1/invoices', async (request) => {
-    const businessId = String(request.headers['x-business-id'] ?? 'biz_1');
-    return store.listInvoices(businessId);
+    const businessId = String(request.headers['x-business-id']);
+    if (!businessId)
+        return [];
+    return await prisma.invoice.findMany({
+        where: { businessId },
+        include: { items: true },
+    });
 });
 app.post('/api/v1/invoices', async (request, reply) => {
     const parsed = invoiceSchema.safeParse(request.body);
     if (!parsed.success) {
         return reply.code(400).send({ error: 'Invalid invoice payload' });
     }
-    const items = parsed.data.items.map((item, index) => {
-        const lineTotal = item.quantity * item.price;
-        const taxable = Math.max(lineTotal - item.discount, 0);
-        const tax = (taxable * item.gstRate) / 100;
-        return {
-            id: `invitem_${index + 1}`,
-            productId: item.productId,
-            name: item.name,
-            hsn: item.hsn,
-            quantity: item.quantity,
-            price: item.price,
-            gstRate: item.gstRate,
-            discount: item.discount,
-            taxable,
-            tax,
-        };
-    });
     const totals = calculateInvoiceTotals(parsed.data.items);
-    const invoice = store.createInvoice({
-        ...parsed.data,
-        items,
-        subtotal: totals.subtotal,
-        discount: totals.discount,
-        tax: totals.tax,
-        total: totals.total,
-        status: 'Finalized',
+    const invoice = await prisma.invoice.create({
+        data: {
+            businessId: parsed.data.businessId,
+            number: parsed.data.number,
+            customerId: parsed.data.customerId,
+            customerName: parsed.data.customerName,
+            date: new Date(parsed.data.date),
+            dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : undefined,
+            subtotal: totals.subtotal,
+            discount: totals.discount,
+            tax: totals.tax,
+            total: totals.total,
+            status: 'Finalized',
+            items: {
+                create: parsed.data.items.map((item) => {
+                    const lineTotal = item.quantity * item.price;
+                    const taxable = Math.max(lineTotal - item.discount, 0);
+                    const tax = (taxable * item.gstRate) / 100;
+                    return {
+                        productId: item.productId,
+                        name: item.name,
+                        hsn: item.hsn,
+                        quantity: item.quantity,
+                        price: item.price,
+                        gstRate: item.gstRate,
+                        discount: item.discount,
+                        taxable,
+                        tax,
+                    };
+                }),
+            },
+        },
+        include: { items: true },
     });
     return reply.code(201).send(invoice);
 });
@@ -195,7 +231,7 @@ app.post('/api/v1/sync/push', async (request, reply) => {
     if (!queueItem.success) {
         return reply.code(400).send({ error: 'Invalid sync payload' });
     }
-    const record = enqueueSync({
+    const record = await enqueueSync({
         businessId: queueItem.data.businessId,
         entity: queueItem.data.entity,
         entityId: queueItem.data.entityId,

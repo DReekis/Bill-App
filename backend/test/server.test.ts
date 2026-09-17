@@ -17,19 +17,20 @@ test('GET /health is public', async () => {
 });
 
 test('POST /api/v1/auth/register creates a user and token', async () => {
+  const email = `test.user.${Date.now()}@example.com`;
   const response = await app.inject({
     method: 'POST',
     url: '/api/v1/auth/register',
     payload: {
       name: 'Test User',
-      email: 'test.user@example.com',
+      email,
       password: 'secret123',
     },
   });
 
   assert.equal(response.statusCode, 201);
   const body = response.json() as { token: string; user: { email: string } };
-  assert.equal(body.user.email, 'test.user@example.com');
+  assert.equal(body.user.email, email);
   assert.ok(body.token.length > 20);
 });
 
