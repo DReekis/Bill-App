@@ -903,7 +903,17 @@ class Repository {
       final retId = await txn.insert('returns', ret.toMap()..['business_id'] = bizId);
 
       for (final line in ret.lines) {
-        await txn.insert('return_items', line.toMap()..['return_id'] = retId);
+        await txn.insert('return_items', {
+          'return_id': retId,
+          'product_id': line.productId,
+          'name': line.name,
+          'hsn': line.hsn,
+          'gst_rate': line.gstRate,
+          'quantity': line.quantity,
+          'price': line.price,
+          'taxable': line.taxable,
+          'tax': line.tax,
+        });
 
         if (line.productId != null) {
           final product = await txn.query('products',

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/security_service.dart';
 import '../../core/session.dart';
+import '../../l10n/app_localizations.dart';
 import '../../theme/stitch_theme.dart';
 
 class PinLockScreen extends StatefulWidget {
@@ -13,6 +15,31 @@ class PinLockScreen extends StatefulWidget {
 class _PinLockScreenState extends State<PinLockScreen> {
   String pin = '';
   bool get _full => pin.length == 4;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAutoBiometric();
+    });
+  }
+
+  Future<void> _checkAutoBiometric() async {
+    final session = context.read<Session>();
+    if (session.biometricEnabled) {
+      await _triggerBiometric();
+    }
+  }
+
+  Future<void> _triggerBiometric() async {
+    final session = context.read<Session>();
+    final success = await SecurityService.instance.authenticateBiometric(
+      reason: 'Unlock Billket with biometric credentials',
+    );
+    if (success && mounted) {
+      session.unlock();
+    }
+  }
 
   void _press(String digit) {
     if (_full) return;
@@ -41,6 +68,9 @@ class _PinLockScreenState extends State<PinLockScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<Session>();
+    final l10n = AppLocalizations.of(context);
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -53,7 +83,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
               child: const Icon(Icons.lock_rounded, color: Colors.white, size: 26),
             ),
             const SizedBox(height: 18),
-            const Text('App locked', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+            Text(l10n.text('app_locked'), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             const Text('Enter your PIN to continue',
                 style: TextStyle(color: StitchColors.textSecondary, fontSize: 13)),
@@ -80,14 +110,15 @@ class _PinLockScreenState extends State<PinLockScreen> {
             _padRow(['4', '5', '6']),
             _padRow(['7', '8', '9']),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 48),
-              child: Row(children: [
-                const Spacer(),
-                _padKey('0'),
-                const Spacer(),
-                _backKey(),
-                const Spacer(),
-              ]),
+              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  if (session.biometricEnabled) _bioKey() else const SizedBox(width: 72),
+                  _padKey('0'),
+                  _backKey(),
+                ],
+              ),
             ),
           ],
         ),
@@ -121,6 +152,18 @@ class _PinLockScreenState extends State<PinLockScreen> {
           width: 72,
           height: 72,
           child: Center(child: Icon(Icons.backspace_outlined, color: StitchColors.textSecondary, size: 24)),
+        ),
+      );
+
+  Widget _bioKey() => InkWell(
+        onTap: _triggerBiometric,
+        borderRadius: BorderRadius.circular(24),
+        child: const SizedBox(
+          width: 72,
+          height: 72,
+          child: Center(
+            child: Icon(Icons.fingerprint_rounded, color: StitchColors.primary, size: 34),
+          ),
         ),
       );
 }

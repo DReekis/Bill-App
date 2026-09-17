@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_localizations/flutter_localizations.dart';
+
 import 'core/api_client.dart';
 import 'core/business_service.dart';
 import 'core/inventory_service.dart';
 import 'core/models.dart';
 import 'core/session.dart';
 import 'data/repositories.dart';
+import 'l10n/app_localizations.dart';
 import 'sync/sync_engine.dart';
 import 'features/auth/auth_flow.dart';
 import 'features/auth/pin_lock_screen.dart';
@@ -28,11 +31,21 @@ class BillApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: Repository.instance.session),
         ChangeNotifierProvider.value(value: SyncEngine.instance),
       ],
-      child: MaterialApp(
-        title: 'Stitch Bill',
-        debugShowCheckedModeBanner: false,
-        theme: buildStitchTheme(),
-        home: const AppGate(),
+      child: Consumer<Session>(
+        builder: (context, session, _) => MaterialApp(
+          title: 'Billket',
+          debugShowCheckedModeBanner: false,
+          theme: buildStitchTheme(),
+          locale: session.locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const AppGate(),
+        ),
       ),
     );
   }

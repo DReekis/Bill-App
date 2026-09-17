@@ -1,5 +1,7 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../data/app_database.dart';
+import 'security_service.dart';
 
 class Session extends ChangeNotifier {
   SharedPreferences? _prefs;
@@ -8,7 +10,12 @@ class Session extends ChangeNotifier {
   int? businessId;
   String currentUser = 'Owner';
   String currentRole = 'Admin';
+  String localeCode = 'en';
+  bool flagSecureEnabled = false;
+  bool biometricEnabled = false;
   bool _locked = true;
+
+  Locale get locale => Locale(localeCode);
 
   bool can(String action) {
     if (currentRole == 'Admin' || currentRole == 'Owner') return true;
@@ -24,6 +31,9 @@ class Session extends ChangeNotifier {
   static const _kPinHash = 'session.pin';
   static const _kOnboarded = 'session.onboarded';
   static const _kCurrentUser = 'session.currentUser';
+  static const _kLocaleCode = 'session.localeCode';
+  static const _kFlagSecure = 'session.flagSecure';
+  static const _kBiometric = 'session.biometric';
 
   bool get hasPin => (_prefs?.getString(_kPinHash) ?? '').isNotEmpty;
   bool get locked => _locked && hasPin;
@@ -37,6 +47,12 @@ class Session extends ChangeNotifier {
     token = _prefs!.getString(_kToken);
     businessId = _prefs!.getInt(_kBusinessId);
     currentUser = _prefs!.getString(_kCurrentUser) ?? 'Owner';
+    localeCode = _prefs!.getString(_kLocaleCode) ?? 'en';
+    flagSecureEnabled = _prefs!.getBool(_kFlagSecure) ?? false;
+    biometricEnabled = _prefs!.getBool(_kBiometric) ?? false;
+    if (flagSecureEnabled) {
+      SecurityService.instance.setFlagSecure(true);
+    }
     _locked = true; // stays locked only when a PIN exists — see `locked`
     notifyListeners();
   }
@@ -141,6 +157,48 @@ class Session extends ChangeNotifier {
   void switchRole(String role) {
     currentRole = role;
     notifyListeners();
+  }
+
+  Future<void> setLocale(String code) async {
+    _prefs ??= await SharedPreferences.getInstance();
+    localeCode = code;
+    await _prefs!.setString(_kLocaleCode, code);
+    notifyListeners();
+  }
+
+  Future<void> setFlagSecure(bool enabled) async {
+    _prefs ??= await SharedPreferences.getInstance();
+    flagSecureEnabled = enabled;
+    await _prefs!.setBool(_kFlagSecure, enabled);
+    await SecurityService.instance.setFlagSecure(enabled);
+    notifyListeners();
+  }
+
+  Future<void> setBiometricEnabled(bool enabled) async {
+    _prefs ??= await SharedPreferences.getInstance();
+    biometricEnabled = enabled;
+    await _prefs!.setBool(_kBiometric, enabled);
+    notifyListeners();
+  }
+
+  Future<void> deleteBusinessData(int targetBusinessId) async {
+    final db = await AppDatabase.instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('invoices', where: 'business_id = ?', whereArgs: [targetBusinessId]);
+      await txn.delete('invoice_items', where: 'invoice_id NOT IN (SELECT id FROM invoices)');
+      await txn.delete('customers', where: 'business_id = ?', whereArgs: [targetBusinessId]);
+      await txn.delete('suppliers', where: 'business_id = ?', whereArgs: [targetBusinessId]);
+      await txn.delete('products', where: 'business_id = ?', whereArgs: [targetBusinessId]);
+      await txn.delete('payments', where: 'business_id = ?', whereArgs: [targetBusinessId]);
+      await txn.delete('expenses', where: 'business_id = ?', whereArgs: [targetBusinessId]);
+      await txn.delete('bank_accounts', where: 'business_id = ?', whereArgs: [targetBusinessId]);
+      await txn.delete('cheques', where: 'business_id = ?', whereArgs: [targetBusinessId]);
+      await txn.delete('ledger_entries', where: 'business_id = ?', whereArgs: [targetBusinessId]);
+      await txn.delete('sync_queue', where: 'business_id = ?', whereArgs: [targetBusinessId]);
+      await txn.delete('audit_logs', where: 'business_id = ?', whereArgs: [targetBusinessId]);
+      await txn.delete('businesses', where: 'id = ?', whereArgs: [targetBusinessId]);
+    });
+    await logout();
   }
 
   void refresh() => notifyListeners();

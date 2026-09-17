@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -107,6 +109,28 @@ class _MoreTabState extends State<MoreTab> {
           ? Text('${sync.pendingCount} pending', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.warning))
           : null),
       _menuTile(context, Icons.backup_outlined, 'Backup & export', () => nav(const BackupExportScreen())),
+      _menuTile(context, Icons.translate_rounded, 'Language / भाषा (${session.localeCode == 'hi' ? 'हिन्दी' : 'English'})', () => _languageSelector(context, session)),
+      _menuTile(
+        context,
+        Icons.security_rounded,
+        'Screen security (block capture)',
+        () => session.setFlagSecure(!session.flagSecureEnabled),
+        trailing: Switch(
+          value: session.flagSecureEnabled,
+          onChanged: (val) => session.setFlagSecure(val),
+        ),
+      ),
+      if (session.hasPin)
+        _menuTile(
+          context,
+          Icons.fingerprint_rounded,
+          'Biometric unlock (Fingerprint/Face)',
+          () => session.setBiometricEnabled(!session.biometricEnabled),
+          trailing: Switch(
+            value: session.biometricEnabled,
+            onChanged: (val) => session.setBiometricEnabled(val),
+          ),
+        ),
       _menuTile(context, Icons.tune_rounded, 'Invoice settings', () => nav(const BusinessEditScreen())),
       _menuTile(
         context,
@@ -166,6 +190,50 @@ class _MoreTabState extends State<MoreTab> {
         onChanged: (message) {
           if (context.mounted) showAppMessage(context, message);
         },
+      ),
+    );
+  }
+
+  void _languageSelector(BuildContext context, Session session) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 10),
+              child: Text('Choose Language / भाषा चुनें',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.language_rounded, color: StitchColors.primary),
+              title: const Text('English', style: TextStyle(fontWeight: FontWeight.w600)),
+              trailing: session.localeCode == 'en'
+                  ? const Icon(Icons.check_circle_rounded, color: StitchColors.success)
+                  : null,
+              onTap: () {
+                session.setLocale('en');
+                Navigator.pop(ctx);
+                showAppMessage(context, 'Language set to English');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.translate_rounded, color: StitchColors.primary),
+              title: const Text('हिन्दी (Hindi)', style: TextStyle(fontWeight: FontWeight.w600)),
+              trailing: session.localeCode == 'hi'
+                  ? const Icon(Icons.check_circle_rounded, color: StitchColors.success)
+                  : null,
+              onTap: () {
+                session.setLocale('hi');
+                Navigator.pop(ctx);
+                showAppMessage(context, 'भाषा हिन्दी सेट की गई');
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
   }
@@ -565,6 +633,7 @@ class _PinSettingsDialogState extends State<PinSettingsDialog> {
 
 class _BackupExportScreenState extends State<BackupExportScreen> {
   bool exporting = false;
+  bool exportingJson = false;
 
   Future<void> _export() async {
     setState(() => exporting = true);
@@ -588,6 +657,102 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
     }
   }
 
+  Future<void> _exportJsonArchive() async {
+    final session = context.read<Session>();
+    final businessId = session.businessId;
+    if (businessId == null) return;
+
+    setState(() => exportingJson = true);
+    try {
+      final db = await AppDatabase.instance.database;
+      final customers = await db.query('customers', where: 'business_id = ?', whereArgs: [businessId]);
+      final products = await db.query('products', where: 'business_id = ?', whereArgs: [businessId]);
+      final invoices = await db.query('invoices', where: 'business_id = ?', whereArgs: [businessId]);
+      final payments = await db.query('payments', where: 'business_id = ?', whereArgs: [businessId]);
+      final bankAccounts = await db.query('bank_accounts', where: 'business_id = ?', whereArgs: [businessId]);
+
+      final archive = {
+        'exportDate': DateTime.now().toIso8601String(),
+        'app': 'Billket',
+        'businessId': businessId,
+        'customers': customers,
+        'products': products,
+        'invoices': invoices,
+        'payments': payments,
+        'bankAccounts': bankAccounts,
+      };
+
+      final jsonStr = const JsonEncoder.withIndent('  ').convert(archive);
+      final temp = await AppDatabase.instance.tempExportFile();
+      final jsonFile = File('${temp.parent.path}/billket_business_archive.json');
+      await jsonFile.writeAsString(jsonStr);
+
+      await Share.shareXFiles(
+        [XFile(jsonFile.path, mimeType: 'application/json', name: 'billket_business_archive.json')],
+        subject: 'Billket Complete Business JSON Export',
+        text: 'Complete structured business records archive from Billket.',
+      );
+    } catch (e) {
+      if (mounted) showAppMessage(context, 'JSON export failed: $e', error: true);
+    } finally {
+      if (mounted) setState(() => exportingJson = false);
+    }
+  }
+
+  void _confirmDeleteBusinessAccount() {
+    final session = context.read<Session>();
+    final businessId = session.businessId;
+    if (businessId == null) return;
+
+    final controller = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Business & Wipe Data',
+            style: TextStyle(color: StitchColors.error, fontWeight: FontWeight.w800)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This will permanently delete all local invoices, customers, products, ledger entries, and audit records for this business.\n\nThis action cannot be undone.',
+              style: TextStyle(fontSize: 13, color: StitchColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            const Text('Type DELETE to confirm:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: 'DELETE',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: StitchColors.error),
+            onPressed: () async {
+              if (controller.text.trim() == 'DELETE') {
+                Navigator.pop(ctx);
+                await session.deleteBusinessData(businessId);
+                if (mounted) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                  showAppMessage(context, 'Business data wiped cleanly');
+                }
+              } else {
+                showAppMessage(ctx, 'Type DELETE to proceed', error: true);
+              }
+            },
+            child: const Text('Confirm Deletion'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Backup & export')),
@@ -598,7 +763,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
               const Row(children: [
                 Icon(Icons.storage_rounded, color: StitchColors.primary),
                 SizedBox(width: 10),
-                Text('Local database', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                Text('Local database backup', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
               ]),
               const SizedBox(height: 8),
               const Text('Your data lives on this device in ledger_pilot.db. Export a copy to share or archive it.',
@@ -609,15 +774,63 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                 child: AsyncButton(
                   loading: exporting,
                   icon: Icons.ios_share_rounded,
-                  label: 'Export database file',
+                  label: 'Export database (.db) file',
                   onPressed: _export,
                 ),
               ),
             ]),
           ),
           const SizedBox(height: 14),
-          const Text('Restore from backup is coming in a future update.',
-              style: TextStyle(fontSize: 12.5, color: StitchColors.textTertiary)),
+          AppCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Row(children: [
+                Icon(Icons.data_object_rounded, color: StitchColors.primary),
+                SizedBox(width: 10),
+                Text('JSON Data Archive (Portability)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              ]),
+              const SizedBox(height: 8),
+              const Text('Export structured customer, invoice, and catalog records in machine-readable JSON format for audit or migration.',
+                  style: TextStyle(fontSize: 13, color: StitchColors.textSecondary)),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: AsyncButton(
+                  loading: exportingJson,
+                  icon: Icons.file_download_outlined,
+                  label: 'Export structured JSON archive',
+                  onPressed: _exportJsonArchive,
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 24),
+          AppCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Row(children: [
+                Icon(Icons.delete_forever_rounded, color: StitchColors.error),
+                SizedBox(width: 10),
+                Text('Compliance & Account Erasure', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: StitchColors.error)),
+              ]),
+              const SizedBox(height: 8),
+              const Text('Permanently erase all business records and transaction ledgers stored on this device.',
+                  style: TextStyle(fontSize: 13, color: StitchColors.textSecondary)),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: StitchColors.error,
+                    side: const BorderSide(color: StitchColors.error),
+                  ),
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  label: const Text('Delete Business & Clear Data'),
+                  onPressed: _confirmDeleteBusinessAccount,
+                ),
+              ),
+            ]),
+          ),
         ]),
       );
 }
