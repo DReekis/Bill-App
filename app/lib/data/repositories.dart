@@ -1130,8 +1130,278 @@ class Repository {
     return rows.map(BankAccount.fromMap).toList();
   }
 
-  Future<void> convertQuotationToInvoice(int quotationId, {required String invoiceNumber}) async {
-    // ... logic already added
+  Future<SalesOrder?> salesOrder(int businessId, int id) async {
+    final db = await _database;
+    final rows = await db.query('sales_orders',
+        where: 'business_id = ? AND id = ?', whereArgs: [businessId, id], limit: 1);
+    if (rows.isEmpty) return null;
+    final order = SalesOrder.fromMap(rows.first);
+    final items = await db.query('sales_order_items',
+        where: 'order_id = ?', whereArgs: [id], orderBy: 'id ASC');
+    order.lines = items.map(InvoiceLine.fromMap).toList();
+    return order;
+  }
+
+  Future<PurchaseOrder?> purchaseOrder(int businessId, int id) async {
+    final db = await _database;
+    final rows = await db.query('purchase_orders',
+        where: 'business_id = ? AND id = ?', whereArgs: [businessId, id], limit: 1);
+    if (rows.isEmpty) return null;
+    final po = PurchaseOrder.fromMap(rows.first);
+    final items = await db.query('purchase_order_items',
+        where: 'order_id = ?', whereArgs: [id], orderBy: 'id ASC');
+    po.lines = items.map(InvoiceLine.fromMap).toList();
+    return po;
+  }
+
+  Future<DeliveryChallan?> deliveryChallan(int businessId, int id) async {
+    final db = await _database;
+    final rows = await db.query('delivery_challans',
+        where: 'business_id = ? AND id = ?', whereArgs: [businessId, id], limit: 1);
+    if (rows.isEmpty) return null;
+    final dc = DeliveryChallan.fromMap(rows.first);
+    final items = await db.query('delivery_challan_items',
+        where: 'challan_id = ?', whereArgs: [id], orderBy: 'id ASC');
+    dc.lines = items.map(InvoiceLine.fromMap).toList();
+    return dc;
+  }
+
+  Future<int> convertQuotationToInvoice(int quotationId, {String? invoiceNumber}) async {
+    final bizId = session.businessId!;
+    final q = await quotation(bizId, quotationId);
+    if (q == null) throw StateError('Quotation not found');
+    final biz = await getBusiness(bizId);
+    if (biz == null) throw StateError('Business not found');
+
+    Customer? cust;
+    if (q.customerId != null) {
+      cust = await customer(bizId, q.customerId!);
+    }
+
+    final number = invoiceNumber ?? await nextInvoiceNumber(bizId, biz.invoicePrefix);
+
+    final lineInputs = q.lines.map((l) => LineCalcInput(
+      quantity: l.quantity,
+      price: l.price,
+      discountPercent: l.discountPercent,
+      gstRate: l.gstRate,
+      taxIncluded: false,
+    )).toList();
+
+    final quoteResult = BillingEngine.calculateQuote(
+      lines: lineInputs,
+      invoiceDiscount: const InvoiceDiscountInput.none(),
+      gstEnabled: biz.taxRegistered,
+      businessTaxRegistered: biz.taxRegistered,
+      businessState: biz.state,
+      customerState: cust?.state,
+    );
+
+    final invoiceId = await finalizeSale(
+      businessId: bizId,
+      number: number,
+      customerId: q.customerId,
+      customerName: q.customerName ?? 'Walk-in',
+      date: todayIso(),
+      dueDate: cust != null && cust.paymentTermsDays > 0
+          ? isoDate(DateTime.now().add(Duration(days: cust.paymentTermsDays)))
+          : null,
+      gstType: quoteResult.intraState ? 'intra' : 'inter',
+      quote: quoteResult,
+      lines: q.lines,
+      amountPaid: 0,
+      notes: 'Converted from Quotation ${q.number}',
+    );
+
+    await markQuotationConverted(bizId, quotationId, invoiceId);
+    return invoiceId;
+  }
+
+  Future<int> convertSalesOrderToInvoice(int orderId, {String? invoiceNumber}) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    final so = await salesOrder(bizId, orderId);
+    if (so == null) throw StateError('Sales order not found');
+    final biz = await getBusiness(bizId);
+    if (biz == null) throw StateError('Business not found');
+
+    Customer? cust;
+    if (so.customerId != null) {
+      cust = await customer(bizId, so.customerId!);
+    }
+
+    final number = invoiceNumber ?? await nextInvoiceNumber(bizId, biz.invoicePrefix);
+
+    final lineInputs = <LineCalcInput>[];
+    final invoiceLines = <InvoiceLine>[];
+
+    for (final l in so.lines) {
+      int gstRate = 0;
+      if (l.productId != null) {
+        final pRows = await db.query('products', where: 'id = ?', whereArgs: [l.productId], limit: 1);
+        if (pRows.isNotEmpty) {
+          gstRate = (pRows.first['gst_rate'] as num?)?.toInt() ?? 0;
+        }
+      }
+      lineInputs.add(LineCalcInput(
+        quantity: l.quantity,
+        price: l.price,
+        gstRate: gstRate,
+      ));
+      invoiceLines.add(InvoiceLine(
+        productId: l.productId,
+        name: l.name,
+        quantity: l.quantity,
+        price: l.price,
+        gstRate: gstRate,
+        taxable: (l.price * l.quantity).round(),
+      ));
+    }
+
+    final quoteResult = BillingEngine.calculateQuote(
+      lines: lineInputs,
+      invoiceDiscount: const InvoiceDiscountInput.none(),
+      gstEnabled: biz.taxRegistered,
+      businessTaxRegistered: biz.taxRegistered,
+      businessState: biz.state,
+      customerState: cust?.state,
+    );
+
+    final invoiceId = await finalizeSale(
+      businessId: bizId,
+      number: number,
+      customerId: so.customerId,
+      customerName: so.customerName ?? 'Walk-in',
+      date: todayIso(),
+      dueDate: so.dueDate ?? (cust != null && cust.paymentTermsDays > 0
+          ? isoDate(DateTime.now().add(Duration(days: cust.paymentTermsDays)))
+          : null),
+      gstType: quoteResult.intraState ? 'intra' : 'inter',
+      quote: quoteResult,
+      lines: invoiceLines,
+      amountPaid: 0,
+      notes: 'Converted from Sales Order ${so.number}',
+    );
+
+    await db.update('sales_orders', {
+      'status': 'Converted',
+      'notes': 'Converted to Invoice ID: $invoiceId'
+    }, where: 'business_id = ? AND id = ?', whereArgs: [bizId, orderId]);
+
+    return invoiceId;
+  }
+
+  Future<int> convertDeliveryChallanToInvoice(int challanId, {String? invoiceNumber}) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    final dc = await deliveryChallan(bizId, challanId);
+    if (dc == null) throw StateError('Delivery challan not found');
+    final biz = await getBusiness(bizId);
+    if (biz == null) throw StateError('Business not found');
+
+    Customer? cust;
+    if (dc.customerId != null) {
+      cust = await customer(bizId, dc.customerId!);
+    }
+
+    final number = invoiceNumber ?? await nextInvoiceNumber(bizId, biz.invoicePrefix);
+
+    final lineInputs = <LineCalcInput>[];
+    final invoiceLines = <InvoiceLine>[];
+
+    for (final l in dc.lines) {
+      int price = l.price;
+      int gstRate = 0;
+      if (l.productId != null) {
+        final pRows = await db.query('products', where: 'id = ?', whereArgs: [l.productId], limit: 1);
+        if (pRows.isNotEmpty) {
+          if (price <= 0) {
+            price = (pRows.first['sale_price'] as num?)?.toInt() ?? 0;
+          }
+          gstRate = (pRows.first['gst_rate'] as num?)?.toInt() ?? 0;
+        }
+      }
+      lineInputs.add(LineCalcInput(
+        quantity: l.quantity,
+        price: price,
+        gstRate: gstRate,
+      ));
+      invoiceLines.add(InvoiceLine(
+        productId: l.productId,
+        name: l.name,
+        quantity: l.quantity,
+        price: price,
+        gstRate: gstRate,
+        taxable: (price * l.quantity).round(),
+      ));
+    }
+
+    final quoteResult = BillingEngine.calculateQuote(
+      lines: lineInputs,
+      invoiceDiscount: const InvoiceDiscountInput.none(),
+      gstEnabled: biz.taxRegistered,
+      businessTaxRegistered: biz.taxRegistered,
+      businessState: biz.state,
+      customerState: cust?.state,
+    );
+
+    final invoiceId = await finalizeSale(
+      businessId: bizId,
+      number: number,
+      customerId: dc.customerId,
+      customerName: dc.customerName ?? 'Walk-in',
+      date: todayIso(),
+      dueDate: cust != null && cust.paymentTermsDays > 0
+          ? isoDate(DateTime.now().add(Duration(days: cust.paymentTermsDays)))
+          : null,
+      gstType: quoteResult.intraState ? 'intra' : 'inter',
+      quote: quoteResult,
+      lines: invoiceLines,
+      amountPaid: 0,
+      notes: 'Converted from Delivery Challan ${dc.number}',
+    );
+
+    await db.update('delivery_challans', {
+      'status': 'Converted',
+    }, where: 'business_id = ? AND id = ?', whereArgs: [bizId, challanId]);
+
+    return invoiceId;
+  }
+
+  Future<int> convertPurchaseOrderToPurchase(int orderId) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    final po = await purchaseOrder(bizId, orderId);
+    if (po == null) throw StateError('Purchase order not found');
+
+    final items = <(int?, String, double, int, int)>[];
+    for (final l in po.lines) {
+      int gstRate = 0;
+      if (l.productId != null) {
+        final pRows = await db.query('products', where: 'id = ?', whereArgs: [l.productId], limit: 1);
+        if (pRows.isNotEmpty) {
+          gstRate = (pRows.first['gst_rate'] as num?)?.toInt() ?? 0;
+        }
+      }
+      items.add((l.productId, l.name, l.quantity, l.price, gstRate));
+    }
+
+    final purchaseId = await createPurchase(
+      businessId: bizId,
+      supplierId: po.supplierId,
+      supplierName: po.supplierName ?? 'Direct vendor',
+      date: todayIso(),
+      items: items,
+      amountPaid: 0,
+      notes: 'Converted from Purchase Order ${po.number}',
+    );
+
+    await db.update('purchase_orders', {
+      'status': 'Converted',
+      'notes': 'Converted to Purchase ID: $purchaseId'
+    }, where: 'business_id = ? AND id = ?', whereArgs: [bizId, orderId]);
+
+    return purchaseId;
   }
 
   Future<void> recordStockTransfer({

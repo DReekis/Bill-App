@@ -21,6 +21,7 @@ import '../sales/sales_order_builder_screen.dart';
 import '../suppliers/supplier_form.dart';
 import '../search/search_screen.dart';
 import '../reports/reports_menu_screen.dart';
+import '../shell/business_switcher_sheet.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -157,6 +158,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         profitHistory: profitHistory,
         onQuick: _quick,
         onRefresh: _load,
+        onSwitchBusiness: () => showBusinessSwitcher(context).then((changed) {
+          if (changed == true) _load();
+        }),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddMenu(context),
@@ -222,6 +226,7 @@ class _ReferenceDashboard extends StatelessWidget {
     required this.profitHistory,
     required this.onQuick,
     required this.onRefresh,
+    this.onSwitchBusiness,
   });
 
   final Business? business;
@@ -233,6 +238,7 @@ class _ReferenceDashboard extends StatelessWidget {
   final List<double> profitHistory;
   final ValueChanged<String> onQuick;
   final Future<void> Function() onRefresh;
+  final VoidCallback? onSwitchBusiness;
 
   String amount(int? value) => value == null ? '₹0' : formatPaise(value);
 
@@ -261,24 +267,66 @@ class _ReferenceDashboard extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
         children: [
           Row(children: [
-            const Icon(Icons.menu_rounded, size: 28, color: StitchColors.textPrimary),
-            const SizedBox(width: 16),
+            IconButton(
+              onPressed: onSwitchBusiness,
+              tooltip: 'Switch Business',
+              icon: const Icon(Icons.menu_rounded, size: 28, color: StitchColors.textPrimary),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+            const SizedBox(width: 14),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                RichText(
-                  text: const TextSpan(
-                    style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        color: StitchColors.textPrimary),
-                    children: [
-                      TextSpan(text: 'Bill'),
-                      TextSpan(
-                          text: 'ket',
-                          style: TextStyle(color: StitchColors.primary))
-                    ],
-                  ),
+                Row(
+                  children: [
+                    RichText(
+                      text: const TextSpan(
+                        style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                            color: StitchColors.textPrimary),
+                        children: [
+                          TextSpan(text: 'Bill'),
+                          TextSpan(
+                              text: 'ket',
+                              style: TextStyle(color: StitchColors.primary))
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: onSwitchBusiness,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: StitchColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: StitchColors.primary.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 110),
+                              child: Text(
+                                business?.name ?? 'My Business',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: StitchColors.primary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(Icons.keyboard_arrow_down_rounded, size: 15, color: StitchColors.primary),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const Text('Smart Billing. Better Business.',
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: StitchColors.textSecondary)),
@@ -309,12 +357,22 @@ class _ReferenceDashboard extends StatelessWidget {
                   )),
             ]),
             const SizedBox(width: 4),
-            const CircleAvatar(
+            InkWell(
+              onTap: onSwitchBusiness,
+              borderRadius: BorderRadius.circular(18),
+              child: CircleAvatar(
                 radius: 18,
-                backgroundColor: Color(0xFF3F51B5),
-                child: Text('R',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14))),
+                backgroundColor: const Color(0xFF3F51B5),
+                child: Text(
+                  (business?.name.isNotEmpty == true ? business!.name[0] : 'R').toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
           ]),
           const SizedBox(height: 32),
 

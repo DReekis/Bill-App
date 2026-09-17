@@ -62,7 +62,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> wit
         children: [
           _List(items: quotations, onConvert: _convertQuotation),
           _List(items: salesOrders, onConvert: _convertSalesOrder),
-          _List(items: purchaseOrders, onConvert: null),
+          _List(items: purchaseOrders, onConvert: _convertPurchaseOrder),
           _List(items: challans, onConvert: _convertChallan),
         ],
       ),
@@ -72,25 +72,53 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> wit
   Future<void> _convertQuotation(dynamic item) async {
     final q = item as Quotation;
     try {
-      final number = 'INV-FROM-Q-${DateTime.now().millisecondsSinceEpoch}';
-      await Repository.instance.convertQuotationToInvoice(q.id!, invoiceNumber: number);
+      final invoiceId = await Repository.instance.convertQuotationToInvoice(q.id!);
       if (mounted) {
-        showAppMessage(context, 'Converted to Invoice $number');
+        showAppMessage(context, 'Quotation ${q.number} converted to Invoice #$invoiceId');
         _load();
       }
     } catch (e) {
-      if (mounted) showAppMessage(context, 'Error: $e', error: true);
+      if (mounted) showAppMessage(context, 'Conversion failed: $e', error: true);
     }
   }
 
   Future<void> _convertSalesOrder(dynamic item) async {
-    // Similar to Quotation
-    showAppMessage(context, 'Order Conversion placeholder');
+    final so = item as SalesOrder;
+    try {
+      final invoiceId = await Repository.instance.convertSalesOrderToInvoice(so.id!);
+      if (mounted) {
+        showAppMessage(context, 'Sales Order ${so.number} converted to Invoice #$invoiceId');
+        _load();
+      }
+    } catch (e) {
+      if (mounted) showAppMessage(context, 'Conversion failed: $e', error: true);
+    }
   }
 
   Future<void> _convertChallan(dynamic item) async {
-    // Similar to Quotation
-    showAppMessage(context, 'Challan Conversion placeholder');
+    final dc = item as DeliveryChallan;
+    try {
+      final invoiceId = await Repository.instance.convertDeliveryChallanToInvoice(dc.id!);
+      if (mounted) {
+        showAppMessage(context, 'Challan ${dc.number} converted to Invoice #$invoiceId');
+        _load();
+      }
+    } catch (e) {
+      if (mounted) showAppMessage(context, 'Conversion failed: $e', error: true);
+    }
+  }
+
+  Future<void> _convertPurchaseOrder(dynamic item) async {
+    final po = item as PurchaseOrder;
+    try {
+      final purchaseId = await Repository.instance.convertPurchaseOrderToPurchase(po.id!);
+      if (mounted) {
+        showAppMessage(context, 'Purchase Order ${po.number} converted to Purchase #$purchaseId');
+        _load();
+      }
+    } catch (e) {
+      if (mounted) showAppMessage(context, 'Conversion failed: $e', error: true);
+    }
   }
 }
 

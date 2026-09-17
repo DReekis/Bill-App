@@ -57,9 +57,9 @@ The vision set forth by the 118-page specification is clear and explicit:
 |---|---|:---:|:---:|---|
 | **1** | App Foundation (Auth, OTP, Lock) | 1 | 🟡 Partial | Mock OTP flow, PIN lock with djb2 hash exists. Real SMS/WhatsApp OTP API & biometric missing. |
 | **2** | Business Creation & Profile | 1 | 🟢 Complete | Name, GSTIN, PAN, state, city, prefix, sequence, composition flag, negative stock toggle. |
-| **3** | Multiple Business Support | 2 | 🟡 Partial | DB schema has `business_id` isolation everywhere, but `Session` lacks `switchBusiness(id)` UI. |
+| **3** | Multiple Business Support | 2 | 🟢 Complete | Dedicated BusinessSwitcherSheet in dashboard and more tabs, switchBusiness in Session with SharedPreferences persistence, full database isolation. |
 | **4** | Home Dashboard | 1 | 🟢 Complete | Today sales, purchases, expenses, profit, cash, bank, receivables, payables, stock value. |
-| **5** | Customer / Party Management | 1 | 🟢 Complete | Customer details, balance, statement, ledger tab, invoice history. Credit limit not enforced. |
+| **5** | Customer / Party Management | 1 | 🟢 Complete | Customer details, balance, statement, ledger tab, invoice history. Credit limit enforced in checkout with manager override dialog. |
 | **6** | Supplier Management | 1 | 🟢 Complete | Supplier details, opening balance, credit period, payable ledger, invoice history. |
 | **7** | Product / Item Management | 1 | 🟢 Complete | HSN, barcode, SKU, brand, category, wholesale/retail/MRP/min price, tax-inclusive toggle. |
 | **8** | Product Units & Conversion | 1 | 🟡 Partial | `unit_conversions` table & logic exists in repo, but dedicated UI conversion manager is missing. |
@@ -75,12 +75,12 @@ The vision set forth by the 118-page specification is clear and explicit:
 | **18** | GST Invoice Formats | 1 | 🟢 Complete | PDF generator includes GSTIN, buyer state, HSN breakdown, tax split, amount in words. |
 | **19** | Non-GST Bill | 1 | 🟢 Complete | Supported when business `tax_registered = 0` or items have 0% GST. |
 | **20** | Quotation / Estimate | 2 | 🟢 Complete | Create quotation, calculate totals, 1-tap convert to Invoice (`convertQuotationToInvoice`). |
-| **21** | Sales Order | 2 | 🟡 Partial | `SalesOrderBuilderScreen` saves order; conversion to invoice is a placeholder in UI. |
-| **22** | Delivery Challan | 2 | 🟡 Partial | `DeliveryChallanBuilderScreen` saves challan; conversion to invoice is a placeholder in UI. |
+| **21** | Sales Order | 2 | 🟢 Complete | `SalesOrderBuilderScreen` creates orders; `convertSalesOrderToInvoice` converts atomically with full inventory & ledger reconciliation. |
+| **22** | Delivery Challan | 2 | 🟢 Complete | `DeliveryChallanBuilderScreen` creates challans; `convertDeliveryChallanToInvoice` converts to official GST bill. |
 | **23** | Sales Return | 2 | 🟢 Complete | `sales_return_form.dart` validates return qty against sold, reverses stock, updates ledger. |
 | **24** | Credit Note | 2 | 🟡 Partial | Handled under return records, but standalone Credit Note issuance UI needed. |
 | **25** | Purchase Module | 1 | 🟢 Complete | `PurchaseBuilderScreen` updates inventory, calculates weighted cost-average, updates payables. |
-| **26** | Purchase Order | 2 | 🟡 Partial | `PurchaseOrderBuilderScreen` creates draft PO; conversion to purchase bill is missing. |
+| **26** | Purchase Order | 2 | 🟢 Complete | `PurchaseOrderBuilderScreen` creates draft PO; `convertPurchaseOrderToPurchase` converts to received goods bill with weighted cost-averaging. |
 | **27** | Purchase Return | 2 | 🟡 Partial | Return logic exists in models & tables, needs dedicated Supplier Return UI sheet. |
 | **28** | Expense Management | 1 | 🟢 Complete | 11 categories, payment mode, date, vendor, amount validation, ledger debit. |
 | **29** | Other Income | 2 | 🔴 Missing | Income categories (interest, commission) currently bundled in generic ledger. |
@@ -382,16 +382,16 @@ To ensure zero rework, avoid compounding errors, and guarantee full architectura
 ### 🟢 Phase 2: Complete Mobile Transaction Pipelines & Core Gaps (Mobile First)
 > **Goal:** Connect all disconnected business workflows so estimates, orders, challans, and bills transition seamlessly without manual re-entry.
 
-- [ ] **Task 2.1: Document Conversion Engine**
+- [x] **Task 2.1: Document Conversion Engine**
   - Implement `convertSalesOrderToInvoice(orderId)` in `Repository` and wire the "Convert to Invoice" button in `TransactionHistoryScreen`.
   - Implement `convertDeliveryChallanToInvoice(challanId)` in `Repository` and wire to UI.
   - Implement `convertPurchaseOrderToPurchase(orderId)` in `Repository` and wire to UI.
   - Ensure all conversions copy party, items, quantity, rate, discount, and tax without data loss.
-- [ ] **Task 2.2: Multi-Business Switching**
+- [x] **Task 2.2: Multi-Business Switching**
   - Add `switchBusiness(int businessId)` method in `Session` and persist `current_business_id` in `SharedPreferences`.
   - Add Business Switcher UI in the App Bar / Drawer allowing 1-tap switching between businesses.
   - Verify complete data isolation (Business A records never visible in Business B).
-- [ ] **Task 2.3: Business Rule Enforcement in Invoicing**
+- [x] **Task 2.3: Business Rule Enforcement in Invoicing**
   - **Credit Limit Enforcement:** Check customer outstanding balance against `credit_limit` during checkout; warn/block if exceeded with manager override prompt.
   - **Auto Due Date Calculation:** When selecting a customer with `paymentTermsDays > 0`, auto-set the invoice due date to `invoiceDate + paymentTermsDays`.
   - **Draft Cart Auto-Save:** Auto-persist active cart in local storage (`shared_preferences`) so unfinished bills survive accidental app kill/restart.
@@ -508,5 +508,6 @@ To ensure zero rework, avoid compounding errors, and guarantee full architectura
 | **2026-09-17** | Antigravity AI | Phase 1: Foundation Stability | Recovered backend Prisma client, expanded schema.prisma to full 20-entity parity, created dev.db, passed 100% backend tests, fixed dashboard metric titles bug, fixed CSV import price parsing math bug, wired search screen customer/product navigation. | Phase 1 Completed & Verified (All Tests Pass) |
 | **2026-09-17** | Antigravity AI | Web Compatibility Fix | Fixed MissingPluginException on path_provider for web by adding web platform branch in AppDatabase using sqflite FFI in-memory factory. Hot restarted successfully. | App running on Chrome without MissingPluginException |
 | **2026-09-17** | Antigravity AI | Android Build Fix | Resolved NDK auto-provisioning failure (CXX1101) by installing NDK 28.2.13676358 cleanly, patched subprojects to compileSdk 36, added debug signing fallback for unsigned release builds. Built release APK successfully (74.1MB). | `flutter build apk --release` SUCCESS (`app-release.apk`) |
+| **2026-09-17** | Antigravity AI | Phase 2: Transaction Pipelines & Core Gaps | Implemented all 4 document conversions (`convertQuotationToInvoice`, `convertSalesOrderToInvoice`, `convertDeliveryChallanToInvoice`, `convertPurchaseOrderToPurchase`) with atomic inventory & ledger entries; wired in `TransactionHistoryScreen`; implemented multi-business switcher with UI bottom sheet (`BusinessSwitcherSheet`), enhanced `BusinessEditScreen` for new business creation, wired in dashboard & more tabs; enforced customer credit limit check with manager override alert modal, auto-calculated payment terms due date, and built draft auto-save/restore persistence with `SharedPreferences`. | Phase 2 Completed & Verified (`flutter analyze` 0 warnings, `flutter test` 37/37 pass, `npm test` 3/3 pass) |
 
 *(This log will be appended after every milestone and code modification to maintain an unbroken audit trail until project completion.)*

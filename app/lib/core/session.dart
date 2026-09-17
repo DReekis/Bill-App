@@ -124,6 +124,13 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> switchBusiness(int newBusinessId) async {
+    _prefs ??= await SharedPreferences.getInstance();
+    businessId = newBusinessId;
+    await _prefs!.setInt(_kBusinessId, newBusinessId);
+    notifyListeners();
+  }
+
   Future<void> switchUser(String name) async {
     _prefs ??= await SharedPreferences.getInstance();
     currentUser = name;

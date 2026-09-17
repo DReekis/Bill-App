@@ -8,7 +8,10 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 
 class BusinessEditScreen extends StatefulWidget {
-  const BusinessEditScreen({super.key});
+  const BusinessEditScreen({super.key, this.businessId, this.isNew = false});
+  final int? businessId;
+  final bool isNew;
+
   @override
   State<BusinessEditScreen> createState() => _BusinessEditScreenState();
 }
@@ -19,15 +22,27 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
   final _gstin = TextEditingController();
   final _state = TextEditingController();
   final _city = TextEditingController();
-  final _prefix = TextEditingController();
+  final _prefix = TextEditingController(text: 'INV');
   Business? business;
   bool saving = false;
-  bool taxRegistered = false;
+  bool taxRegistered = true;
 
   Future<void> _load() async {
-    final businessId = context.read<Session>().businessId;
-    if (businessId == null) return;
-    final b = await Repository.instance.getBusiness(businessId);
+    if (widget.isNew) {
+      // New business default template
+      setState(() {
+        business = Business(
+          name: '',
+          invoicePrefix: 'INV',
+          taxRegistered: true,
+        );
+      });
+      return;
+    }
+
+    final targetId = widget.businessId ?? context.read<Session>().businessId;
+    if (targetId == null) return;
+    final b = await Repository.instance.getBusiness(targetId);
     if (!mounted) return;
     setState(() {
       business = b;
@@ -50,31 +65,57 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
   }
 
   Future<void> _save() async {
-    final b = business;
-    if (b == null || _name.text.trim().isEmpty) {
+    if (_name.text.trim().isEmpty) {
       showAppMessage(context, 'Business name is required', error: true);
       return;
     }
     setState(() => saving = true);
     try {
-      final updated = Business(
-        id: b.id,
-        name: _name.text.trim(),
-        ownerName: _owner.text.trim().isEmpty ? null : _owner.text.trim(),
-        gstin: _gstin.text.trim().isEmpty ? null : _gstin.text.trim().toUpperCase(),
-        state: _state.text.trim().isEmpty ? null : _state.text.trim(),
-        city: _city.text.trim().isEmpty ? null : _city.text.trim(),
-        industry: b.industry,
-        invoicePrefix: _prefix.text.trim().isEmpty ? 'INV' : _prefix.text.trim(),
-        taxRegistered: taxRegistered,
-        allowNegativeStock: b.allowNegativeStock,
-        invoiceSequence: b.invoiceSequence,
-        fyStart: b.fyStart,
-        currency: b.currency,
-      );
-      await Repository.instance.updateBusiness(updated, businessIdOverride: b.id);
-      if (mounted) showAppMessage(context, 'Business updated');
-      await _load();
+      if (widget.isNew) {
+        final newBiz = Business(
+          name: _name.text.trim(),
+          ownerName: _owner.text.trim().isEmpty ? null : _owner.text.trim(),
+          gstin: _gstin.text.trim().isEmpty ? null : _gstin.text.trim().toUpperCase(),
+          state: _state.text.trim().isEmpty ? null : _state.text.trim(),
+          city: _city.text.trim().isEmpty ? null : _city.text.trim(),
+          industry: 'Retail',
+          invoicePrefix: _prefix.text.trim().isEmpty ? 'INV' : _prefix.text.trim(),
+          taxRegistered: taxRegistered,
+          allowNegativeStock: true,
+          invoiceSequence: 1,
+          fyStart: '04-01',
+          currency: 'INR',
+        );
+        final newId = await Repository.instance.createBusiness(newBiz);
+        if (!mounted) return;
+        await context.read<Session>().switchBusiness(newId);
+        if (!mounted) return;
+        showAppMessage(context, 'Business created successfully');
+        Navigator.of(context).pop(true);
+      } else {
+        final b = business;
+        if (b == null) return;
+        final updated = Business(
+          id: b.id,
+          name: _name.text.trim(),
+          ownerName: _owner.text.trim().isEmpty ? null : _owner.text.trim(),
+          gstin: _gstin.text.trim().isEmpty ? null : _gstin.text.trim().toUpperCase(),
+          state: _state.text.trim().isEmpty ? null : _state.text.trim(),
+          city: _city.text.trim().isEmpty ? null : _city.text.trim(),
+          industry: b.industry,
+          invoicePrefix: _prefix.text.trim().isEmpty ? 'INV' : _prefix.text.trim(),
+          taxRegistered: taxRegistered,
+          allowNegativeStock: b.allowNegativeStock,
+          invoiceSequence: b.invoiceSequence,
+          fyStart: b.fyStart,
+          currency: b.currency,
+        );
+        await Repository.instance.updateBusiness(updated, businessIdOverride: b.id);
+        if (mounted) {
+          showAppMessage(context, 'Business updated');
+          Navigator.of(context).pop(true);
+        }
+      }
     } catch (e) {
       if (mounted) showAppMessage(context, 'Could not save: $e', error: true);
     } finally {
@@ -84,7 +125,9 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Business profile')),
+        appBar: AppBar(
+          title: Text(widget.isNew ? 'Create business' : 'Business profile'),
+        ),
         body: business == null
             ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
             : ListView(padding: const EdgeInsets.all(16), children: [
@@ -116,15 +159,21 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
-                  child: AsyncButton(loading: saving, label: 'Save changes', onPressed: _save),
+                  child: AsyncButton(
+                    loading: saving,
+                    label: widget.isNew ? 'Create business' : 'Save changes',
+                    onPressed: _save,
+                  ),
                 ),
-                const SizedBox(height: 24),
-                TextButton.icon(
-                  onPressed: () => context.read<Session>().logout(),
-                  icon: const Icon(Icons.logout_rounded, size: 18),
-                  label: const Text('Sign out & switch business'),
-                  style: TextButton.styleFrom(foregroundColor: StitchColors.error),
-                ),
+                if (!widget.isNew) ...[
+                  const SizedBox(height: 24),
+                  TextButton.icon(
+                    onPressed: () => context.read<Session>().logout(),
+                    icon: const Icon(Icons.logout_rounded, size: 18),
+                    label: const Text('Sign out & switch business'),
+                    style: TextButton.styleFrom(foregroundColor: StitchColors.error),
+                  ),
+                ],
               ]),
       );
 }

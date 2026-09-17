@@ -13,6 +13,7 @@ import '../../utils/widgets.dart';
 import '../reports/reports_screen.dart';
 import '../shell/audit_log_screen.dart';
 import '../shell/business_edit_screen.dart';
+import '../shell/business_switcher_sheet.dart';
 import 'import_screen.dart';
 
 export '../customers/parties_tab.dart' show PartiesTab;
@@ -64,26 +65,36 @@ class _MoreTabState extends State<MoreTab> {
       ]),
       const SizedBox(height: 6),
       InkWell(
-        onTap: () => nav(const BusinessEditScreen()),
+        onTap: () => showBusinessSwitcher(context).then((changed) {
+          if (changed == true) _load();
+        }),
         borderRadius: BorderRadius.circular(14),
         child: AppCard(
-        padding: const EdgeInsets.all(16),
-        child: Row(children: [
-          InitialsAvatar(biz?.name ?? 'My Business', size: 46),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(biz?.name ?? 'My Business', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 2),
-              Text(biz?.gstin?.isNotEmpty == true ? 'GSTIN ${biz!.gstin}' : 'Business profile',
-                  style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
-            ]),
-          ),
-          const Icon(Icons.chevron_right_rounded, color: StitchColors.textTertiary),
-        ]),
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            InitialsAvatar(biz?.name ?? 'My Business', size: 46),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(biz?.name ?? 'My Business', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text(biz?.gstin?.isNotEmpty == true ? 'GSTIN ${biz!.gstin}' : 'Tap to switch business',
+                    style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
+              ]),
+            ),
+            IconButton(
+              icon: const Icon(Icons.settings_outlined, size: 20, color: StitchColors.textTertiary),
+              tooltip: 'Edit Business Profile',
+              onPressed: () => nav(const BusinessEditScreen()),
+            ),
+            const Icon(Icons.unfold_more_rounded, color: StitchColors.primary),
+          ]),
         ),
       ),
       const SizedBox(height: 18),
+      _menuTile(context, Icons.swap_horiz_rounded, 'Switch business', () => showBusinessSwitcher(context).then((changed) {
+        if (changed == true) _load();
+      })),
       _menuTile(context, Icons.bar_chart_rounded, 'Reports & analytics', () => nav(const ReportsScreen())),
       _menuTile(context, Icons.upload_file_rounded, 'Bulk import', () => nav(const ImportScreen())),
       _menuTile(context, Icons.history_rounded, 'Audit log', () => nav(const AuditLogScreen())),
