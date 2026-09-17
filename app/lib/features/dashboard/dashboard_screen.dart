@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/dates.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
@@ -43,6 +44,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<double> profitHistory = [];
   int low = 0;
   int out = 0;
+  int overdueCount = 0;
+  int overdueAmount = 0;
+  String snapshotTimeframe = 'Today';
 
   Future<void> _load() async {
     final session = context.read<Session>();
@@ -54,6 +58,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final biz = await repo.getBusiness(businessId);
     final lowCount = await repo.lowStockCount(businessId);
     final outCount = await repo.outOfStockCount(businessId);
+    final overdueSummary = await repo.overdueInvoicesSummary(businessId);
     final sHist = await repo.dailyPerformance(businessId, 'sales', days: 7);
     final pHist = await repo.dailyPerformance(businessId, 'profit', days: 7);
 
@@ -65,9 +70,384 @@ class _DashboardScreenState extends State<DashboardScreen> {
       business = biz;
       low = lowCount;
       out = outCount;
+      overdueCount = overdueSummary.$1;
+      overdueAmount = overdueSummary.$2;
       salesHistory = sHist;
       profitHistory = pHist;
+      snapshotTimeframe = 'Today';
     });
+  }
+
+  Future<void> _loadTotalsForTimeframe(String tf) async {
+    final session = context.read<Session>();
+    final businessId = session.businessId;
+    if (businessId == null) return;
+    final repo = Repository.instance;
+    final now = DateTime.now();
+    String? fromDate;
+    if (tf == 'This Week') {
+      final monday = now.subtract(Duration(days: now.weekday - 1));
+      fromDate = isoDate(DateTime(monday.year, monday.month, monday.day));
+    } else if (tf == 'This Month') {
+      fromDate = isoDate(DateTime(now.year, now.month, 1));
+    } else if (tf == 'This Year') {
+      fromDate = isoDate(DateTime(now.year, 1, 1));
+    }
+    final map = await repo.dashboardTotals(businessId, fromDate: fromDate);
+    if (!mounted) return;
+    setState(() {
+      totals = map;
+      snapshotTimeframe = tf;
+    });
+  }
+
+  Future<void> _showLowStockSheet() async {
+    final session = context.read<Session>();
+    final businessId = session.businessId;
+    if (businessId == null) return;
+    final items = await Repository.instance.lowStockProducts(businessId);
+    if (!mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (ctx, scroll) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: StitchColors.warning.withValues(alpha: 0.15), shape: BoxShape.circle),
+                    child: const Icon(Icons.warning_amber_rounded, color: StitchColors.warning, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Low Stock Products', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                        Text('${items.length} ${items.length == 1 ? "item needs" : "items need"} replenishment', style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: items.isEmpty
+                    ? const Center(child: Text('No low stock products.'))
+                    : ListView.separated(
+                        controller: scroll,
+                        itemCount: items.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (ctx, i) {
+                          final p = items[i];
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                            subtitle: Text('SKU: ${p.sku ?? "—"} • Reorder point: ${p.lowStockThreshold}'),
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(6)),
+                              child: Text('${p.stock} left', style: TextStyle(color: Colors.amber.shade900, fontWeight: FontWeight.w700, fontSize: 12)),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+                  label: const Text('Add Purchase / Restock'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _quick('Purchase');
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showOverdueSheet() async {
+    final session = context.read<Session>();
+    final businessId = session.businessId;
+    if (businessId == null) return;
+    final items = await Repository.instance.overdueInvoices(businessId);
+    if (!mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (ctx, scroll) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: StitchColors.error.withValues(alpha: 0.15), shape: BoxShape.circle),
+                    child: const Icon(Icons.access_time_rounded, color: StitchColors.error, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Overdue Invoices', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                        Text('${items.length} ${items.length == 1 ? "invoice is" : "invoices are"} past due date', style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: items.isEmpty
+                    ? const Center(child: Text('No overdue invoices.'))
+                    : ListView.separated(
+                        controller: scroll,
+                        itemCount: items.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (ctx, i) {
+                          final inv = items[i];
+                          final due = inv.total - inv.amountPaid;
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(inv.number, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                            subtitle: Text('${inv.customerName ?? "Customer"} • Due: ${inv.dueDate ?? "—"}'),
+                            trailing: Text('₹${formatPaise(due)}', style: const TextStyle(color: StitchColors.error, fontWeight: FontWeight.w800, fontSize: 14)),
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => InvoiceDetailScreen(invoiceId: inv.id!))).then((_) => _load());
+                            },
+                          );
+                        },
+                      ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.call_received_rounded, size: 18),
+                  label: const Text('Record Payment In'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _quick('Payment In');
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showOutOfStockSheet() async {
+    final session = context.read<Session>();
+    final businessId = session.businessId;
+    if (businessId == null) return;
+    final items = await Repository.instance.outOfStockProducts(businessId);
+    if (!mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (ctx, scroll) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: StitchColors.error.withValues(alpha: 0.15), shape: BoxShape.circle),
+                    child: const Icon(Icons.error_outline_rounded, color: StitchColors.error, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Out of Stock Products', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                        Text('${items.length} ${items.length == 1 ? "item has" : "items have"} 0 inventory', style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: items.isEmpty
+                    ? const Center(child: Text('No out of stock products.'))
+                    : ListView.separated(
+                        controller: scroll,
+                        itemCount: items.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (ctx, i) {
+                          final p = items[i];
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                            subtitle: Text('SKU: ${p.sku ?? "—"}'),
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(6)),
+                              child: Text('0 in stock', style: TextStyle(color: Colors.red.shade900, fontWeight: FontWeight.w700, fontSize: 12)),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+                  label: const Text('Add Purchase / Restock'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _quick('Purchase');
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openNotificationsSheet() {
+    final pendingSync = SyncEngine.instance.pendingCount;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 16),
+            const Row(
+              children: [
+                Icon(Icons.notifications_active_rounded, color: StitchColors.primary, size: 24),
+                SizedBox(width: 10),
+                Text('Notifications & Alerts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (low > 0)
+              _NotificationItemTile(
+                icon: Icons.warning_amber_rounded,
+                color: StitchColors.warning,
+                title: 'Low Stock Alert',
+                subtitle: '$low products have reached minimum reorder levels',
+                actionLabel: 'View Products',
+                onAction: () {
+                  Navigator.pop(ctx);
+                  _showLowStockSheet();
+                },
+              ),
+            if (out > 0)
+              _NotificationItemTile(
+                icon: Icons.error_outline_rounded,
+                color: StitchColors.error,
+                title: 'Out of Stock Alert',
+                subtitle: '$out products are completely depleted',
+                actionLabel: 'View Items',
+                onAction: () {
+                  Navigator.pop(ctx);
+                  _showOutOfStockSheet();
+                },
+              ),
+            if (overdueCount > 0)
+              _NotificationItemTile(
+                icon: Icons.access_time_rounded,
+                color: StitchColors.error,
+                title: 'Overdue Invoices Alert',
+                subtitle: '$overdueCount invoices totaling ₹${formatPaise(overdueAmount)} are past due',
+                actionLabel: 'View Invoices',
+                onAction: () {
+                  Navigator.pop(ctx);
+                  _showOverdueSheet();
+                },
+              ),
+            if (pendingSync > 0)
+              _NotificationItemTile(
+                icon: Icons.sync_problem_rounded,
+                color: const Color(0xFF3F51B5),
+                title: 'Pending Cloud Sync',
+                subtitle: '$pendingSync changes queued locally for cloud sync',
+                actionLabel: 'Sync Now',
+                onAction: () async {
+                  Navigator.pop(ctx);
+                  await SyncEngine.instance.syncNow();
+                  await _load();
+                  if (mounted) showAppMessage(context, 'Sync triggered');
+                },
+              ),
+            if (low == 0 && out == 0 && overdueCount == 0 && pendingSync == 0)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(14)),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_rounded, color: Colors.green.shade700, size: 28),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('All Caught Up!', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.green.shade900, fontSize: 15)),
+                          const SizedBox(height: 2),
+                          Text('Stock levels healthy, no overdue invoices, and all records are synced.', style: TextStyle(color: Colors.green.shade800, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -169,12 +549,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
         profitToday: profitToday,
         low: low,
         out: out,
+        overdueCount: overdueCount,
+        overdueAmount: overdueAmount,
+        snapshotTimeframe: snapshotTimeframe,
         salesHistory: salesHistory,
         profitHistory: profitHistory,
         recent: recent,
         onViewAllTransactions: () => widget.onSwitchTab?.call(1),
         onQuick: _quick,
         onRefresh: _load,
+        onSelectTimeframe: _loadTotalsForTimeframe,
+        onOpenNotifications: _openNotificationsSheet,
+        onShowLowStock: _showLowStockSheet,
+        onShowOverdue: _showOverdueSheet,
+        onShowOutOfStock: _showOutOfStockSheet,
         onSwitchBusiness: () => showBusinessSwitcher(context).then((changed) {
           if (changed == true) _load();
         }),
@@ -291,12 +679,20 @@ class _ReferenceDashboard extends StatelessWidget {
     required this.profitToday,
     required this.low,
     required this.out,
+    this.overdueCount = 0,
+    this.overdueAmount = 0,
+    this.snapshotTimeframe = 'Today',
     required this.salesHistory,
     required this.profitHistory,
     this.recent,
     this.onViewAllTransactions,
     required this.onQuick,
     required this.onRefresh,
+    this.onSelectTimeframe,
+    this.onOpenNotifications,
+    this.onShowLowStock,
+    this.onShowOverdue,
+    this.onShowOutOfStock,
     this.onSwitchBusiness,
   });
 
@@ -305,15 +701,30 @@ class _ReferenceDashboard extends StatelessWidget {
   final int profitToday;
   final int low;
   final int out;
+  final int overdueCount;
+  final int overdueAmount;
+  final String snapshotTimeframe;
   final List<double> salesHistory;
   final List<double> profitHistory;
   final List<TransactionRecord>? recent;
   final VoidCallback? onViewAllTransactions;
   final ValueChanged<String> onQuick;
   final Future<void> Function() onRefresh;
+  final ValueChanged<String>? onSelectTimeframe;
+  final VoidCallback? onOpenNotifications;
+  final VoidCallback? onShowLowStock;
+  final VoidCallback? onShowOverdue;
+  final VoidCallback? onShowOutOfStock;
   final VoidCallback? onSwitchBusiness;
 
   String amount(int? value) => value == null ? '₹0' : formatPaise(value);
+
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour >= 4 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
 
   String shortDate(DateTime date) => '${date.day} ${const [
         'Jan',
@@ -334,20 +745,14 @@ class _ReferenceDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = totals;
     final name = business?.ownerName?.split(' ').first ?? 'Rahul';
+    final alertCount = (low > 0 ? 1 : 0) + (out > 0 ? 1 : 0) + (overdueCount > 0 ? 1 : 0);
+
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
         children: [
           Row(children: [
-            IconButton(
-              onPressed: onSwitchBusiness,
-              tooltip: 'Switch Business',
-              icon: const Icon(Icons.menu_rounded, size: 28, color: StitchColors.textPrimary),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-            const SizedBox(width: 14),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -382,7 +787,7 @@ class _ReferenceDashboard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 110),
+                              constraints: const BoxConstraints(maxWidth: 120),
                               child: Text(
                                 business?.name ?? 'My Business',
                                 style: const TextStyle(
@@ -408,26 +813,29 @@ class _ReferenceDashboard extends StatelessWidget {
             const Spacer(),
             IconButton(
                 onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen())),
+                tooltip: 'Search',
                 icon: const Icon(Icons.search_rounded, size: 26, color: StitchColors.textPrimary)),
             Stack(children: [
               IconButton(
-                  onPressed: () {},
+                  onPressed: onOpenNotifications,
+                  tooltip: 'Alerts & Notifications',
                   icon: const Icon(Icons.notifications_none_rounded, size: 26, color: StitchColors.textPrimary)),
-              Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    width: 16,
-                    height: 16,
-                    alignment: Alignment.center,
-                    decoration: const BoxDecoration(
-                        color: StitchColors.error, shape: BoxShape.circle),
-                    child: const Text('3',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800)),
-                  )),
+              if (alertCount > 0)
+                Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                          color: StitchColors.error, shape: BoxShape.circle),
+                      child: Text('$alertCount',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800)),
+                    )),
             ]),
             const SizedBox(width: 4),
             InkWell(
@@ -456,7 +864,7 @@ class _ReferenceDashboard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Good morning, $name 👋',
+                    Text('${_greeting()}, $name 👋',
                         style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
                     const SizedBox(height: 4),
                     const Text("Here's your business summary",
@@ -479,15 +887,18 @@ class _ReferenceDashboard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(shortDate(DateTime.now()),
                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
                 ]),
               ),
             ],
           ),
           const SizedBox(height: 24),
 
-          _Snapshot(totals: t, amount: amount),
+          _Snapshot(
+            totals: t,
+            amount: amount,
+            timeframe: snapshotTimeframe,
+            onSelectTimeframe: onSelectTimeframe,
+          ),
           const SizedBox(height: 32),
 
           const Text('Business Overview',
@@ -540,7 +951,7 @@ class _ReferenceDashboard extends StatelessWidget {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const Spacer(),
             TextButton(
-              onPressed: () {},
+              onPressed: onOpenNotifications,
               child: const Row(children: [
                 Text('View All', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF3F51B5))),
                 SizedBox(width: 4),
@@ -551,19 +962,24 @@ class _ReferenceDashboard extends StatelessWidget {
           _AlertRow(
               icon: Icons.warning_amber_rounded,
               color: const Color(0xFFF44336),
-              title: 'Low Stock: $low products'),
+              title: 'Low Stock: $low products',
+              onTap: onShowLowStock),
           const SizedBox(height: 12),
-          const _AlertRow(
+          _AlertRow(
               icon: Icons.access_time_rounded,
-              color: Color(0xFFFFA000),
-              title: 'Overdue: ₹42,500 from 5 invoices'),
+              color: const Color(0xFFFFA000),
+              title: overdueCount > 0
+                  ? 'Overdue: ₹${formatPaise(overdueAmount)} from $overdueCount invoices'
+                  : 'Overdue: No overdue invoices',
+              onTap: onShowOverdue),
           if (out > 0)
             Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: _AlertRow(
                     icon: Icons.error_outline_rounded,
                     color: const Color(0xFFF44336),
-                    title: 'Out of stock: $out products')),
+                    title: 'Out of stock: $out products',
+                    onTap: onShowOutOfStock)),
 
           const SizedBox(height: 32),
           Row(children: [
@@ -726,9 +1142,16 @@ class _DashboardTransactionRow extends StatelessWidget {
 }
 
 class _Snapshot extends StatelessWidget {
-  const _Snapshot({required this.totals, required this.amount});
+  const _Snapshot({
+    required this.totals,
+    required this.amount,
+    required this.timeframe,
+    required this.onSelectTimeframe,
+  });
   final Map<String, int>? totals;
   final String Function(int?) amount;
+  final String timeframe;
+  final ValueChanged<String>? onSelectTimeframe;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -752,19 +1175,32 @@ class _Snapshot extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Today's Snapshot",
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
+                Text(timeframe == 'Today' ? "Today's Snapshot" : "$timeframe's Snapshot",
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                PopupMenuButton<String>(
+                  initialValue: timeframe,
+                  tooltip: 'Select timeframe',
+                  onSelected: (val) => onSelectTimeframe?.call(val),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  color: Colors.white,
+                  itemBuilder: (ctx) => const [
+                    PopupMenuItem(value: 'Today', child: Text('Today')),
+                    PopupMenuItem(value: 'This Week', child: Text('This Week')),
+                    PopupMenuItem(value: 'This Month', child: Text('This Month')),
+                    PopupMenuItem(value: 'This Year', child: Text('This Year')),
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(children: [
+                      Text(timeframe, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 16),
+                    ]),
                   ),
-                  child: const Row(children: [
-                    Text('Today', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                    SizedBox(width: 4),
-                    Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 16),
-                  ]),
                 ),
               ],
             ),
@@ -965,36 +1401,108 @@ class _ReferenceAction extends StatelessWidget {
 }
 
 class _AlertRow extends StatelessWidget {
-  const _AlertRow(
-      {required this.icon, required this.color, required this.title});
+  const _AlertRow({
+    required this.icon,
+    required this.color,
+    required this.title,
+    this.onTap,
+  });
   final IconData icon;
   final Color color;
   final String title;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+  Widget build(BuildContext context) => InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: StitchColors.outline.withValues(alpha: 0.5)),
+          ),
+          child: Row(children: [
+            Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, color: color, size: 22)),
+            const SizedBox(width: 16),
+            Expanded(
+                child: Text(title,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600, color: StitchColors.textPrimary))),
+            const Text('View',
+                style: TextStyle(
+                    color: Color(0xFF3F51B5),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800))
+          ])));
+}
+
+class _NotificationItemTile extends StatelessWidget {
+  const _NotificationItemTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: StitchColors.outline.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: StitchColors.outline.withValues(alpha: 0.6)),
       ),
-      child: Row(children: [
-        Container(
-            width: 40,
-            height: 40,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: color, size: 22)),
-        const SizedBox(width: 16),
-        Expanded(
-            child: Text(title,
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600, color: StitchColors.textPrimary))),
-        const Text('View',
-            style: TextStyle(
-                color: Color(0xFF3F51B5),
-                fontSize: 13,
-                fontWeight: FontWeight.w800))
-      ]));
+              color: color.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: const TextStyle(color: StitchColors.textSecondary, fontSize: 12)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onAction,
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            ),
+            child: Text(actionLabel, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
 }

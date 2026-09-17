@@ -2132,7 +2132,7 @@ class Repository {
   static String _qty(double q) =>
       q == q.roundToDouble() ? q.round().toString() : q.toStringAsFixed(2);
 
-  Future<Map<String, int>> dashboardTotals(int businessId, {DateTime? day}) async {
+  Future<Map<String, int>> dashboardTotals(int businessId, {DateTime? day, String? fromDate}) async {
     final date = isoDate(day ?? DateTime.now());
     final db = await _database;
     Future<int> sumOf(String table, String column, String whereClause, List<Object?> args) async {
@@ -2141,12 +2141,15 @@ class Repository {
       return rows.isEmpty ? 0 : (rows.first['s'] as num).toInt();
     }
 
-    final salesToday = await sumOf('invoices', 'total', 'business_id = ? AND date = ?', [businessId, date]);
-    final taxableToday = await sumOf('invoices', 'taxable', 'business_id = ? AND date = ?', [businessId, date]);
-    final returnsToday = await sumOf('returns', 'taxable', "business_id = ? AND date = ? AND party_type = 'customer'", [businessId, date]);
-    final purchasesToday = await sumOf('expenses', 'amount', "business_id = ? AND date = ? AND category = 'Purchase'", [businessId, date]);
-    final expensesToday = await sumOf('expenses', 'amount', "business_id = ? AND date = ? AND category != 'Purchase'", [businessId, date]);
-    final cogsToday = await sumOf('ledger', 'debit', "business_id = ? AND date = ? AND account = 'cogs'", [businessId, date]);
+    final dateFilter = fromDate != null ? 'date >= ?' : 'date = ?';
+    final dateArg = fromDate ?? date;
+
+    final salesToday = await sumOf('invoices', 'total', 'business_id = ? AND $dateFilter', [businessId, dateArg]);
+    final taxableToday = await sumOf('invoices', 'taxable', 'business_id = ? AND $dateFilter', [businessId, dateArg]);
+    final returnsToday = await sumOf('returns', 'taxable', "business_id = ? AND $dateFilter AND party_type = 'customer'", [businessId, dateArg]);
+    final purchasesToday = await sumOf('expenses', 'amount', "business_id = ? AND $dateFilter AND category = 'Purchase'", [businessId, dateArg]);
+    final expensesToday = await sumOf('expenses', 'amount', "business_id = ? AND $dateFilter AND category != 'Purchase'", [businessId, dateArg]);
+    final cogsToday = await sumOf('ledger', 'debit', "business_id = ? AND $dateFilter AND account = 'cogs'", [businessId, dateArg]);
     final receivables = await db.rawQuery(
         "SELECT COALESCE(SUM(debit - credit), 0) AS s FROM ledger WHERE business_id = ? AND account LIKE 'customer:%'",
         [businessId]);
@@ -2222,6 +2225,52 @@ class Repository {
         'SELECT COUNT(*) AS c FROM products WHERE business_id = ? AND inactive = 0 AND stock <= 0',
         [businessId]);
     return rows.isEmpty ? 0 : rows.first['c'] as int;
+  }
+
+  Future<List<Product>> lowStockProducts(int businessId) async {
+    final db = await _database;
+    final rows = await db.query(
+      'products',
+      where: 'business_id = ? AND inactive = 0 AND stock > 0 AND stock <= low_stock_threshold',
+      whereArgs: [businessId],
+      orderBy: 'stock ASC',
+    );
+    return rows.map(Product.fromMap).toList();
+  }
+
+  Future<List<Product>> outOfStockProducts(int businessId) async {
+    final db = await _database;
+    final rows = await db.query(
+      'products',
+      where: 'business_id = ? AND inactive = 0 AND stock <= 0',
+      whereArgs: [businessId],
+      orderBy: 'name ASC',
+    );
+    return rows.map(Product.fromMap).toList();
+  }
+
+  Future<(int count, int total)> overdueInvoicesSummary(int businessId) async {
+    final db = await _database;
+    final today = todayIso();
+    final rows = await db.rawQuery(
+      "SELECT COUNT(*) AS c, COALESCE(SUM(total - amount_paid), 0) AS s "
+      "FROM invoices WHERE business_id = ? AND status != 'Paid' AND due_date IS NOT NULL AND due_date < ?",
+      [businessId, today],
+    );
+    if (rows.isEmpty) return (0, 0);
+    return ((rows.first['c'] as num).toInt(), (rows.first['s'] as num).toInt());
+  }
+
+  Future<List<Invoice>> overdueInvoices(int businessId) async {
+    final db = await _database;
+    final today = todayIso();
+    final rows = await db.query(
+      'invoices',
+      where: "business_id = ? AND status != 'Paid' AND due_date IS NOT NULL AND due_date < ?",
+      whereArgs: [businessId, today],
+      orderBy: 'due_date ASC',
+    );
+    return rows.map(Invoice.fromMap).toList();
   }
 
   Future<List<Invoice>> overdueOrUnpaidInvoices(int businessId) async {

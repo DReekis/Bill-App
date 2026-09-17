@@ -65,6 +65,8 @@ void main() {
     int gstRate = 18,
     int amountPaid = 0,
     String mode = 'Cash',
+    String? date,
+    String? dueDate,
   }) async {
     final quote = BillingEngine.calculateQuote(
       lines: [LineCalcInput(quantity: qty, price: price, gstRate: gstRate)],
@@ -78,7 +80,8 @@ void main() {
       number: await repo.nextInvoiceNumber(businessId, 'INV'),
       customerId: customerId,
       customerName: 'Acme',
-      date: '2026-09-02',
+      date: date ?? '2026-09-02',
+      dueDate: dueDate,
       gstType: 'intra',
       quote: quote,
       lines: [
@@ -359,6 +362,98 @@ void main() {
     // Verify latest transaction is first (Electricity Bill on 2026-09-05)
     expect(txs.first.type, TransactionType.expense);
     expect(txs.first.amount, 1500);
+  });
+
+  test('lowStockProducts and outOfStockProducts return filtered inventory correctly', () async {
+    // Product 1: healthy stock (20)
+    await repo.upsertProduct(Product(
+      name: 'Healthy Item',
+      sku: 'H-1',
+      salePrice: 1000,
+      stock: 20,
+      lowStockThreshold: 5,
+    ), businessIdOverride: businessId);
+
+    // Product 2: low stock (3 <= threshold 5)
+    await repo.upsertProduct(Product(
+      name: 'Low Stock Item',
+      sku: 'L-1',
+      salePrice: 1000,
+      stock: 3,
+      lowStockThreshold: 5,
+    ), businessIdOverride: businessId);
+
+    // Product 3: out of stock (0)
+    await repo.upsertProduct(Product(
+      name: 'Out of Stock Item',
+      sku: 'O-1',
+      salePrice: 1000,
+      stock: 0,
+      lowStockThreshold: 5,
+    ), businessIdOverride: businessId);
+
+    final low = await repo.lowStockProducts(businessId);
+    expect(low.length, 1);
+    expect(low.first.name, 'Low Stock Item');
+
+    final out = await repo.outOfStockProducts(businessId);
+    expect(out.length, 1);
+    expect(out.first.name, 'Out of Stock Item');
+  });
+
+  test('overdueInvoicesSummary and overdueInvoices identify unpaid invoices past due date', () async {
+    final custId = await repo.upsertCustomer(
+      Customer(name: 'Due Customer', phone: '9999900000'),
+      businessIdOverride: businessId,
+    );
+    final pId = await addProduct(stock: 50);
+
+    // 1. Invoice with past due date (overdue)
+    await sell(
+      productId: pId,
+      customerId: custId,
+      qty: 2,
+      amountPaid: 0,
+      date: '2026-08-01',
+      dueDate: '2026-08-15',
+    );
+
+    // 2. Invoice with future due date (not overdue)
+    await sell(
+      productId: pId,
+      customerId: custId,
+      qty: 1,
+      amountPaid: 0,
+      date: '2026-09-10',
+      dueDate: '2026-10-15',
+    );
+
+    final (count, amount) = await repo.overdueInvoicesSummary(businessId);
+    expect(count, 1);
+    expect(amount, greaterThan(0));
+
+    final overdueList = await repo.overdueInvoices(businessId);
+    expect(overdueList.length, 1);
+    expect(overdueList.first.dueDate, '2026-08-15');
+  });
+
+  test('dashboardTotals respects fromDate range', () async {
+    final custId = await repo.upsertCustomer(
+      Customer(name: 'Date Customer', phone: '9999911111'),
+      businessIdOverride: businessId,
+    );
+    final pId = await addProduct(stock: 100);
+    // Sale in July
+    await sell(productId: pId, customerId: custId, qty: 1, amountPaid: 10000, date: '2026-07-01');
+    // Sale in September
+    await sell(productId: pId, customerId: custId, qty: 2, amountPaid: 20000, date: '2026-09-10');
+
+    // Totals from September 1st onward
+    final septTotals = await repo.dashboardTotals(businessId, fromDate: '2026-09-01');
+    // Totals all time (or earlier)
+    final allTotals = await repo.dashboardTotals(businessId, fromDate: '2026-01-01');
+
+    expect(septTotals['salesToday']!, lessThan(allTotals['salesToday']!));
   });
 }
 

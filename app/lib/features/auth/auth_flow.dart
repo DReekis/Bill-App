@@ -83,35 +83,51 @@ class _LoginOtpScreenState extends State<LoginOtpScreen> {
     final service = AuthService(client);
 
     try {
-      final auth = await service.register(
-        name: 'Business Owner',
-        email: email,
-        password: password,
-      );
-      client.setToken(auth.token);
-      await session.savePhone(phone);
-      await session.saveAuthToken(auth.token);
-      if (mounted) widget.onVerified(phone);
-      return;
-    } catch (registerError) {
-      try {
-        final auth = await service.login(
-          email: email,
-          password: password,
-        );
-        client.setToken(auth.token);
-        await session.savePhone(phone);
-        await session.saveAuthToken(auth.token);
-        if (mounted) widget.onVerified(phone);
-        return;
-      } catch (_) {
-        await session.savePhone(phone);
-        if (mounted) {
-          widget.onVerified(phone);
-          showAppMessage(
-              context, 'Backend unavailable; continuing with local flow.',
-              error: false);
+      // Fast check if backend is reachable (max 1.2s)
+      final reachable = await client
+          .ping()
+          .timeout(const Duration(milliseconds: 1200), onTimeout: () => false);
+
+      if (reachable) {
+        try {
+          final auth = await service
+              .register(
+                name: 'Business Owner',
+                email: email,
+                password: password,
+              )
+              .timeout(const Duration(seconds: 2));
+          client.setToken(auth.token);
+          await session.savePhone(phone);
+          await session.saveAuthToken(auth.token);
+          if (mounted) widget.onVerified(phone);
+          return;
+        } catch (_) {
+          try {
+            final auth = await service
+                .login(
+                  email: email,
+                  password: password,
+                )
+                .timeout(const Duration(seconds: 2));
+            client.setToken(auth.token);
+            await session.savePhone(phone);
+            await session.saveAuthToken(auth.token);
+            if (mounted) widget.onVerified(phone);
+            return;
+          } catch (_) {}
         }
+      }
+
+      // If backend is offline, unreachable or timed out, proceed immediately with local flow
+      await session.savePhone(phone);
+      if (mounted) {
+        widget.onVerified(phone);
+      }
+    } catch (_) {
+      await session.savePhone(phone);
+      if (mounted) {
+        widget.onVerified(phone);
       }
     }
   }

@@ -249,10 +249,17 @@ class AppTextField extends StatelessWidget {
 }
 
 class AppAmountField extends StatelessWidget {
-  const AppAmountField({super.key, required this.controller, required this.label, this.suffix});
+  const AppAmountField({
+    super.key,
+    required this.controller,
+    required this.label,
+    this.suffix,
+    this.suffixIcon,
+  });
   final TextEditingController controller;
   final String label;
   final String? suffix;
+  final Widget? suffixIcon;
   @override
   Widget build(BuildContext context) => TextFormField(
         controller: controller,
@@ -262,6 +269,7 @@ class AppAmountField extends StatelessWidget {
           labelText: label,
           prefixText: '₹ ',
           suffixText: suffix,
+          suffixIcon: suffixIcon,
         ),
       );
 }

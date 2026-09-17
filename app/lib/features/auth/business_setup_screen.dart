@@ -68,7 +68,7 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
             gstin: business.gstin,
             city: business.city,
             state: business.state,
-          );
+          ).timeout(const Duration(seconds: 2));
         } catch (_) {
           if (kDebugMode) {
             debugPrint(
