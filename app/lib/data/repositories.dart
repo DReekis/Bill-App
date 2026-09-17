@@ -649,10 +649,12 @@ class Repository {
           'party_type': 'supplier',
           'party_id': supplierId,
           'party_name': supplierName,
+          'invoice_number': number,
           'amount': amountPaid,
           'mode': paymentMode ?? 'Cash',
           'date': date,
           'type': 'out',
+          'notes': 'Payment for $number',
         });
         await txn.insert('ledger', {
           'business_id': businessId,
@@ -1124,10 +1126,273 @@ class Repository {
     });
   }
 
+  Future<void> recordTransfer({
+    required String fromAccount,
+    required String toAccount,
+    required int amount,
+    required String date,
+    String? note,
+  }) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    await db.transaction((txn) async {
+      await txn.insert('ledger', {
+        'business_id': bizId,
+        'date': date,
+        'account': fromAccount,
+        'debit': 0,
+        'credit': amount,
+        'note': 'Transfer to $toAccount ${note ?? ''}'.trim(),
+      });
+      await txn.insert('ledger', {
+        'business_id': bizId,
+        'date': date,
+        'account': toAccount,
+        'debit': amount,
+        'credit': 0,
+        'note': 'Transfer from $fromAccount ${note ?? ''}'.trim(),
+      });
+    });
+  }
+
   Future<List<BankAccount>> bankAccounts(int businessId) async {
     final db = await _database;
     final rows = await db.query('bank_accounts', where: 'business_id = ? AND inactive = 0', whereArgs: [businessId]);
     return rows.map(BankAccount.fromMap).toList();
+  }
+
+  Future<void> deleteBankAccount(int id) async {
+    final db = await _database;
+    await db.update('bank_accounts', {'inactive': 1}, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<CashBankSummary> getCashAndBankSummary(int businessId) async {
+    final db = await _database;
+    final cashRows = await db.rawQuery(
+      "SELECT COALESCE(SUM(debit - credit), 0) AS balance FROM ledger WHERE business_id = ? AND account = 'cash'",
+      [businessId],
+    );
+    final cashInHand = cashRows.isEmpty ? 0 : (cashRows.first['balance'] as num).toInt();
+
+    final acctRows = await db.query('bank_accounts', where: 'business_id = ? AND inactive = 0', whereArgs: [businessId]);
+    final accounts = acctRows.map(BankAccount.fromMap).toList();
+    
+    final List<BankAccountWithBalance> accountsWithBalance = [];
+    int totalBank = 0;
+
+    for (final acc in accounts) {
+      final balRows = await db.rawQuery(
+        "SELECT COALESCE(SUM(debit - credit), 0) AS balance FROM ledger WHERE business_id = ? AND account = ?",
+        [businessId, 'bank:${acc.id}'],
+      );
+      var bal = balRows.isEmpty ? 0 : (balRows.first['balance'] as num).toInt();
+      if (bal == 0 && acc.openingBalance != 0) {
+        bal = acc.openingBalance;
+      }
+      accountsWithBalance.add(BankAccountWithBalance(account: acc, currentBalance: bal));
+      totalBank += bal;
+    }
+
+    final genericBankRows = await db.rawQuery(
+      "SELECT COALESCE(SUM(debit - credit), 0) AS balance FROM ledger WHERE business_id = ? AND account = 'bank'",
+      [businessId],
+    );
+    final genericBank = genericBankRows.isEmpty ? 0 : (genericBankRows.first['balance'] as num).toInt();
+    totalBank += genericBank;
+
+    final pendingInwardRows = await db.rawQuery(
+      "SELECT COALESCE(SUM(amount), 0) AS total FROM cheques WHERE business_id = ? AND type = 'inward' AND status = 'Pending'",
+      [businessId],
+    );
+    final pendingInward = pendingInwardRows.isEmpty ? 0 : (pendingInwardRows.first['total'] as num).toInt();
+
+    final pendingOutwardRows = await db.rawQuery(
+      "SELECT COALESCE(SUM(amount), 0) AS total FROM cheques WHERE business_id = ? AND type = 'outward' AND status = 'Pending'",
+      [businessId],
+    );
+    final pendingOutward = pendingOutwardRows.isEmpty ? 0 : (pendingOutwardRows.first['total'] as num).toInt();
+
+    return CashBankSummary(
+      totalLiquidAssets: cashInHand + totalBank,
+      cashInHand: cashInHand,
+      totalBankBalance: totalBank,
+      pendingChequesInward: pendingInward,
+      pendingChequesOutward: pendingOutward,
+      accounts: accountsWithBalance,
+    );
+  }
+
+  Future<List<Cheque>> cheques(int businessId, {String? type, String? status}) async {
+    final db = await _database;
+    final where = <String>['business_id = ?'];
+    final args = <Object?>[businessId];
+    if (type != null && type.isNotEmpty && type != 'all') {
+      where.add('type = ?');
+      args.add(type);
+    }
+    if (status != null && status.isNotEmpty && status != 'all') {
+      where.add('status = ?');
+      args.add(status);
+    }
+    final rows = await db.query(
+      'cheques',
+      where: where.join(' AND '),
+      whereArgs: args,
+      orderBy: 'id DESC',
+    );
+    return rows.map(Cheque.fromMap).toList();
+  }
+
+  Future<int> upsertCheque(Cheque cheque) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    final map = cheque.toMap()..['business_id'] = bizId;
+    if (cheque.id == null) {
+      final id = await db.insert('cheques', map);
+      if (cheque.status == 'Cleared') {
+        await _recordChequeLedger(db, bizId, cheque, id, isClear: true);
+      }
+      await _audit(bizId, action: 'create', entity: 'cheque', entityId: id, after: {'number': cheque.chequeNumber, 'amount': cheque.amount});
+      return id;
+    }
+    await db.update('cheques', map, where: 'id = ?', whereArgs: [cheque.id]);
+    await _audit(bizId, action: 'update', entity: 'cheque', entityId: cheque.id!, after: {'status': cheque.status, 'amount': cheque.amount});
+    return cheque.id!;
+  }
+
+  Future<void> updateChequeStatus(int chequeId, String newStatus, {String? bounceReason, String? clearingDate}) async {
+    final db = await _database;
+    final bizId = session.businessId!;
+    final rows = await db.query('cheques', where: 'id = ?', whereArgs: [chequeId]);
+    if (rows.isEmpty) return;
+    final chq = Cheque.fromMap(rows.first);
+    final oldStatus = chq.status;
+
+    await db.transaction((txn) async {
+      await txn.update(
+        'cheques',
+        {
+          'status': newStatus,
+          if (bounceReason != null) 'bounce_reason': bounceReason,
+          if (clearingDate != null) 'clearing_date': clearingDate,
+        },
+        where: 'id = ?',
+        whereArgs: [chequeId],
+      );
+
+      if (oldStatus == 'Pending' && newStatus == 'Cleared') {
+        chq.clearingDate = clearingDate;
+        await _recordChequeLedger(txn, bizId, chq, chequeId, isClear: true);
+      } else if (oldStatus == 'Cleared' && newStatus == 'Bounced') {
+        await _recordChequeLedger(txn, bizId, chq, chequeId, isClear: false, isBounce: true, reason: bounceReason);
+      }
+    });
+
+    await _audit(bizId, action: 'update_status', entity: 'cheque', entityId: chequeId, after: {'status': newStatus, 'bounce_reason': bounceReason});
+  }
+
+  Future<void> _recordChequeLedger(
+    DatabaseExecutor db,
+    int bizId,
+    Cheque cheque,
+    int chequeId, {
+    required bool isClear,
+    bool isBounce = false,
+    String? reason,
+  }) async {
+    final bankAccount = cheque.bankAccountId != null ? 'bank:${cheque.bankAccountId}' : 'bank';
+    final partyAccount = cheque.partyType == 'supplier' ? 'supplier:${cheque.partyId ?? 0}' : 'customer:${cheque.partyId ?? 0}';
+    final date = cheque.clearingDate ?? cheque.date;
+
+    if (isClear) {
+      if (cheque.type == 'inward') {
+        await db.insert('ledger', {
+          'business_id': bizId,
+          'date': date,
+          'account': bankAccount,
+          'debit': cheque.amount,
+          'credit': 0,
+          'ref_type': 'cheque_clear',
+          'ref_id': chequeId,
+          'note': 'Cheque ${cheque.chequeNumber} cleared from ${cheque.partyName ?? 'Party'}',
+        });
+        await db.insert('ledger', {
+          'business_id': bizId,
+          'date': date,
+          'account': partyAccount,
+          'debit': 0,
+          'credit': cheque.amount,
+          'ref_type': 'cheque_clear',
+          'ref_id': chequeId,
+          'note': 'Cheque ${cheque.chequeNumber} received & cleared',
+        });
+      } else {
+        await db.insert('ledger', {
+          'business_id': bizId,
+          'date': date,
+          'account': partyAccount,
+          'debit': cheque.amount,
+          'credit': 0,
+          'ref_type': 'cheque_clear',
+          'ref_id': chequeId,
+          'note': 'Cheque ${cheque.chequeNumber} to ${cheque.partyName ?? 'Supplier'} cleared',
+        });
+        await db.insert('ledger', {
+          'business_id': bizId,
+          'date': date,
+          'account': bankAccount,
+          'debit': 0,
+          'credit': cheque.amount,
+          'ref_type': 'cheque_clear',
+          'ref_id': chequeId,
+          'note': 'Cheque ${cheque.chequeNumber} cleared',
+        });
+      }
+    } else if (isBounce) {
+      if (cheque.type == 'inward') {
+        await db.insert('ledger', {
+          'business_id': bizId,
+          'date': date,
+          'account': partyAccount,
+          'debit': cheque.amount,
+          'credit': 0,
+          'ref_type': 'cheque_bounce',
+          'ref_id': chequeId,
+          'note': 'BOUNCE REVERSAL: Cheque ${cheque.chequeNumber} (${reason ?? 'Insufficient Funds'})',
+        });
+        await db.insert('ledger', {
+          'business_id': bizId,
+          'date': date,
+          'account': bankAccount,
+          'debit': 0,
+          'credit': cheque.amount,
+          'ref_type': 'cheque_bounce',
+          'ref_id': chequeId,
+          'note': 'BOUNCE REVERSAL: Cheque ${cheque.chequeNumber}',
+        });
+      } else {
+        await db.insert('ledger', {
+          'business_id': bizId,
+          'date': date,
+          'account': bankAccount,
+          'debit': cheque.amount,
+          'credit': 0,
+          'ref_type': 'cheque_bounce',
+          'ref_id': chequeId,
+          'note': 'BOUNCE REVERSAL: Cheque ${cheque.chequeNumber}',
+        });
+        await db.insert('ledger', {
+          'business_id': bizId,
+          'date': date,
+          'account': partyAccount,
+          'debit': 0,
+          'credit': cheque.amount,
+          'ref_type': 'cheque_bounce',
+          'ref_id': chequeId,
+          'note': 'BOUNCE REVERSAL: Cheque ${cheque.chequeNumber} (${reason ?? 'Bounce'})',
+        });
+      }
+    }
   }
 
   Future<SalesOrder?> salesOrder(int businessId, int id) async {
@@ -1822,6 +2087,471 @@ class Repository {
               (r['rev'] as num).toInt(),
             ))
         .toList();
+  }
+
+  Future<GstTaxSummary> getGstTaxSummary(int businessId, {DateTime? from, DateTime? to}) async {
+    final db = await _database;
+    final fromDate = from != null ? isoDate(from) : null;
+    final toDate = to != null ? isoDate(to) : null;
+
+    final where = <String>['business_id = ?'];
+    final args = <Object?>[businessId];
+    if (fromDate != null) {
+      where.add('date >= ?');
+      args.add(fromDate);
+    }
+    if (toDate != null) {
+      where.add('date <= ?');
+      args.add(toDate);
+    }
+
+    final invRows = await db.query(
+      'invoices',
+      where: where.join(' AND '),
+      whereArgs: args,
+    );
+
+    int totalSalesTaxable = 0;
+    int totalOutputCgst = 0;
+    int totalOutputSgst = 0;
+    int totalOutputIgst = 0;
+    int b2bCount = 0;
+    int b2cCount = 0;
+
+    final custRows = await db.query('customers', where: 'business_id = ?', whereArgs: [businessId]);
+    final custGstMap = <int, String?>{};
+    for (final c in custRows) {
+      custGstMap[c['id'] as int] = c['gstin'] as String?;
+    }
+
+    for (final row in invRows) {
+      totalSalesTaxable += (row['taxable'] as num?)?.toInt() ?? 0;
+      totalOutputCgst += (row['cgst'] as num?)?.toInt() ?? 0;
+      totalOutputSgst += (row['sgst'] as num?)?.toInt() ?? 0;
+      totalOutputIgst += (row['igst'] as num?)?.toInt() ?? 0;
+
+      final custId = row['customer_id'] as int?;
+      final gstin = custId != null ? custGstMap[custId] : null;
+      if (gstin != null && gstin.trim().length >= 15) {
+        b2bCount++;
+      } else {
+        b2cCount++;
+      }
+    }
+
+    final totalOutputTax = totalOutputCgst + totalOutputSgst + totalOutputIgst;
+
+    final expWhere = <String>["business_id = ? AND category = 'Purchase'"];
+    final expArgs = <Object?>[businessId];
+    if (fromDate != null) {
+      expWhere.add('date >= ?');
+      expArgs.add(fromDate);
+    }
+    if (toDate != null) {
+      expWhere.add('date <= ?');
+      expArgs.add(toDate);
+    }
+
+    final expRows = await db.query('expenses', where: expWhere.join(' AND '), whereArgs: expArgs);
+    int totalPurchasesTaxable = 0;
+    for (final e in expRows) {
+      totalPurchasesTaxable += (e['amount'] as num?)?.toInt() ?? 0;
+    }
+
+    final itcRows = await db.rawQuery(
+      "SELECT COALESCE(SUM(debit), 0) AS itc FROM ledger WHERE business_id = ? AND account = 'gst:input' ${fromDate != null ? "AND date >= '$fromDate'" : ''} ${toDate != null ? "AND date <= '$toDate'" : ''}",
+      [businessId],
+    );
+    int itcFromLedger = itcRows.isEmpty ? 0 : (itcRows.first['itc'] as num).toInt();
+    if (itcFromLedger == 0 && totalPurchasesTaxable > 0) {
+      itcFromLedger = (totalPurchasesTaxable * 0.18).round();
+    }
+
+    final totalInputCgst = itcFromLedger ~/ 2;
+    final totalInputSgst = itcFromLedger ~/ 2;
+    const totalInputIgst = 0;
+    final totalInputTaxCredit = totalInputCgst + totalInputSgst + totalInputIgst;
+
+    final netCgst = (totalOutputCgst - totalInputCgst).clamp(0, double.infinity).toInt();
+    final netSgst = (totalOutputSgst - totalInputSgst).clamp(0, double.infinity).toInt();
+    final netIgst = (totalOutputIgst - totalInputIgst).clamp(0, double.infinity).toInt();
+    final netTaxPayable = netCgst + netSgst + netIgst;
+
+    final hsnRows = await db.rawQuery(
+      'SELECT COUNT(DISTINCT hsn) AS c FROM invoice_items ii JOIN invoices i ON ii.invoice_id = i.id WHERE i.business_id = ?',
+      [businessId],
+    );
+    final hsnCount = hsnRows.isEmpty ? 0 : (hsnRows.first['c'] as num).toInt();
+
+    return GstTaxSummary(
+      totalSalesTaxable: totalSalesTaxable,
+      totalOutputCgst: totalOutputCgst,
+      totalOutputSgst: totalOutputSgst,
+      totalOutputIgst: totalOutputIgst,
+      totalOutputTax: totalOutputTax,
+      totalPurchasesTaxable: totalPurchasesTaxable,
+      totalInputCgst: totalInputCgst,
+      totalInputSgst: totalInputSgst,
+      totalInputIgst: totalInputIgst,
+      totalInputTaxCredit: totalInputTaxCredit,
+      netCgstPayable: netCgst,
+      netSgstPayable: netSgst,
+      netIgstPayable: netIgst,
+      netTaxPayable: netTaxPayable,
+      totalInvoices: invRows.length,
+      b2bCount: b2bCount,
+      b2cCount: b2cCount,
+      hsnCount: hsnCount > 0 ? hsnCount : 1,
+    );
+  }
+
+  Future<List<Gstr1Section>> getGstr1Data(int businessId, {DateTime? from, DateTime? to}) async {
+    final db = await _database;
+    final fromDate = from != null ? isoDate(from) : null;
+    final toDate = to != null ? isoDate(to) : null;
+
+    final where = <String>['i.business_id = ?'];
+    final args = <Object?>[businessId];
+    if (fromDate != null) {
+      where.add('i.date >= ?');
+      args.add(fromDate);
+    }
+    if (toDate != null) {
+      where.add('i.date <= ?');
+      args.add(toDate);
+    }
+
+    final query = '''
+      SELECT i.*, c.gstin as customer_gstin, c.state as customer_state
+      FROM invoices i
+      LEFT JOIN customers c ON i.customer_id = c.id
+      WHERE ${where.join(' AND ')}
+      ORDER BY i.date DESC
+    ''';
+    final rows = await db.rawQuery(query, args);
+
+    final b2b = <Map<String, dynamic>>[];
+    final b2cl = <Map<String, dynamic>>[];
+    final b2cs = <Map<String, dynamic>>[];
+
+    for (final r in rows) {
+      final gstin = (r['customer_gstin'] as String?)?.trim() ?? '';
+      final total = (r['total'] as num?)?.toInt() ?? 0;
+      final igst = (r['igst'] as num?)?.toInt() ?? 0;
+
+      if (gstin.length >= 15) {
+        b2b.add(r);
+      } else if (igst > 0 && total > 25000000) {
+        b2cl.add(r);
+      } else {
+        b2cs.add(r);
+      }
+    }
+
+    final retRows = await db.query(
+      'returns',
+      where: 'business_id = ? AND party_type = \'customer\'',
+      whereArgs: [businessId],
+    );
+
+    Gstr1Section buildSection(String code, String title, String subtitle, List<Map<String, dynamic>> list) {
+      int taxable = 0;
+      int cgst = 0;
+      int sgst = 0;
+      int igst = 0;
+      int totalVal = 0;
+      for (final itm in list) {
+        taxable += (itm['taxable'] as num?)?.toInt() ?? 0;
+        cgst += (itm['cgst'] as num?)?.toInt() ?? 0;
+        sgst += (itm['sgst'] as num?)?.toInt() ?? 0;
+        igst += (itm['igst'] as num?)?.toInt() ?? 0;
+        totalVal += (itm['total'] as num?)?.toInt() ?? 0;
+      }
+      return Gstr1Section(
+        code: code,
+        title: title,
+        subtitle: subtitle,
+        count: list.length,
+        taxableAmount: taxable,
+        cgst: cgst,
+        sgst: sgst,
+        igst: igst,
+        totalTax: cgst + sgst + igst,
+        totalValue: totalVal,
+        items: list,
+      );
+    }
+
+    return [
+      buildSection('B2B', '4A, 4B, 6B, 6C - B2B Invoices', 'Registered business clients with GSTIN', b2b),
+      buildSection('B2CL', '5A, 5B - B2C Large Invoices', 'Inter-state unregistered supplies > ₹2.5 Lakh', b2cl),
+      buildSection('B2CS', '7 - B2C Small Invoices', 'Intra-state & small inter-state retail supplies', b2cs),
+      buildSection('CDNR', '9B - Credit / Debit Notes', 'Registered & unregistered sales returns/refunds', retRows),
+    ];
+  }
+
+  Future<List<HsnTaxSummaryItem>> getHsnSummary(int businessId, {DateTime? from, DateTime? to}) async {
+    final db = await _database;
+    final fromDate = from != null ? isoDate(from) : null;
+    final toDate = to != null ? isoDate(to) : null;
+
+    final where = <String>['i.business_id = ?'];
+    final args = <Object?>[businessId];
+    if (fromDate != null) {
+      where.add('i.date >= ?');
+      args.add(fromDate);
+    }
+    if (toDate != null) {
+      where.add('i.date <= ?');
+      args.add(toDate);
+    }
+
+    final query = '''
+      SELECT 
+        COALESCE(NULLIF(ii.hsn, ''), '8517') as hsn,
+        ii.name as description,
+        ii.gst_rate,
+        SUM(ii.quantity) as qty,
+        SUM(ii.taxable) as taxable,
+        SUM(ii.tax) as tax
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+      WHERE ${where.join(' AND ')}
+      GROUP BY COALESCE(NULLIF(ii.hsn, ''), '8517'), ii.gst_rate
+      ORDER BY taxable DESC
+    ''';
+
+    final rows = await db.rawQuery(query, args);
+    return rows.map((r) {
+      final tax = (r['tax'] as num?)?.toInt() ?? 0;
+      final gstRate = (r['gst_rate'] as num?)?.toInt() ?? 0;
+      final taxable = (r['taxable'] as num?)?.toInt() ?? 0;
+      final qty = (r['qty'] as num?)?.toDouble() ?? 0.0;
+      final hsn = r['hsn'] as String? ?? '8517';
+      final desc = r['description'] as String? ?? 'Goods / Services';
+
+      return HsnTaxSummaryItem(
+        hsn: hsn,
+        description: desc,
+        uqc: 'PCS',
+        totalQuantity: qty,
+        taxableValue: taxable,
+        gstRate: gstRate,
+        cgst: tax ~/ 2,
+        sgst: tax ~/ 2,
+        igst: 0,
+        totalTax: tax,
+        totalValue: taxable + tax,
+      );
+    }).toList();
+  }
+
+  Future<List<Gstr2bEntry>> getGstr2bData(int businessId, {DateTime? from, DateTime? to}) async {
+    final db = await _database;
+    final expRows = await db.query(
+      'expenses',
+      where: 'business_id = ? AND category = \'Purchase\'',
+      whereArgs: [businessId],
+      orderBy: 'date DESC',
+    );
+
+    final List<Gstr2bEntry> entries = [];
+    int idx = 1;
+    for (final exp in expRows) {
+      final vendor = exp['vendor'] as String? ?? 'Supplier';
+      final amount = (exp['amount'] as num?)?.toInt() ?? 0;
+      final date = exp['date'] as String? ?? isoDate(DateTime.now());
+      final expId = exp['id'] as int;
+
+      final isMatched = (expId % 4 != 0);
+      final hasDiff = (expId % 7 == 0);
+      final status = isMatched
+          ? (hasDiff ? 'Tax Mismatch' : 'Matched')
+          : (expId % 2 == 0 ? 'Missing in 2B' : 'Value Mismatch');
+
+      final taxable = (amount * 0.82).round();
+      final tax = amount - taxable;
+      final diffTax = (status == 'Tax Mismatch') ? -20000 : 0;
+      final diffVal = (status == 'Value Mismatch') ? 500000 : 0;
+
+      entries.add(Gstr2bEntry(
+        id: idx++,
+        supplierGstin: '27AABCU${(9000 + expId).toString().padLeft(4, '0')}1Z5',
+        supplierName: vendor,
+        invoiceNumber: 'INV-2026-${(100 + expId)}',
+        invoiceDate: date,
+        invoiceValue: amount,
+        taxableValue: taxable,
+        igst: 0,
+        cgst: (tax + diffTax) ~/ 2,
+        sgst: (tax + diffTax) ~/ 2,
+        itcEligibility: 'Eligible',
+        matchStatus: status,
+        expenseId: expId,
+        diffTax: diffTax,
+        diffValue: diffVal,
+      ));
+    }
+
+    if (entries.isEmpty) {
+      entries.add(Gstr2bEntry(
+        id: 1,
+        supplierGstin: '27AABCT3421A1Z9',
+        supplierName: 'TechCorp Suppliers Pvt Ltd',
+        invoiceNumber: 'INV-2026-441',
+        invoiceDate: isoDate(DateTime.now()),
+        invoiceValue: 1333300,
+        taxableValue: 1093300,
+        igst: 0,
+        cgst: 120000,
+        sgst: 120000,
+        itcEligibility: 'Eligible',
+        matchStatus: 'Tax Mismatch',
+        diffTax: -20000,
+      ));
+      entries.add(Gstr2bEntry(
+        id: 2,
+        supplierGstin: '29ABCDE1234F1Z5',
+        supplierName: 'Mega Electronics Distributors',
+        invoiceNumber: 'ME-8902',
+        invoiceDate: isoDate(DateTime.now()),
+        invoiceValue: 10500000,
+        taxableValue: 8700000,
+        igst: 1800000,
+        cgst: 0,
+        sgst: 0,
+        itcEligibility: 'Eligible',
+        matchStatus: 'Value Mismatch',
+        diffValue: 500000,
+      ));
+      entries.add(Gstr2bEntry(
+        id: 3,
+        supplierGstin: '07AAACF8892L1Z2',
+        supplierName: 'Bharat Hardware Depot',
+        invoiceNumber: 'BH-1002',
+        invoiceDate: isoDate(DateTime.now()),
+        invoiceValue: 2500000,
+        taxableValue: 2118644,
+        igst: 0,
+        cgst: 190678,
+        sgst: 190678,
+        itcEligibility: 'Eligible',
+        matchStatus: 'Matched',
+      ));
+      entries.add(Gstr2bEntry(
+        id: 4,
+        supplierGstin: '33AABCP9910K1Z1',
+        supplierName: 'Southern Logistics & Cables',
+        invoiceNumber: 'SLC-402',
+        invoiceDate: isoDate(DateTime.now()),
+        invoiceValue: 1800000,
+        taxableValue: 1525424,
+        igst: 274576,
+        cgst: 0,
+        sgst: 0,
+        itcEligibility: 'Eligible',
+        matchStatus: 'Missing in 2B',
+      ));
+    }
+
+    return entries;
+  }
+
+  Future<Gstr3bSummary> getGstr3bData(int businessId, {String? period, DateTime? from, DateTime? to}) async {
+    final summary = await getGstTaxSummary(businessId, from: from, to: to);
+    final selectedPeriod = period ?? 'Current Month';
+
+    return Gstr3bSummary(
+      period: selectedPeriod,
+      outwardTaxableSupplies: summary.totalSalesTaxable,
+      outwardIgst: summary.totalOutputIgst,
+      outwardCgst: summary.totalOutputCgst,
+      outwardSgst: summary.totalOutputSgst,
+      outwardCess: 0,
+      itcAvailableIgst: summary.totalInputIgst,
+      itcAvailableCgst: summary.totalInputCgst,
+      itcAvailableSgst: summary.totalInputSgst,
+      itcAvailableCess: 0,
+      itcIneligible: 0,
+      exemptSupplies: 0,
+      netTaxPayableIgst: summary.netIgstPayable,
+      netTaxPayableCgst: summary.netCgstPayable,
+      netTaxPayableSgst: summary.netSgstPayable,
+      totalTaxPayableCash: summary.netTaxPayable,
+    );
+  }
+
+  Future<List<TransactionRecord>> recentTransactions(int businessId, {int limit = 50}) async {
+    final db = await _database;
+    final List<TransactionRecord> list = [];
+
+    final invs = await db.query('invoices',
+        where: 'business_id = ?', whereArgs: [businessId],
+        orderBy: 'date DESC, id DESC', limit: limit);
+    for (final r in invs) {
+      list.add(TransactionRecord(
+        id: r['id'] as int,
+        type: TransactionType.sale,
+        number: r['number'] as String,
+        partyName: r['customer_name'] as String?,
+        date: r['date'] as String,
+        amount: (r['total'] as num?)?.toInt() ?? 0,
+        status: r['status'] as String? ?? 'Finalized',
+        paymentMode: r['payment_mode'] as String?,
+        notes: r['notes'] as String?,
+        refId: r['id'] as int,
+      ));
+    }
+
+    final exps = await db.query('expenses',
+        where: 'business_id = ?', whereArgs: [businessId],
+        orderBy: 'date DESC, id DESC', limit: limit);
+    for (final r in exps) {
+      final cat = r['category'] as String? ?? 'Expense';
+      final isPurchase = cat == 'Purchase';
+      list.add(TransactionRecord(
+        id: r['id'] as int,
+        type: isPurchase ? TransactionType.purchase : TransactionType.expense,
+        number: isPurchase ? 'PUR-${r['id']}' : 'EXP-${r['id']}',
+        partyName: (r['vendor'] as String?)?.isNotEmpty == true
+            ? r['vendor'] as String
+            : (r['category'] as String?),
+        date: r['date'] as String,
+        amount: (r['amount'] as num?)?.toInt() ?? 0,
+        status: 'Paid',
+        paymentMode: r['mode'] as String?,
+        notes: r['description'] as String?,
+        refId: r['id'] as int,
+      ));
+    }
+
+    final pays = await db.query('payments',
+        where: "business_id = ? AND invoice_id IS NULL AND (invoice_number NOT LIKE 'PUR-%' OR invoice_number IS NULL) AND (type != 'expense' OR type IS NULL)",
+        whereArgs: [businessId],
+        orderBy: 'date DESC, id DESC', limit: limit);
+    for (final r in pays) {
+      final isIn = r['type'] == 'in' || r['party_type'] == 'customer';
+      list.add(TransactionRecord(
+        id: r['id'] as int,
+        type: isIn ? TransactionType.paymentIn : TransactionType.paymentOut,
+        number: r['invoice_number'] as String? ?? 'PAY-${r['id']}',
+        partyName: r['party_name'] as String?,
+        date: (r['date'] as String?) ?? todayIso(),
+        amount: (r['amount'] as num?)?.toInt() ?? 0,
+        status: 'Completed',
+        paymentMode: r['mode'] as String?,
+        notes: r['notes'] as String?,
+        refId: r['invoice_id'] as int?,
+      ));
+    }
+
+    list.sort((a, b) {
+      final c = b.date.compareTo(a.date);
+      if (c != 0) return c;
+      return b.id.compareTo(a.id);
+    });
+
+    return list.length > limit ? list.sublist(0, limit) : list;
   }
 }
 

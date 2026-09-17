@@ -10,6 +10,8 @@ import '../../data/repositories.dart';
 import '../../sync/sync_engine.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../banking/cash_bank_hub_screen.dart';
+import '../gst/gst_center_screen.dart';
 import '../reports/reports_screen.dart';
 import '../shell/audit_log_screen.dart';
 import '../shell/business_edit_screen.dart';
@@ -95,6 +97,8 @@ class _MoreTabState extends State<MoreTab> {
       _menuTile(context, Icons.swap_horiz_rounded, 'Switch business', () => showBusinessSwitcher(context).then((changed) {
         if (changed == true) _load();
       })),
+      _menuTile(context, Icons.account_balance_outlined, 'GST Compliance Center', () => nav(const GstCenterScreen())),
+      _menuTile(context, Icons.account_balance_wallet_outlined, 'Cash & Bank Accounts Hub', () => nav(const CashBankHubScreen())),
       _menuTile(context, Icons.bar_chart_rounded, 'Reports & analytics', () => nav(const ReportsScreen())),
       _menuTile(context, Icons.upload_file_rounded, 'Bulk import', () => nav(const ImportScreen())),
       _menuTile(context, Icons.history_rounded, 'Audit log', () => nav(const AuditLogScreen())),

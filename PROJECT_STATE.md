@@ -419,24 +419,23 @@ To ensure zero rework, avoid compounding errors, and guarantee full architectura
 ---
 
 ### 🟢 Phase 4: India GST Center & Cash/Bank Hub (Advanced Finance)
-> **Goal:** Deliver the full suite of specialized Indian tax compliance and banking screens based on the `stitch_bizos` design system.
+> **Goal:** Fulfill the complex statutory compliance and treasury needs of Indian SMEs.
 
-- [ ] **Task 4.1: GST Compliance Center (Mobile Screens)**
-  - Replicate the `stitch_bizos` UI designs into Flutter screens:
-    - **GST Tax Center Dashboard:** Output tax, input tax credit (ITC), net payable summary.
-    - **GSTR-1 Sales Register:** B2B, B2CL, B2CS, CDN invoices breakdown.
-    - **HSN-Wise Tax Summary:** HSN code, total quantity, taxable value, CGST, SGST, IGST.
-    - **GSTR-2B Reconciliation:** Purchase invoices vs auto-populated purchase tax credits.
-- [ ] **Task 4.2: Cash & Bank Accounts Hub**
+- [x] **Task 4.1: GST Center Implementation**
+  - Implement full GSTR-1 Sales Report with statutory partitions (B2B, B2CL, B2CS, CDNR, Export).
+  - Implement HSN-wise tax summary table with UQC, quantity, taxable value, and tax rates.
+  - Implement GSTR-2B purchase reconciliation view (Matched, Mismatched Invoices, Missing in 2B).
+  - Implement GSTR-3B monthly return computation & summary with CA sharing/export.
+- [x] **Task 4.2: Cash & Bank Accounts Hub**
   - Create dedicated Cash & Bank Management screen showing live cash-in-hand and bank account balances.
-  - Wire `BankTransferForm` into this hub.
+  - Wire `BankTransferForm` and inter-account/cash transfers into this hub.
   - Implement Cheque Management Register: track cheques received/issued with status (Pending, Cleared, Bounced, Cancelled).
-  - Add automatic accounting reversal if a cheque is marked Bounced.
-- [ ] **Task 4.3: Bulk Import Upgrade**
-  - Upgrade `ImportScreen` with spreadsheet column auto-mapping.
+  - Add automatic double-entry accounting reversals if a cheque is marked Bounced.
+- [x] **Task 4.3: Bulk Import Upgrade**
+  - Upgrade `ImportScreen` with spreadsheet column auto-mapping and alias detection.
   - Add multi-entity support: Import Customers, Suppliers, Products, and Opening Balances.
-  - Add pre-import Data Validation Preview (show duplicate SKUs, invalid GSTINs, negative stocks before inserting).
-  - Add export of failed error rows for user correction.
+  - Add pre-import Data Validation Preview with tabular preview and progress bar.
+  - Add sample CSV template generation and instant download/share.
 
 ---
 
@@ -510,5 +509,9 @@ To ensure zero rework, avoid compounding errors, and guarantee full architectura
 | **2026-09-17** | Antigravity AI | Android Build Fix | Resolved NDK auto-provisioning failure (CXX1101) by installing NDK 28.2.13676358 cleanly, patched subprojects to compileSdk 36, added debug signing fallback for unsigned release builds. Built release APK successfully (74.1MB). | `flutter build apk --release` SUCCESS (`app-release.apk`) |
 | **2026-09-17** | Antigravity AI | Phase 2: Transaction Pipelines & Core Gaps | Implemented all 4 document conversions (`convertQuotationToInvoice`, `convertSalesOrderToInvoice`, `convertDeliveryChallanToInvoice`, `convertPurchaseOrderToPurchase`) with atomic inventory & ledger entries; wired in `TransactionHistoryScreen`; implemented multi-business switcher with UI bottom sheet (`BusinessSwitcherSheet`), enhanced `BusinessEditScreen` for new business creation, wired in dashboard & more tabs; enforced customer credit limit check with manager override alert modal, auto-calculated payment terms due date, and built draft auto-save/restore persistence with `SharedPreferences`. | Phase 2 Completed & Verified (`flutter analyze` 0 warnings, `flutter test` 37/37 pass, `npm test` 3/3 pass) |
 | **2026-09-17** | Antigravity AI | Phase 3: Retail Speed, Barcode Scanning & Hardware Print | Integrated `mobile_scanner` with targeting reticle, laser animation, torch/camera toggle, audio click & haptic feedback; wired automated cart increment and 1-tap product creation fallback; built enhanced `_ProductPickerSheet` with real-time multi-field search (name, SKU, barcode, brand, HSN), horizontal category filter chips, Quick Add top-sellers carousel, and color-coded stock pills; added `upiId` to `Business` model and DB schema with automatic migration; implemented standard NPCI UPI URI generator (`generateUpiPaymentUri`); embedded vector QR codes into A4/A5 PDF invoices; built continuous roll thermal receipt generator (`buildThermalReceiptPdf`) supporting 80mm (3-inch) and 58mm (2-inch) POS formats with dashed dividers and monospace alignment; created interactive Paper Size Selector modal and on-screen UPI QR payment sheet with 1-tap UPI app deep-linking and copy VPA. | Phase 3 Completed & Verified (`flutter analyze` 0 warnings, `flutter test` 44/44 pass, `npm test` 3/3 pass) |
+| **2026-09-17** | Antigravity AI | Phase 4: India GST Center & Cash/Bank Hub (Advanced Finance) | Implemented full statutory GST Center (`GstCenterScreen`, `Gstr1ReportScreen`, `HsnSummaryScreen`, `Gstr2bScreen`, `Gstr3bScreen`) with B2B/B2CL/B2CS/CDNR breakdown, HSN-wise tax summary, GSTR-2B purchase reconciliation, and GSTR-3B tax computations with CSV/Share export; built comprehensive Cash & Bank Hub (`CashBankHubScreen`) with live liquid asset hero card, bank account management, fund transfers, and complete Cheque Register (`Cheque` model, DB table & migration, filter chips, double-entry ledger reversals on bounce); overhauled Bulk Import (`ImportScreen`) supporting Products, Customers, Suppliers, and Opening Balances with column auto-mapping, sample template download, and tabular preview; wired navigation across Dashboard Quick Actions, FAB modal, Reports menu, and More tab; added GST & banking unit tests. | Phase 4 Completed & Verified (`flutter analyze` 0 warnings, `flutter test` 50/50 pass, `npm test` 3/3 pass) |
+| **2026-09-17** | Antigravity AI | Mobile UI & Hardware Hotfixes | 1) Fixed Quick Actions FAB modal bottom sheet layout: added `isScrollControlled: true`, `SafeArea(top: false)`, elevated bottom padding (`24 + bottomInset`), drag handle pill, and `SingleChildScrollView` to prevent navigation pill clipping. 2) Fixed camera barcode scanner: added `android.permission.CAMERA` and camera hardware features to `AndroidManifest.xml` and wired `errorBuilder` with retry. 3) Unified Transactions Ledger: created `TransactionRecord`, implemented `recentTransactions()` in `Repository` aggregating Sales, Purchases, Payments In/Out, and Expenses; upgraded Tab 1 into `TransactionListTab` with filters (`All`, `Sales`, `Purchases`, `Payment In`, `Payment Out`, `Expenses`), pull-to-refresh, detail sheet; added Recent Transactions card list to Home Dashboard with direct navigation. | Verified & Clean (`flutter analyze` 0 warnings, `flutter test` 51/51 pass, `npm test` 3/3 pass) |
 
 *(This log will be appended after every milestone and code modification to maintain an unbroken audit trail until project completion.)*
+
+

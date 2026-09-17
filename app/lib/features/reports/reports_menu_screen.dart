@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/stitch_theme.dart';
+import '../banking/cash_bank_hub_screen.dart';
+import '../gst/gst_center_screen.dart';
 import '../shell/transaction_history_screen.dart';
 import 'day_book_screen.dart';
 import 'balance_sheet_screen.dart';
@@ -12,10 +14,24 @@ class ReportsMenuScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reports', style: TextStyle(fontWeight: FontWeight.w800))),
+      appBar: AppBar(title: const Text('Reports & Compliance', style: TextStyle(fontWeight: FontWeight.w800))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _ReportTile(
+            icon: Icons.account_balance_outlined,
+            title: 'GST Compliance Center',
+            subtitle: 'GSTR-1, GSTR-2B, GSTR-3B & HSN Summary',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GstCenterScreen())),
+          ),
+          const SizedBox(height: 16),
+          _ReportTile(
+            icon: Icons.account_balance_wallet_outlined,
+            title: 'Cash & Bank Accounts Hub',
+            subtitle: 'Live balances, transfers & cheque register',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashBankHubScreen())),
+          ),
+          const SizedBox(height: 16),
           _ReportTile(
             icon: Icons.assignment_outlined,
             title: 'Orders & Estimates',
@@ -31,7 +47,7 @@ class ReportsMenuScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _ReportTile(
-            icon: Icons.account_balance_outlined,
+            icon: Icons.pie_chart_outline_rounded,
             title: 'Balance Sheet',
             subtitle: 'Assets, Liabilities & Equity',
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BalanceSheetScreen())),

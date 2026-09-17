@@ -306,4 +306,59 @@ void main() {
     await repo.markSyncSuccess(queued.first.id!);
     expect(await repo.pendingSyncCount(), queued.length - 1);
   });
+
+  test('recentTransactions aggregates sales, purchases, payments, and expenses correctly', () async {
+    final productId = await addProduct(salePrice: 10000, purchasePrice: 5000);
+    final customerId = await repo.upsertCustomer(Customer(name: 'Customer A'), businessIdOverride: businessId);
+    final supplierId = await repo.upsertSupplier(Supplier(name: 'Supplier B'), businessIdOverride: businessId);
+
+    // 1. Sale
+    await sell(productId: productId, customerId: customerId, qty: 1, price: 10000, amountPaid: 10000);
+
+    // 2. Purchase
+    await repo.createPurchase(
+      businessId: businessId,
+      supplierId: supplierId,
+      supplierName: 'Supplier B',
+      date: '2026-09-03',
+      items: [(productId, 'Widget', 5.0, 5000, 18)],
+      amountPaid: 25000,
+      paymentMode: 'Cash',
+    );
+
+    // 3. Standalone Payment In
+    await repo.recordPayment(
+      businessId: businessId,
+      partyType: 'customer',
+      partyId: customerId,
+      partyName: 'Customer A',
+      amount: 5000,
+      date: '2026-09-04',
+      mode: 'UPI',
+    );
+
+    // 4. Expense
+    await repo.recordExpense(
+      businessId: businessId,
+      category: 'Utilities',
+      amount: 1500,
+      mode: 'Cash',
+      date: '2026-09-05',
+      description: 'Electricity Bill',
+    );
+
+    final txs = await repo.recentTransactions(businessId, limit: 10);
+    expect(txs.length, 4);
+
+    final types = txs.map((t) => t.type).toList();
+    expect(types, contains(TransactionType.sale));
+    expect(types, contains(TransactionType.purchase));
+    expect(types, contains(TransactionType.paymentIn));
+    expect(types, contains(TransactionType.expense));
+
+    // Verify latest transaction is first (Electricity Bill on 2026-09-05)
+    expect(txs.first.type, TransactionType.expense);
+    expect(txs.first.amount, 1500);
+  });
 }
+

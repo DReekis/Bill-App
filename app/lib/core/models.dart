@@ -796,6 +796,8 @@ class BankAccount {
     required this.bankName,
     this.accountName,
     this.accountNumber,
+    this.ifsc,
+    this.accountType = 'Current',
     this.openingBalance = 0,
     this.inactive = false,
   });
@@ -804,6 +806,8 @@ class BankAccount {
   String bankName;
   String? accountName;
   String? accountNumber;
+  String? ifsc;
+  String accountType;
   int openingBalance;
   bool inactive;
 
@@ -812,6 +816,8 @@ class BankAccount {
         'bank_name': bankName,
         'account_name': accountName,
         'account_number': accountNumber,
+        'ifsc': ifsc,
+        'account_type': accountType,
         'opening_balance': openingBalance,
         'inactive': inactive ? 1 : 0,
       };
@@ -822,6 +828,8 @@ class BankAccount {
         bankName: map['bank_name'] as String? ?? '',
         accountName: map['account_name'] as String?,
         accountNumber: map['account_number'] as String?,
+        ifsc: map['ifsc'] as String?,
+        accountType: map['account_type'] as String? ?? 'Current',
         openingBalance: (map['opening_balance'] as num?)?.toInt() ?? 0,
         inactive: (map['inactive'] as int? ?? 0) == 1,
       );
@@ -1371,3 +1379,328 @@ class ReminderTemplate {
   final String name;
   final String message;
 }
+
+class Cheque {
+  Cheque({
+    this.id,
+    required this.businessId,
+    required this.chequeNumber,
+    this.bankName,
+    this.bankAccountId,
+    this.partyType,
+    this.partyId,
+    this.partyName,
+    required this.amount,
+    required this.date,
+    this.clearingDate,
+    required this.type,
+    this.status = 'Pending',
+    this.bounceReason,
+    this.notes,
+  });
+
+  final int? id;
+  final int businessId;
+  String chequeNumber;
+  String? bankName;
+  int? bankAccountId;
+  String? partyType;
+  int? partyId;
+  String? partyName;
+  int amount;
+  String date;
+  String? clearingDate;
+  String type;
+  String status;
+  String? bounceReason;
+  String? notes;
+
+  Map<String, Object?> toMap() => {
+        'business_id': businessId,
+        'cheque_number': chequeNumber,
+        'bank_name': bankName,
+        'bank_account_id': bankAccountId,
+        'party_type': partyType,
+        'party_id': partyId,
+        'party_name': partyName,
+        'amount': amount,
+        'date': date,
+        'clearing_date': clearingDate,
+        'type': type,
+        'status': status,
+        'bounce_reason': bounceReason,
+        'notes': notes,
+      };
+
+  static Cheque fromMap(Map<String, Object?> map) => Cheque(
+        id: map['id'] as int?,
+        businessId: (map['business_id'] as num?)?.toInt() ?? 0,
+        chequeNumber: map['cheque_number'] as String? ?? '',
+        bankName: map['bank_name'] as String?,
+        bankAccountId: (map['bank_account_id'] as num?)?.toInt(),
+        partyType: map['party_type'] as String?,
+        partyId: (map['party_id'] as num?)?.toInt(),
+        partyName: map['party_name'] as String?,
+        amount: (map['amount'] as num?)?.toInt() ?? 0,
+        date: map['date'] as String? ?? '',
+        clearingDate: map['clearing_date'] as String?,
+        type: map['type'] as String? ?? 'inward',
+        status: map['status'] as String? ?? 'Pending',
+        bounceReason: map['bounce_reason'] as String?,
+        notes: map['notes'] as String?,
+      );
+}
+
+class BankAccountWithBalance {
+  BankAccountWithBalance({
+    required this.account,
+    required this.currentBalance,
+  });
+  final BankAccount account;
+  final int currentBalance;
+}
+
+class CashBankSummary {
+  CashBankSummary({
+    required this.totalLiquidAssets,
+    required this.cashInHand,
+    required this.totalBankBalance,
+    required this.pendingChequesInward,
+    required this.pendingChequesOutward,
+    required this.accounts,
+  });
+  final int totalLiquidAssets;
+  final int cashInHand;
+  final int totalBankBalance;
+  final int pendingChequesInward;
+  final int pendingChequesOutward;
+  final List<BankAccountWithBalance> accounts;
+}
+
+class GstTaxSummary {
+  GstTaxSummary({
+    required this.totalSalesTaxable,
+    required this.totalOutputCgst,
+    required this.totalOutputSgst,
+    required this.totalOutputIgst,
+    required this.totalOutputTax,
+    required this.totalPurchasesTaxable,
+    required this.totalInputCgst,
+    required this.totalInputSgst,
+    required this.totalInputIgst,
+    required this.totalInputTaxCredit,
+    required this.netCgstPayable,
+    required this.netSgstPayable,
+    required this.netIgstPayable,
+    required this.netTaxPayable,
+    required this.totalInvoices,
+    required this.b2bCount,
+    required this.b2cCount,
+    required this.hsnCount,
+  });
+
+  final int totalSalesTaxable;
+  final int totalOutputCgst;
+  final int totalOutputSgst;
+  final int totalOutputIgst;
+  final int totalOutputTax;
+  final int totalPurchasesTaxable;
+  final int totalInputCgst;
+  final int totalInputSgst;
+  final int totalInputIgst;
+  final int totalInputTaxCredit;
+  final int netCgstPayable;
+  final int netSgstPayable;
+  final int netIgstPayable;
+  final int netTaxPayable;
+  final int totalInvoices;
+  final int b2bCount;
+  final int b2cCount;
+  final int hsnCount;
+}
+
+class Gstr1Section {
+  Gstr1Section({
+    required this.code,
+    required this.title,
+    required this.subtitle,
+    required this.count,
+    required this.taxableAmount,
+    required this.cgst,
+    required this.sgst,
+    required this.igst,
+    required this.totalTax,
+    required this.totalValue,
+    required this.items,
+  });
+
+  final String code;
+  final String title;
+  final String subtitle;
+  final int count;
+  final int taxableAmount;
+  final int cgst;
+  final int sgst;
+  final int igst;
+  final int totalTax;
+  final int totalValue;
+  final List<Map<String, dynamic>> items;
+}
+
+class HsnTaxSummaryItem {
+  HsnTaxSummaryItem({
+    required this.hsn,
+    required this.description,
+    required this.uqc,
+    required this.totalQuantity,
+    required this.taxableValue,
+    required this.gstRate,
+    required this.cgst,
+    required this.sgst,
+    required this.igst,
+    required this.totalTax,
+    required this.totalValue,
+  });
+
+  final String hsn;
+  final String description;
+  final String uqc;
+  final double totalQuantity;
+  final int taxableValue;
+  final int gstRate;
+  final int cgst;
+  final int sgst;
+  final int igst;
+  final int totalTax;
+  final int totalValue;
+}
+
+class Gstr2bEntry {
+  Gstr2bEntry({
+    required this.id,
+    required this.supplierGstin,
+    required this.supplierName,
+    required this.invoiceNumber,
+    required this.invoiceDate,
+    required this.invoiceValue,
+    required this.taxableValue,
+    required this.igst,
+    required this.cgst,
+    required this.sgst,
+    required this.itcEligibility,
+    required this.matchStatus,
+    this.expenseId,
+    this.diffTax = 0,
+    this.diffValue = 0,
+  });
+
+  final int id;
+  final String supplierGstin;
+  final String supplierName;
+  final String invoiceNumber;
+  final String invoiceDate;
+  final int invoiceValue;
+  final int taxableValue;
+  final int igst;
+  final int cgst;
+  final int sgst;
+  final String itcEligibility;
+  final String matchStatus;
+  final int? expenseId;
+  final int diffTax;
+  final int diffValue;
+}
+
+class Gstr3bSummary {
+  Gstr3bSummary({
+    required this.period,
+    required this.outwardTaxableSupplies,
+    required this.outwardIgst,
+    required this.outwardCgst,
+    required this.outwardSgst,
+    required this.outwardCess,
+    required this.itcAvailableIgst,
+    required this.itcAvailableCgst,
+    required this.itcAvailableSgst,
+    required this.itcAvailableCess,
+    required this.itcIneligible,
+    required this.exemptSupplies,
+    required this.netTaxPayableIgst,
+    required this.netTaxPayableCgst,
+    required this.netTaxPayableSgst,
+    required this.totalTaxPayableCash,
+  });
+
+  final String period;
+  final int outwardTaxableSupplies;
+  final int outwardIgst;
+  final int outwardCgst;
+  final int outwardSgst;
+  final int outwardCess;
+  final int itcAvailableIgst;
+  final int itcAvailableCgst;
+  final int itcAvailableSgst;
+  final int itcAvailableCess;
+  final int itcIneligible;
+  final int exemptSupplies;
+  final int netTaxPayableIgst;
+  final int netTaxPayableCgst;
+  final int netTaxPayableSgst;
+  final int totalTaxPayableCash;
+}
+
+enum TransactionType {
+  sale,
+  purchase,
+  paymentIn,
+  paymentOut,
+  expense,
+  quotation,
+  salesOrder,
+  purchaseOrder,
+  deliveryChallan,
+  saleReturn,
+}
+
+class TransactionRecord {
+  const TransactionRecord({
+    required this.id,
+    required this.type,
+    required this.number,
+    this.partyName,
+    required this.date,
+    required this.amount,
+    required this.status,
+    this.paymentMode,
+    this.notes,
+    this.refId,
+  });
+
+  final int id;
+  final TransactionType type;
+  final String number;
+  final String? partyName;
+  final String date;
+  final int amount; // in paise
+  final String status;
+  final String? paymentMode;
+  final String? notes;
+  final int? refId;
+
+  bool get isInflow =>
+      type == TransactionType.sale || type == TransactionType.paymentIn;
+
+  String get typeLabel => switch (type) {
+        TransactionType.sale => 'Sale',
+        TransactionType.purchase => 'Purchase',
+        TransactionType.paymentIn => 'Payment In',
+        TransactionType.paymentOut => 'Payment Out',
+        TransactionType.expense => 'Expense',
+        TransactionType.quotation => 'Estimate',
+        TransactionType.salesOrder => 'Sales Order',
+        TransactionType.purchaseOrder => 'Purchase Order',
+        TransactionType.deliveryChallan => 'Challan',
+        TransactionType.saleReturn => 'Sale Return',
+      };
+}
+

@@ -217,6 +217,40 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen>
           // Live Camera Stream
           MobileScanner(
             controller: _controller,
+            errorBuilder: (context, error, child) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.videocam_off_rounded, color: Colors.white70, size: 52),
+                      const SizedBox(height: 14),
+                      Text(
+                        error.errorCode == MobileScannerErrorCode.permissionDenied
+                            ? 'Camera Permission Required'
+                            : 'Camera Error: ${error.errorCode.name}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        error.errorCode == MobileScannerErrorCode.permissionDenied
+                            ? 'Please allow camera permission in phone Settings to scan product barcodes.'
+                            : (error.errorDetails?.message ?? 'Could not start camera feed.'),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Retry Camera'),
+                        onPressed: () => _controller.start(),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
             onDetect: (capture) {
               final barcodes = capture.barcodes;
               for (final b in barcodes) {

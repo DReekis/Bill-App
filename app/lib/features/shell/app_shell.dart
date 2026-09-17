@@ -176,7 +176,14 @@ class _AppShellState extends State<AppShell> {
         child: IndexedStack(
           index: _index,
           children: [
-            DashboardScreen(key: ValueKey('dashboard-$_dataVersion')),
+            DashboardScreen(
+              key: ValueKey('dashboard-$_dataVersion'),
+              onSwitchTab: (i) => setState(() {
+                _index = i;
+                _dataVersion++;
+              }),
+              onDataChanged: _reloadTabs,
+            ),
             InvoiceListTab(key: ValueKey('invoices-$_dataVersion')),
             ProductListTab(key: ValueKey('products-$_dataVersion')),
             ReportsScreen(key: ValueKey('reports-$_dataVersion')),
@@ -186,7 +193,10 @@ class _AppShellState extends State<AppShell> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) => setState(() {
+          _index = i;
+          _dataVersion++;
+        }),
         destinations: List.generate(
             _titles.length,
             (i) => NavigationDestination(

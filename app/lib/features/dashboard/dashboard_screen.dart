@@ -18,20 +18,26 @@ import '../sales/delivery_challan_builder_screen.dart';
 import '../sales/invoice_builder_screen.dart';
 import '../sales/quotation_builder_screen.dart';
 import '../sales/sales_order_builder_screen.dart';
+import '../sales/invoice_detail_screen.dart';
 import '../suppliers/supplier_form.dart';
 import '../search/search_screen.dart';
 import '../reports/reports_menu_screen.dart';
+import '../banking/cash_bank_hub_screen.dart';
+import '../gst/gst_center_screen.dart';
 import '../shell/business_switcher_sheet.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.onSwitchTab, this.onDataChanged});
+  final ValueChanged<int>? onSwitchTab;
+  final VoidCallback? onDataChanged;
+
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, int>? totals;
-  List<Invoice>? recent;
+  List<TransactionRecord>? recent;
   Business? business;
   List<double> salesHistory = [];
   List<double> profitHistory = [];
@@ -44,7 +50,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (businessId == null) return;
     final repo = Repository.instance;
     final map = await repo.dashboardTotals(businessId);
-    final allInvoices = await repo.invoices(businessId);
+    final recents = await repo.recentTransactions(businessId, limit: 5);
     final biz = await repo.getBusiness(businessId);
     final lowCount = await repo.lowStockCount(businessId);
     final outCount = await repo.outOfStockCount(businessId);
@@ -55,7 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!mounted) return;
     setState(() {
       totals = map;
-      recent = allInvoices.take(6).toList();
+      recent = recents;
       business = biz;
       low = lowCount;
       out = outCount;
@@ -78,64 +84,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     final businessId = session.businessId!;
     final nav = Navigator.of(context);
+    Future<void> onDone() async {
+      await _load();
+      widget.onDataChanged?.call();
+    }
+
     switch (action) {
       case 'New Sale':
         nav
             .push(
                 MaterialPageRoute(builder: (_) => const InvoiceBuilderScreen()))
-            .then((_) => _load());
+            .then((_) => onDone());
       case 'Payment In':
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const PaymentFormScreen(partyType: 'customer')))
-            .then((_) => _load());
+            .then((_) => onDone());
       case 'Payment Out':
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const PaymentFormScreen(partyType: 'supplier')))
-            .then((_) => _load());
+            .then((_) => onDone());
       case 'Purchase':
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const PurchaseBuilderScreen()))
-            .then((_) => _load());
+            .then((_) => onDone());
       case 'Estimate':
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const QuotationBuilderScreen()))
-            .then((_) => _load());
+            .then((_) => onDone());
       case 'Sales Order':
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const SalesOrderBuilderScreen()))
-            .then((_) => _load());
+            .then((_) => onDone());
       case 'Purchase Order':
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const PurchaseOrderBuilderScreen()))
-            .then((_) => _load());
+            .then((_) => onDone());
       case 'Challan':
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const DeliveryChallanBuilderScreen()))
-            .then((_) => _load());
+            .then((_) => onDone());
       case 'Reports':
         nav.push(MaterialPageRoute(builder: (_) => const ReportsMenuScreen()));
+      case 'GST Center':
+        nav.push(MaterialPageRoute(builder: (_) => const GstCenterScreen()));
+      case 'Cash & Bank':
+        nav.push(MaterialPageRoute(builder: (_) => const CashBankHubScreen())).then((_) => onDone());
       default:
         showModalBottomSheet<void>(
             context: context,
             isScrollControlled: true,
             builder: (_) => switch (action) {
                   'Customer' =>
-                    CustomerFormSheet(onSaved: _load, businessId: businessId),
+                    CustomerFormSheet(onSaved: onDone, businessId: businessId),
                   'Supplier' =>
-                    SupplierFormSheet(onSaved: _load, businessId: businessId),
+                    SupplierFormSheet(onSaved: onDone, businessId: businessId),
                   'Product' => ProductFormSheet(
-                      onSaved: _load,
+                      onSaved: onDone,
                       businessId: businessId,
                       onSavedProduct: (_) {}),
                   'Expense' =>
-                    ExpenseFormSheet(onSaved: _load, businessId: businessId),
+                    ExpenseFormSheet(onSaved: onDone, businessId: businessId),
                   _ => const SizedBox.shrink(),
                 });
     }
@@ -156,6 +171,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         out: out,
         salesHistory: salesHistory,
         profitHistory: profitHistory,
+        recent: recent,
+        onViewAllTransactions: () => widget.onSwitchTab?.call(1),
         onQuick: _quick,
         onRefresh: _load,
         onSwitchBusiness: () => showBusinessSwitcher(context).then((changed) {
@@ -173,45 +190,97 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showAddMenu(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-            _actionItem(context, Icons.shopping_cart_outlined, 'Sale', 'New Sale'),
-            _actionItem(context, Icons.shopping_bag_outlined, 'Purchase', 'Purchase'),
-            _actionItem(context, Icons.description_outlined, 'Estimate', 'Estimate'),
-          ]),
-          const SizedBox(height: 20),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-            _actionItem(context, Icons.assignment_outlined, 'Order', 'Sales Order'),
-            _actionItem(context, Icons.local_shipping_outlined, 'Challan', 'Challan'),
-            _actionItem(context, Icons.person_add_outlined, 'Customer', 'Customer'),
-          ]),
-          const SizedBox(height: 20),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-            _actionItem(context, Icons.inventory_2_outlined, 'Product', 'Product'),
-            _actionItem(context, Icons.payments_outlined, 'Payment In', 'Payment In'),
-            _actionItem(context, Icons.outbox_outlined, 'Payment Out', 'Payment Out'),
-          ]),
-        ]),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final bottomInset = MediaQuery.of(ctx).padding.bottom;
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.fromLTRB(20, 12, 20, 24 + bottomInset),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                    _actionItem(ctx, Icons.shopping_cart_outlined, 'Sale', 'New Sale'),
+                    _actionItem(ctx, Icons.shopping_bag_outlined, 'Purchase', 'Purchase'),
+                    _actionItem(ctx, Icons.description_outlined, 'Estimate', 'Estimate'),
+                  ]),
+                  const SizedBox(height: 20),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                    _actionItem(ctx, Icons.assignment_outlined, 'Order', 'Sales Order'),
+                    _actionItem(ctx, Icons.local_shipping_outlined, 'Challan', 'Challan'),
+                    _actionItem(ctx, Icons.person_add_outlined, 'Customer', 'Customer'),
+                  ]),
+                  const SizedBox(height: 20),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                    _actionItem(ctx, Icons.inventory_2_outlined, 'Product', 'Product'),
+                    _actionItem(ctx, Icons.payments_outlined, 'Payment In', 'Payment In'),
+                    _actionItem(ctx, Icons.outbox_outlined, 'Payment Out', 'Payment Out'),
+                  ]),
+                  const SizedBox(height: 20),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                    _actionItem(ctx, Icons.account_balance_outlined, 'GST Center', 'GST Center'),
+                    _actionItem(ctx, Icons.account_balance_wallet_outlined, 'Cash & Bank', 'Cash & Bank'),
+                    _actionItem(ctx, Icons.bar_chart_rounded, 'Reports', 'Reports'),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _actionItem(BuildContext context, IconData icon, String label, String action) => InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () {
           Navigator.pop(context);
           _quick(action);
         },
-        child: Column(children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: StitchColors.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: StitchColors.primary),
+        child: SizedBox(
+          width: 88,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: StitchColors.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, color: StitchColors.primary, size: 24),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: StitchColors.textPrimary),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        ]),
+        ),
       );
 }
 
@@ -224,6 +293,8 @@ class _ReferenceDashboard extends StatelessWidget {
     required this.out,
     required this.salesHistory,
     required this.profitHistory,
+    this.recent,
+    this.onViewAllTransactions,
     required this.onQuick,
     required this.onRefresh,
     this.onSwitchBusiness,
@@ -236,6 +307,8 @@ class _ReferenceDashboard extends StatelessWidget {
   final int out;
   final List<double> salesHistory;
   final List<double> profitHistory;
+  final List<TransactionRecord>? recent;
+  final VoidCallback? onViewAllTransactions;
   final ValueChanged<String> onQuick;
   final Future<void> Function() onRefresh;
   final VoidCallback? onSwitchBusiness;
@@ -452,12 +525,12 @@ class _ReferenceDashboard extends StatelessWidget {
             children: [
               _ReferenceAction(Icons.shopping_cart_outlined, 'Create Sale', 'New Sale', onQuick, primary: true),
               _ReferenceAction(Icons.shopping_bag_outlined, 'Add Purchase', 'Purchase', onQuick),
+              _ReferenceAction(Icons.account_balance_outlined, 'GST Center', 'GST Center', onQuick),
+              _ReferenceAction(Icons.account_balance_wallet_outlined, 'Cash & Bank', 'Cash & Bank', onQuick),
               _ReferenceAction(Icons.inventory_2_outlined, 'Add Product', 'Product', onQuick),
               _ReferenceAction(Icons.description_outlined, 'Estimate', 'Estimate', onQuick),
               _ReferenceAction(Icons.assignment_outlined, 'Sales Order', 'Sales Order', onQuick),
-              _ReferenceAction(Icons.local_shipping_outlined, 'Challan', 'Challan', onQuick),
-              _ReferenceAction(Icons.list_alt_outlined, 'Orders', 'Reports', onQuick), // Reusing Reports for now or adding a specific one
-              _ReferenceAction(Icons.grid_view_rounded, 'More', 'More', onQuick),
+              _ReferenceAction(Icons.bar_chart_rounded, 'Reports', 'Reports', onQuick),
             ],
           ),
           const SizedBox(height: 32),
@@ -491,7 +564,162 @@ class _ReferenceDashboard extends StatelessWidget {
                     icon: Icons.error_outline_rounded,
                     color: const Color(0xFFF44336),
                     title: 'Out of stock: $out products')),
+
+          const SizedBox(height: 32),
+          Row(children: [
+            const Text('Recent Transactions',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const Spacer(),
+            TextButton(
+              onPressed: onViewAllTransactions,
+              child: const Row(children: [
+                Text('View All', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.primary)),
+                SizedBox(width: 4),
+                Icon(Icons.chevron_right_rounded, size: 18, color: StitchColors.primary),
+              ])),
+          ]),
+          const SizedBox(height: 8),
+          if (recent == null || recent!.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: StitchColors.outline.withValues(alpha: 0.5)),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.receipt_long_outlined, size: 40, color: Colors.grey.shade400),
+                  const SizedBox(height: 8),
+                  const Text('No transactions recorded yet',
+                      style: TextStyle(fontWeight: FontWeight.w600, color: StitchColors.textSecondary, fontSize: 14)),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FilledButton.icon(
+                        icon: const Icon(Icons.add_shopping_cart_rounded, size: 16),
+                        label: const Text('Create Sale'),
+                        onPressed: () => onQuick('New Sale'),
+                      ),
+                      const SizedBox(width: 12),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.shopping_bag_outlined, size: 16),
+                        label: const Text('Add Purchase'),
+                        onPressed: () => onQuick('Purchase'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+          else
+            ...recent!.map((tx) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _DashboardTransactionRow(
+                    transaction: tx,
+                    onTap: () {
+                      if (tx.type == TransactionType.sale && tx.refId != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => InvoiceDetailScreen(invoiceId: tx.refId!)),
+                        ).then((_) => onRefresh());
+                      } else {
+                        onViewAllTransactions?.call();
+                      }
+                    },
+                  ),
+                )),
         ],
+      ),
+    );
+  }
+}
+
+class _DashboardTransactionRow extends StatelessWidget {
+  const _DashboardTransactionRow({required this.transaction, required this.onTap});
+  final TransactionRecord transaction;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, bg, fg) = switch (transaction.type) {
+      TransactionType.sale => (Icons.shopping_cart_outlined, const Color(0xFFE8F5E9), const Color(0xFF2E7D32)),
+      TransactionType.purchase => (Icons.shopping_bag_outlined, const Color(0xFFE3F2FD), const Color(0xFF1565C0)),
+      TransactionType.paymentIn => (Icons.call_received_rounded, const Color(0xFFE0F2F1), const Color(0xFF00695C)),
+      TransactionType.paymentOut => (Icons.call_made_rounded, const Color(0xFFFFF3E0), const Color(0xFFE65100)),
+      TransactionType.expense => (Icons.receipt_long_outlined, const Color(0xFFF3E5F5), const Color(0xFF7B1FA2)),
+      _ => (Icons.description_outlined, const Color(0xFFECEFF1), const Color(0xFF455A64)),
+    };
+
+    final isPositive = transaction.isInflow;
+    final prefix = isPositive ? '+' : '-';
+    final amountColor = isPositive ? StitchColors.success : StitchColors.error;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: StitchColors.outline.withValues(alpha: 0.5)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 4, offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+              alignment: Alignment.center,
+              child: Icon(icon, color: fg, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    transaction.number,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: StitchColors.textPrimary),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${transaction.partyName ?? transaction.typeLabel} • ${transaction.date}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '$prefix${formatPaise(transaction.amount)}',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: amountColor),
+                ),
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    transaction.status,
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
