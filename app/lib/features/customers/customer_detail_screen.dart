@@ -129,7 +129,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                     style: FilledButton.styleFrom(backgroundColor: StitchColors.success, foregroundColor: Colors.white),
                     onPressed: () => Navigator.of(context)
                         .push(MaterialPageRoute(
-                          builder: (_) => PaymentFormScreen(partyType: 'customer', partyId: c.id),
+                          builder: (_) => PaymentFormScreen(partyType: 'customer', partyId: c.id, partyName: c.name),
                         ))
                         .then((_) => _load()),
                     icon: const Icon(Icons.currency_rupee_rounded, size: 18),

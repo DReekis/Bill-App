@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/dates.dart';
 import '../core/money.dart';
 import '../theme/stitch_theme.dart';
 
@@ -143,10 +144,11 @@ class StatCard extends StatelessWidget {
 }
 
 class AppEmptyState extends StatelessWidget {
-  const AppEmptyState({super.key, required this.icon, required this.title, this.subtitle});
+  const AppEmptyState({super.key, required this.icon, required this.title, this.subtitle, this.action});
   final IconData icon;
   final String title;
   final String? subtitle;
+  final Widget? action;
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 40),
@@ -163,6 +165,10 @@ class AppEmptyState extends StatelessWidget {
             if (subtitle != null) ...[
               const SizedBox(height: 4),
               Text(subtitle!, style: const TextStyle(fontSize: 12.5, color: StitchColors.textSecondary)),
+            ],
+            if (action != null) ...[
+              const SizedBox(height: 16),
+              action!,
             ],
           ],
         ),
@@ -255,32 +261,98 @@ class AppAmountField extends StatelessWidget {
     required this.label,
     this.suffix,
     this.suffixIcon,
+    this.hintText,
   });
   final TextEditingController controller;
   final String label;
   final String? suffix;
   final Widget? suffixIcon;
+  final String? hintText;
   @override
   Widget build(BuildContext context) => TextFormField(
         controller: controller,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: StitchColors.textPrimary),
         decoration: InputDecoration(
           labelText: label,
+          hintText: hintText ?? '0.00',
           prefixText: '₹ ',
+          prefixStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: StitchColors.textPrimary),
           suffixText: suffix,
           suffixIcon: suffixIcon,
         ),
       );
 }
 
+class AppDateField extends StatelessWidget {
+  const AppDateField({
+    super.key,
+    required this.date,
+    required this.onDateSelected,
+    this.label = 'Date',
+    this.firstDate,
+    this.lastDate,
+  });
+
+  final String date;
+  final ValueChanged<String> onDateSelected;
+  final String label;
+  final DateTime? firstDate;
+  final DateTime? lastDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () async {
+        final dt = dateTimeFor(date);
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: dt,
+          firstDate: firstDate ?? DateTime(dt.year - 2),
+          lastDate: lastDate ?? DateTime(dt.year + 2),
+        );
+        if (picked != null) onDateSelected(isoDate(picked));
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: InputDecorator(
+        decoration: inputDecoration(label).copyWith(
+          prefixIcon: const Icon(Icons.calendar_today_rounded, size: 18),
+        ),
+        child: Text(
+          displayDate(date),
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: StitchColors.textPrimary,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+}
+
 class AsyncButton extends StatefulWidget {
-  const AsyncButton({super.key, required this.label, required this.onPressed, this.icon, this.expand = true, this.loading = false});
+  const AsyncButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.expand = true,
+    this.loading = false,
+    this.backgroundColor,
+    this.foregroundColor,
+    this.style,
+  });
   final String label;
   final FutureOr<void> Function() onPressed;
   final IconData? icon;
   final bool expand;
   final bool loading;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
+  final ButtonStyle? style;
   @override
   State<AsyncButton> createState() => _AsyncButtonState();
 }
@@ -308,9 +380,16 @@ class _AsyncButtonState extends State<AsyncButton> {
             Flexible(child: Text(widget.label, maxLines: 1, overflow: TextOverflow.ellipsis)),
           ]);
     final onTapped = isBusy ? null : _run;
+    final btnStyle = widget.style ??
+        (widget.backgroundColor != null || widget.foregroundColor != null
+            ? FilledButton.styleFrom(
+                backgroundColor: widget.backgroundColor,
+                foregroundColor: widget.foregroundColor,
+              )
+            : null);
     return widget.expand
-        ? SizedBox(width: double.infinity, child: FilledButton(onPressed: onTapped, child: child))
-        : FilledButton(onPressed: onTapped, child: child);
+        ? SizedBox(width: double.infinity, child: FilledButton(style: btnStyle, onPressed: onTapped, child: child))
+        : FilledButton(style: btnStyle, onPressed: onTapped, child: child);
   }
 }
 

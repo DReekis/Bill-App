@@ -308,9 +308,20 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   void _receivePayment() {
     final inv = invoice;
     if (inv == null) return;
+    final isWalkIn = inv.customerId == null || inv.customerId == 0;
+    final name = (isWalkIn || inv.customerName == null || inv.customerName!.isEmpty)
+        ? 'Walk-in customer'
+        : inv.customerName;
+    final outstanding = inv.outstanding.paise > 0 ? inv.outstanding.paise : inv.total;
     Navigator.of(context)
         .push(MaterialPageRoute(
-          builder: (_) => PaymentFormScreen(partyType: 'customer', partyId: inv.customerId),
+          builder: (_) => PaymentFormScreen(
+            partyType: 'customer',
+            partyId: inv.customerId,
+            partyName: name,
+            initialAmount: outstanding,
+            initialInvoiceId: inv.id,
+          ),
         ))
         .then((_) => _load());
   }

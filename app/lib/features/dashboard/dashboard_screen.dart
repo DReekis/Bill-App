@@ -48,34 +48,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int overdueCount = 0;
   int overdueAmount = 0;
   String snapshotTimeframe = 'Today';
+  TrendInfo salesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%');
+  TrendInfo purchasesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%');
+  TrendInfo expensesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%');
+  TrendInfo revenueTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%');
+  TrendInfo profitTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%');
+  String comparisonLabel = 'vs yesterday';
 
   Future<void> _load() async {
     final session = context.read<Session>();
     final businessId = session.businessId;
     if (businessId == null) return;
     final repo = Repository.instance;
-    final map = await repo.dashboardTotals(businessId);
+    final perf = await repo.dashboardPerformance(businessId, snapshotTimeframe);
     final recents = await repo.recentTransactions(businessId, limit: 5);
     final biz = await repo.getBusiness(businessId);
     final lowCount = await repo.lowStockCount(businessId);
     final outCount = await repo.outOfStockCount(businessId);
     final overdueSummary = await repo.overdueInvoicesSummary(businessId);
-    final sHist = await repo.dailyPerformance(businessId, 'sales', days: 7);
-    final pHist = await repo.dailyPerformance(businessId, 'profit', days: 7);
 
     await SyncEngine.instance.refreshPending();
     if (!mounted) return;
     setState(() {
-      totals = map;
+      totals = perf.totals;
+      salesTrend = perf.salesTrend;
+      purchasesTrend = perf.purchasesTrend;
+      expensesTrend = perf.expensesTrend;
+      revenueTrend = perf.revenueTrend;
+      profitTrend = perf.profitTrend;
+      comparisonLabel = perf.comparisonLabel;
+      salesHistory = perf.salesHistory;
+      profitHistory = perf.profitHistory;
       recent = recents;
       business = biz;
       low = lowCount;
       out = outCount;
       overdueCount = overdueSummary.$1;
       overdueAmount = overdueSummary.$2;
-      salesHistory = sHist;
-      profitHistory = pHist;
-      snapshotTimeframe = 'Today';
     });
   }
 
@@ -84,20 +93,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final businessId = session.businessId;
     if (businessId == null) return;
     final repo = Repository.instance;
-    final now = DateTime.now();
-    String? fromDate;
-    if (tf == 'This Week') {
-      final monday = now.subtract(Duration(days: now.weekday - 1));
-      fromDate = isoDate(DateTime(monday.year, monday.month, monday.day));
-    } else if (tf == 'This Month') {
-      fromDate = isoDate(DateTime(now.year, now.month, 1));
-    } else if (tf == 'This Year') {
-      fromDate = isoDate(DateTime(now.year, 1, 1));
-    }
-    final map = await repo.dashboardTotals(businessId, fromDate: fromDate);
+    final perf = await repo.dashboardPerformance(businessId, tf);
     if (!mounted) return;
     setState(() {
-      totals = map;
+      totals = perf.totals;
+      salesTrend = perf.salesTrend;
+      purchasesTrend = perf.purchasesTrend;
+      expensesTrend = perf.expensesTrend;
+      revenueTrend = perf.revenueTrend;
+      profitTrend = perf.profitTrend;
+      comparisonLabel = perf.comparisonLabel;
+      salesHistory = perf.salesHistory;
+      profitHistory = perf.profitHistory;
       snapshotTimeframe = tf;
     });
   }
@@ -555,6 +562,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         snapshotTimeframe: snapshotTimeframe,
         salesHistory: salesHistory,
         profitHistory: profitHistory,
+        salesTrend: salesTrend,
+        purchasesTrend: purchasesTrend,
+        expensesTrend: expensesTrend,
+        revenueTrend: revenueTrend,
+        profitTrend: profitTrend,
+        comparisonLabel: comparisonLabel,
         recent: recent,
         onViewAllTransactions: () => widget.onSwitchTab?.call(1),
         onQuick: _quick,
@@ -686,6 +699,12 @@ class _ReferenceDashboard extends StatelessWidget {
     this.snapshotTimeframe = 'Today',
     required this.salesHistory,
     required this.profitHistory,
+    this.salesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%'),
+    this.purchasesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%'),
+    this.expensesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%'),
+    this.revenueTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%'),
+    this.profitTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%'),
+    this.comparisonLabel = 'vs yesterday',
     this.recent,
     this.onViewAllTransactions,
     required this.onQuick,
@@ -708,6 +727,12 @@ class _ReferenceDashboard extends StatelessWidget {
   final String snapshotTimeframe;
   final List<double> salesHistory;
   final List<double> profitHistory;
+  final TrendInfo salesTrend;
+  final TrendInfo purchasesTrend;
+  final TrendInfo expensesTrend;
+  final TrendInfo revenueTrend;
+  final TrendInfo profitTrend;
+  final String comparisonLabel;
   final List<TransactionRecord>? recent;
   final VoidCallback? onViewAllTransactions;
   final ValueChanged<String> onQuick;
@@ -901,28 +926,76 @@ class _ReferenceDashboard extends StatelessWidget {
             amount: amount,
             timeframe: snapshotTimeframe,
             onSelectTimeframe: onSelectTimeframe,
+            salesTrend: salesTrend,
+            purchasesTrend: purchasesTrend,
+            expensesTrend: expensesTrend,
           ),
           const SizedBox(height: 32),
 
-          Text(l10n.text('business_overview'),
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(l10n.text('business_overview'),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              PopupMenuButton<String>(
+                initialValue: snapshotTimeframe,
+                tooltip: 'Select timeframe',
+                onSelected: (val) => onSelectTimeframe?.call(val),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                color: Colors.white,
+                itemBuilder: (ctx) => [
+                  PopupMenuItem(value: 'Today', child: Text(l10n.text('today'))),
+                  PopupMenuItem(value: 'This Week', child: Text(l10n.text('this_week'))),
+                  PopupMenuItem(value: 'This Month', child: Text(l10n.text('this_month'))),
+                  PopupMenuItem(value: 'This Year', child: Text(l10n.text('this_year'))),
+                ],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: StitchColors.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: StitchColors.primary.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        snapshotTimeframe == 'Today'
+                            ? l10n.text('today')
+                            : (snapshotTimeframe == 'This Week'
+                                ? l10n.text('this_week')
+                                : (snapshotTimeframe == 'This Month'
+                                    ? l10n.text('this_month')
+                                    : l10n.text('this_year'))),
+                        style: const TextStyle(color: StitchColors.primary, fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.keyboard_arrow_down_rounded, color: StitchColors.primary, size: 16),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(
                 child: _OverviewCard(
                     label: l10n.text('revenue'),
                     value: formatPaise(totals?['taxableToday'] ?? 0),
-                    change: l10n.text('trend_7day'),
+                    change: '${revenueTrend.formatted} $comparisonLabel',
                     data: salesHistory,
-                    color: const Color(0xFF00C853))),
+                    isNegative: revenueTrend.isNegative,
+                    color: revenueTrend.isNegative ? const Color(0xFFE53935) : const Color(0xFF00C853))),
             const SizedBox(width: 16),
             Expanded(
                 child: _OverviewCard(
                     label: l10n.text('net_profit'),
                     value: formatPaise(profitToday),
-                    change: l10n.text('trend_7day'),
+                    change: '${profitTrend.formatted} $comparisonLabel',
                     data: profitHistory,
-                    color: const Color(0xFF00C853))),
+                    isNegative: profitTrend.isNegative || profitToday < 0,
+                    color: profitToday < 0 || profitTrend.isNegative ? const Color(0xFFE53935) : const Color(0xFF00C853))),
           ]),
           const SizedBox(height: 32),
 
@@ -1152,11 +1225,17 @@ class _Snapshot extends StatelessWidget {
     required this.amount,
     required this.timeframe,
     required this.onSelectTimeframe,
+    this.salesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%'),
+    this.purchasesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%'),
+    this.expensesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%'),
   });
   final Map<String, int>? totals;
   final String Function(int?) amount;
   final String timeframe;
   final ValueChanged<String>? onSelectTimeframe;
+  final TrendInfo salesTrend;
+  final TrendInfo purchasesTrend;
+  final TrendInfo expensesTrend;
 
   @override
   Widget build(BuildContext context) {
@@ -1228,9 +1307,9 @@ class _Snapshot extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _SnapshotValue(l10n.text('sales'), amount(totals?['salesToday']), '12.4%', isNegative: false),
-                _SnapshotValue(l10n.text('purchases'), amount(totals?['purchasesToday']), '8.6%', isNegative: false),
-                _SnapshotValue(l10n.text('expenses'), amount(totals?['expensesToday']), '3.2%', isNegative: true),
+                _SnapshotValue(l10n.text('sales'), amount(totals?['salesToday']), salesTrend.formatted, isNegative: salesTrend.isNegative),
+                _SnapshotValue(l10n.text('purchases'), amount(totals?['purchasesToday']), purchasesTrend.formatted, isNegative: purchasesTrend.isNegative),
+                _SnapshotValue(l10n.text('expenses'), amount(totals?['expensesToday']), expensesTrend.formatted, isNegative: expensesTrend.isNegative),
               ],
             ),
           ],
@@ -1322,11 +1401,18 @@ class _SnapshotValue extends StatelessWidget {
 }
 
 class _OverviewCard extends StatelessWidget {
-  const _OverviewCard(
-      {required this.label, required this.value, required this.change, required this.color, required this.data});
+  const _OverviewCard({
+    required this.label,
+    required this.value,
+    required this.change,
+    required this.color,
+    required this.data,
+    this.isNegative = false,
+  });
   final String label, value, change;
   final Color color;
   final List<double> data;
+  final bool isNegative;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1348,7 +1434,7 @@ class _OverviewCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
-            child: Icon(Icons.trending_up_rounded, color: color, size: 16),
+            child: Icon(isNegative ? Icons.trending_down_rounded : Icons.trending_up_rounded, color: color, size: 16),
           )
         ]),
         const SizedBox(height: 8),
@@ -1356,13 +1442,17 @@ class _OverviewCard extends StatelessWidget {
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: StitchColors.textPrimary)),
         const SizedBox(height: 4),
         Row(children: [
-          Icon(Icons.arrow_upward_rounded, size: 10, color: color),
+          Icon(isNegative ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded, size: 10, color: color),
           const SizedBox(width: 4),
-          Text(change,
-              style: TextStyle(
-                  color: color,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700)),
+          Expanded(
+            child: Text(change,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700)),
+          ),
         ]),
         const SizedBox(height: 12),
         SizedBox(height: 40, width: double.infinity, child: CustomPaint(painter: _SparklinePainter(color: color, data: data))),
@@ -1391,20 +1481,26 @@ class _SparklinePainter extends CustomPainter {
         colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0.0)],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
+    final effectiveData = data.length == 1 ? [data.first, data.first] : data;
     final path = Path();
-    final double stepX = size.width / (data.length - 1);
+    final double stepX = size.width / (effectiveData.length - 1);
 
-    double maxVal = data.reduce((a, b) => a > b ? a : b);
-    double minVal = data.reduce((a, b) => a < b ? a : b);
+    double maxVal = effectiveData.reduce((a, b) => a > b ? a : b);
+    double minVal = effectiveData.reduce((a, b) => a < b ? a : b);
     if (maxVal == minVal) {
-      maxVal += 1;
-      minVal -= 1;
+      if (maxVal == 0) {
+        maxVal = 1;
+        minVal = 0;
+      } else {
+        maxVal += 1;
+        minVal -= 1;
+      }
     }
     final double range = maxVal - minVal;
 
-    for (var i = 0; i < data.length; i++) {
+    for (var i = 0; i < effectiveData.length; i++) {
       final x = i * stepX;
-      final y = size.height - ((data[i] - minVal) / range * size.height * 0.8 + size.height * 0.1);
+      final y = size.height - ((effectiveData[i] - minVal) / range * size.height * 0.8 + size.height * 0.1);
       if (i == 0) {
         path.moveTo(x, y);
       } else {
@@ -1422,7 +1518,8 @@ class _SparklinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _SparklinePainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.data != data;
 }
 
 class _ReferenceAction extends StatefulWidget {

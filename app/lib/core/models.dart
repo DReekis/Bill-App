@@ -1704,3 +1704,56 @@ class TransactionRecord {
       };
 }
 
+class TrendInfo {
+  const TrendInfo({
+    required this.percent,
+    required this.isNegative,
+    required this.formatted,
+  });
+
+  final double percent;
+  final bool isNegative;
+  final String formatted;
+
+  static TrendInfo compute(num current, num previous) {
+    if (previous == 0) {
+      if (current > 0) return const TrendInfo(percent: 100.0, isNegative: false, formatted: '+100%');
+      if (current < 0) return const TrendInfo(percent: -100.0, isNegative: true, formatted: '-100%');
+      return const TrendInfo(percent: 0.0, isNegative: false, formatted: '0.0%');
+    }
+    final diff = current - previous;
+    final change = (diff / previous.abs()) * 100.0;
+    final isNeg = change < 0;
+    final sign = change > 0 ? '+' : '';
+    return TrendInfo(
+      percent: change,
+      isNegative: isNeg,
+      formatted: '$sign${change.toStringAsFixed(1)}%',
+    );
+  }
+}
+
+class DashboardPerformance {
+  const DashboardPerformance({
+    required this.totals,
+    required this.salesTrend,
+    required this.purchasesTrend,
+    required this.expensesTrend,
+    required this.revenueTrend,
+    required this.profitTrend,
+    required this.comparisonLabel,
+    required this.salesHistory,
+    required this.profitHistory,
+  });
+
+  final Map<String, int> totals;
+  final TrendInfo salesTrend;
+  final TrendInfo purchasesTrend;
+  final TrendInfo expensesTrend;
+  final TrendInfo revenueTrend;
+  final TrendInfo profitTrend;
+  final String comparisonLabel;
+  final List<double> salesHistory;
+  final List<double> profitHistory;
+}
+

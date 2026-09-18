@@ -239,12 +239,21 @@ class Repository {
     await _audit(businessId, action: 'delete', entity: 'supplier', entityId: id);
   }
 
-  Future<List<Invoice>> invoicesForParty(int businessId, String partyType, int partyId) async {
+  Future<List<Invoice>> invoicesForParty(int businessId, String partyType, int? partyId) async {
     final db = await _database;
     final column = partyType == 'customer' ? 'customer_id' : 'party_id';
     final table = partyType == 'customer' ? 'invoices' : 'payments';
+    final String whereClause;
+    final List<Object?> whereArgs;
+    if (partyId == null || partyId == 0) {
+      whereClause = 'business_id = ? AND ($column IS NULL OR $column = 0)';
+      whereArgs = [businessId];
+    } else {
+      whereClause = 'business_id = ? AND $column = ?';
+      whereArgs = [businessId, partyId];
+    }
     final rows = await db.query(table,
-        where: 'business_id = ? AND $column = ?', whereArgs: [businessId, partyId],
+        where: whereClause, whereArgs: whereArgs,
         orderBy: 'date DESC, id DESC');
     if (partyType != 'customer') return const [];
     return rows.map(Invoice.fromMap).toList();
@@ -2132,7 +2141,7 @@ class Repository {
   static String _qty(double q) =>
       q == q.roundToDouble() ? q.round().toString() : q.toStringAsFixed(2);
 
-  Future<Map<String, int>> dashboardTotals(int businessId, {DateTime? day, String? fromDate}) async {
+  Future<Map<String, int>> dashboardTotals(int businessId, {DateTime? day, String? fromDate, String? toDate}) async {
     final date = isoDate(day ?? DateTime.now());
     final db = await _database;
     Future<int> sumOf(String table, String column, String whereClause, List<Object?> args) async {
@@ -2141,15 +2150,25 @@ class Repository {
       return rows.isEmpty ? 0 : (rows.first['s'] as num).toInt();
     }
 
-    final dateFilter = fromDate != null ? 'date >= ?' : 'date = ?';
-    final dateArg = fromDate ?? date;
+    final String dateFilter;
+    final List<Object?> dateArgs;
+    if (fromDate != null && toDate != null) {
+      dateFilter = 'date >= ? AND date <= ?';
+      dateArgs = [fromDate, toDate];
+    } else if (fromDate != null) {
+      dateFilter = 'date >= ?';
+      dateArgs = [fromDate];
+    } else {
+      dateFilter = 'date = ?';
+      dateArgs = [date];
+    }
 
-    final salesToday = await sumOf('invoices', 'total', 'business_id = ? AND $dateFilter', [businessId, dateArg]);
-    final taxableToday = await sumOf('invoices', 'taxable', 'business_id = ? AND $dateFilter', [businessId, dateArg]);
-    final returnsToday = await sumOf('returns', 'taxable', "business_id = ? AND $dateFilter AND party_type = 'customer'", [businessId, dateArg]);
-    final purchasesToday = await sumOf('expenses', 'amount', "business_id = ? AND $dateFilter AND category = 'Purchase'", [businessId, dateArg]);
-    final expensesToday = await sumOf('expenses', 'amount', "business_id = ? AND $dateFilter AND category != 'Purchase'", [businessId, dateArg]);
-    final cogsToday = await sumOf('ledger', 'debit', "business_id = ? AND $dateFilter AND account = 'cogs'", [businessId, dateArg]);
+    final salesToday = await sumOf('invoices', 'total', 'business_id = ? AND $dateFilter', [businessId, ...dateArgs]);
+    final taxableToday = await sumOf('invoices', 'taxable', 'business_id = ? AND $dateFilter', [businessId, ...dateArgs]);
+    final returnsToday = await sumOf('returns', 'taxable', "business_id = ? AND $dateFilter AND party_type = 'customer'", [businessId, ...dateArgs]);
+    final purchasesToday = await sumOf('expenses', 'amount', "business_id = ? AND $dateFilter AND category = 'Purchase'", [businessId, ...dateArgs]);
+    final expensesToday = await sumOf('expenses', 'amount', "business_id = ? AND $dateFilter AND category != 'Purchase'", [businessId, ...dateArgs]);
+    final cogsToday = await sumOf('ledger', 'debit', "business_id = ? AND $dateFilter AND account = 'cogs'", [businessId, ...dateArgs]);
     final receivables = await db.rawQuery(
         "SELECT COALESCE(SUM(debit - credit), 0) AS s FROM ledger WHERE business_id = ? AND account LIKE 'customer:%'",
         [businessId]);
@@ -2178,6 +2197,212 @@ class Repository {
       'bank': bank.isEmpty ? 0 : (bank.first['s'] as num).toInt(),
       'stockValue': stockValue.isEmpty ? 0 : (stockValue.first['s'] as num).toInt(),
     };
+  }
+
+  Future<DashboardPerformance> dashboardPerformance(int businessId, String timeframe) async {
+    final db = await _database;
+    final now = DateTime.now();
+
+    DateTime curStart, curEnd, prevStart, prevEnd;
+    String comparisonLabel;
+
+    if (timeframe == 'This Week') {
+      final monday = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+      curStart = monday;
+      curEnd = monday.add(const Duration(days: 6));
+      prevStart = curStart.subtract(const Duration(days: 7));
+      prevEnd = curStart.subtract(const Duration(days: 1));
+      comparisonLabel = 'vs last week';
+    } else if (timeframe == 'This Month') {
+      curStart = DateTime(now.year, now.month, 1);
+      curEnd = DateTime(now.year, now.month + 1, 0);
+      prevStart = DateTime(now.year, now.month - 1, 1);
+      prevEnd = DateTime(now.year, now.month, 0);
+      comparisonLabel = 'vs last month';
+    } else if (timeframe == 'This Year') {
+      curStart = DateTime(now.year, 1, 1);
+      curEnd = DateTime(now.year, 12, 31);
+      prevStart = DateTime(now.year - 1, 1, 1);
+      prevEnd = DateTime(now.year - 1, 12, 31);
+      comparisonLabel = 'vs last year';
+    } else {
+      // Default: 'Today'
+      curStart = DateTime(now.year, now.month, now.day);
+      curEnd = curStart;
+      prevStart = curStart.subtract(const Duration(days: 1));
+      prevEnd = prevStart;
+      comparisonLabel = 'vs yesterday';
+    }
+
+    final curFrom = isoDate(curStart);
+    final curTo = isoDate(curEnd);
+    final prevFrom = isoDate(prevStart);
+    final prevTo = isoDate(prevEnd);
+
+    final baseTotals = await dashboardTotals(
+      businessId,
+      fromDate: timeframe == 'Today' ? null : curFrom,
+      toDate: timeframe == 'Today' ? null : curTo,
+      day: timeframe == 'Today' ? curStart : null,
+    );
+
+    Future<int> sumOf(String table, String column, String whereClause, List<Object?> args) async {
+      final rows = await db.rawQuery(
+          'SELECT COALESCE(SUM($column), 0) AS s FROM $table WHERE $whereClause', args);
+      return rows.isEmpty ? 0 : (rows.first['s'] as num).toInt();
+    }
+
+    final prevSales = await sumOf('invoices', 'total', 'business_id = ? AND date >= ? AND date <= ?', [businessId, prevFrom, prevTo]);
+    final prevTaxable = await sumOf('invoices', 'taxable', 'business_id = ? AND date >= ? AND date <= ?', [businessId, prevFrom, prevTo]);
+    final prevReturns = await sumOf('returns', 'taxable', "business_id = ? AND date >= ? AND date <= ? AND party_type = 'customer'", [businessId, prevFrom, prevTo]);
+    final prevPurchases = await sumOf('expenses', 'amount', "business_id = ? AND date >= ? AND date <= ? AND category = 'Purchase'", [businessId, prevFrom, prevTo]);
+    final prevExpenses = await sumOf('expenses', 'amount', "business_id = ? AND date >= ? AND date <= ? AND category != 'Purchase'", [businessId, prevFrom, prevTo]);
+    final prevCogs = await sumOf('ledger', 'debit', "business_id = ? AND date >= ? AND date <= ? AND account = 'cogs'", [businessId, prevFrom, prevTo]);
+
+    final curSales = baseTotals['salesToday'] ?? 0;
+    final curTaxable = baseTotals['taxableToday'] ?? 0;
+    final curPurchases = baseTotals['purchasesToday'] ?? 0;
+    final curExpenses = baseTotals['expensesToday'] ?? 0;
+    final curCogs = baseTotals['cogsToday'] ?? 0;
+
+    final curRevenue = curTaxable;
+    final curProfit = curRevenue - curCogs - curExpenses;
+
+    final prevRevenue = prevTaxable - prevReturns;
+    final prevProfit = prevRevenue - prevCogs - prevExpenses;
+
+    final salesTrend = TrendInfo.compute(curSales, prevSales);
+    final purchasesTrend = TrendInfo.compute(curPurchases, prevPurchases);
+    final expensesTrend = TrendInfo.compute(curExpenses, prevExpenses);
+    final revenueTrend = TrendInfo.compute(curRevenue, prevRevenue);
+    final profitTrend = TrendInfo.compute(curProfit, prevProfit);
+
+    final List<double> salesHistory = [];
+    final List<double> profitHistory = [];
+
+    if (timeframe == 'This Year') {
+      final curYearStr = curStart.year.toString();
+      final salesByMonth = await db.rawQuery(
+        "SELECT substr(date, 6, 2) AS m, COALESCE(SUM(total), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY m",
+        [businessId, '$curYearStr-01-01', '$curYearStr-12-31'],
+      );
+      final taxByMonth = await db.rawQuery(
+        "SELECT substr(date, 6, 2) AS m, COALESCE(SUM(taxable), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY m",
+        [businessId, '$curYearStr-01-01', '$curYearStr-12-31'],
+      );
+      final retByMonth = await db.rawQuery(
+        "SELECT substr(date, 6, 2) AS m, COALESCE(SUM(taxable), 0) AS s FROM returns WHERE business_id = ? AND date >= ? AND date <= ? AND party_type = 'customer' GROUP BY m",
+        [businessId, '$curYearStr-01-01', '$curYearStr-12-31'],
+      );
+      final cogsByMonth = await db.rawQuery(
+        "SELECT substr(date, 6, 2) AS m, COALESCE(SUM(debit), 0) AS s FROM ledger WHERE business_id = ? AND date >= ? AND date <= ? AND account = 'cogs' GROUP BY m",
+        [businessId, '$curYearStr-01-01', '$curYearStr-12-31'],
+      );
+      final expByMonth = await db.rawQuery(
+        "SELECT substr(date, 6, 2) AS m, COALESCE(SUM(amount), 0) AS s FROM expenses WHERE business_id = ? AND date >= ? AND date <= ? AND category != 'Purchase' GROUP BY m",
+        [businessId, '$curYearStr-01-01', '$curYearStr-12-31'],
+      );
+
+      final salesMap = {for (var r in salesByMonth) r['m'] as String: (r['s'] as num).toDouble() / 100};
+      final taxMap = {for (var r in taxByMonth) r['m'] as String: (r['s'] as num).toDouble() / 100};
+      final retMap = {for (var r in retByMonth) r['m'] as String: (r['s'] as num).toDouble() / 100};
+      final cogsMap = {for (var r in cogsByMonth) r['m'] as String: (r['s'] as num).toDouble() / 100};
+      final expMap = {for (var r in expByMonth) r['m'] as String: (r['s'] as num).toDouble() / 100};
+
+      for (var m = 1; m <= 12; m++) {
+        final key = m.toString().padLeft(2, '0');
+        salesHistory.add(salesMap[key] ?? 0.0);
+        final rev = (taxMap[key] ?? 0.0) - (retMap[key] ?? 0.0);
+        final p = rev - (cogsMap[key] ?? 0.0) - (expMap[key] ?? 0.0);
+        profitHistory.add(p);
+      }
+    } else if (timeframe == 'This Month') {
+      final lastDay = curEnd.day;
+      final salesByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(total), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final taxByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(taxable), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final retByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(taxable), 0) AS s FROM returns WHERE business_id = ? AND date >= ? AND date <= ? AND party_type = 'customer' GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final cogsByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(debit), 0) AS s FROM ledger WHERE business_id = ? AND date >= ? AND date <= ? AND account = 'cogs' GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final expByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(amount), 0) AS s FROM expenses WHERE business_id = ? AND date >= ? AND date <= ? AND category != 'Purchase' GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+
+      final salesMap = {for (var r in salesByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final taxMap = {for (var r in taxByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final retMap = {for (var r in retByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final cogsMap = {for (var r in cogsByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final expMap = {for (var r in expByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+
+      for (var d = 1; d <= lastDay; d++) {
+        final dStr = isoDate(DateTime(curStart.year, curStart.month, d));
+        salesHistory.add(salesMap[dStr] ?? 0.0);
+        final rev = (taxMap[dStr] ?? 0.0) - (retMap[dStr] ?? 0.0);
+        final p = rev - (cogsMap[dStr] ?? 0.0) - (expMap[dStr] ?? 0.0);
+        profitHistory.add(p);
+      }
+    } else if (timeframe == 'This Week') {
+      final salesByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(total), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final taxByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(taxable), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final retByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(taxable), 0) AS s FROM returns WHERE business_id = ? AND date >= ? AND date <= ? AND party_type = 'customer' GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final cogsByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(debit), 0) AS s FROM ledger WHERE business_id = ? AND date >= ? AND date <= ? AND account = 'cogs' GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final expByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(amount), 0) AS s FROM expenses WHERE business_id = ? AND date >= ? AND date <= ? AND category != 'Purchase' GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+
+      final salesMap = {for (var r in salesByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final taxMap = {for (var r in taxByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final retMap = {for (var r in retByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final cogsMap = {for (var r in cogsByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final expMap = {for (var r in expByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+
+      for (var i = 0; i < 7; i++) {
+        final dStr = isoDate(curStart.add(Duration(days: i)));
+        salesHistory.add(salesMap[dStr] ?? 0.0);
+        final rev = (taxMap[dStr] ?? 0.0) - (retMap[dStr] ?? 0.0);
+        final p = rev - (cogsMap[dStr] ?? 0.0) - (expMap[dStr] ?? 0.0);
+        profitHistory.add(p);
+      }
+    } else {
+      salesHistory.addAll(await dailyPerformance(businessId, 'sales', days: 7));
+      profitHistory.addAll(await dailyPerformance(businessId, 'profit', days: 7));
+    }
+
+    return DashboardPerformance(
+      totals: baseTotals,
+      salesTrend: salesTrend,
+      purchasesTrend: purchasesTrend,
+      expensesTrend: expensesTrend,
+      revenueTrend: revenueTrend,
+      profitTrend: profitTrend,
+      comparisonLabel: comparisonLabel,
+      salesHistory: salesHistory,
+      profitHistory: profitHistory,
+    );
   }
 
   Future<List<double>> dailyPerformance(int businessId, String metric, {int days = 7}) async {

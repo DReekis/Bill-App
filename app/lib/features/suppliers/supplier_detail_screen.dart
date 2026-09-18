@@ -117,7 +117,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => PaymentFormScreen(partyType: 'supplier', partyId: s.id))),
+                        builder: (_) => PaymentFormScreen(partyType: 'supplier', partyId: s.id, partyName: s.name))),
                     icon: const Icon(Icons.call_made_rounded, size: 18),
                     label: const Text('Payment out'),
                   ),

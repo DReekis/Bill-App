@@ -356,7 +356,21 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
           TextButton.icon(onPressed: _addLine, icon: const Icon(Icons.add_rounded, size: 18), label: const Text('Add item')),
         ]),
         if (lines.isEmpty)
-          const AppEmptyState(icon: Icons.shopping_cart_outlined, title: 'No items yet', subtitle: 'Add products to record the purchase')
+          AppEmptyState(
+            icon: Icons.shopping_cart_outlined,
+            title: 'No items yet',
+            subtitle: 'Add products to record the purchase',
+            action: OutlinedButton.icon(
+              onPressed: _addLine,
+              icon: const Icon(Icons.add_rounded, size: 16),
+              label: const Text('Add Item'),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                foregroundColor: const Color(0xFF335C8D),
+                side: BorderSide(color: const Color(0xFF335C8D).withValues(alpha: 0.4)),
+              ),
+            ),
+          )
         else
           ...lines.asMap().entries.map((e) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -370,10 +384,13 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(e.value.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                           const SizedBox(height: 3),
-                          Text('${_qty(e.value.qty)} × ${formatPaise(e.value.price)} ${e.value.tax > 0 ? '· GST ${e.value.tax}%' : ''}',
+                          Text('${_qty(e.value.qty)} × ${formatPaise(e.value.price)} ${e.value.tax > 0 ? "· GST ${e.value.tax}%" : ""}',
                               style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
                         ]),
                       ),
+                      Text(formatPaise((e.value.price * e.value.qty * (1 + e.value.tax / 100)).round()),
+                          style: moneyStyle(fontSize: 14)),
+                      const SizedBox(width: 8),
                       IconButton(
                         onPressed: () => setState(() => lines.removeAt(e.key)),
                         icon: const Icon(Icons.close_rounded, size: 17),
@@ -397,9 +414,10 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: AsyncButton(
             loading: saving,
-            icon: Icons.local_shipping_rounded,
-            label: lines.isEmpty ? 'Add items to continue' : 'Save purchase ${formatPaise(total.round())}',
-            onPressed: lines.isEmpty ? () {} : _checkout,
+            icon: lines.isEmpty ? Icons.add_rounded : Icons.local_shipping_rounded,
+            label: lines.isEmpty ? 'Add items' : 'Save purchase ${formatPaise(total.round())}',
+            backgroundColor: lines.isEmpty ? const Color(0xFF4A6DA7) : StitchColors.primary,
+            onPressed: lines.isEmpty ? _addLine : _checkout,
           ),
         ),
       ),

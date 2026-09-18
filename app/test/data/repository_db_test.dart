@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:billket/core/billing_engine.dart';
+import 'package:billket/core/dates.dart';
 import 'package:billket/core/models.dart';
 import 'package:billket/data/app_database.dart';
 import 'package:billket/data/repositories.dart';
@@ -59,7 +60,7 @@ void main() {
 
   Future<int> sell({
     required int productId,
-    required int customerId,
+    int? customerId,
     double qty = 2,
     int price = 10000,
     int gstRate = 18,
@@ -79,7 +80,7 @@ void main() {
       businessId: businessId,
       number: await repo.nextInvoiceNumber(businessId, 'INV'),
       customerId: customerId,
-      customerName: 'Acme',
+      customerName: customerId == null ? 'Walk-in customer' : 'Acme',
       date: date ?? '2026-09-02',
       dueDate: dueDate,
       gstType: 'intra',
@@ -224,6 +225,27 @@ void main() {
     expect((await repo.invoice(businessId, second))!.status, 'Partially paid');
     expect(await repo.partyBalance(businessId, 'customer', customerId),
         23600 * 2 - 30000);
+  });
+
+  test('recordPayment settles walk-in invoices and invoicesForParty retrieves them', () async {
+    final productId = await addProduct(stock: 10);
+    final walkInInvoiceId = await sell(productId: productId, customerId: null);
+
+    final walkInInvoices = await repo.invoicesForParty(businessId, 'customer', null);
+    expect(walkInInvoices.any((i) => i.id == walkInInvoiceId), isTrue);
+
+    await repo.recordPayment(
+      businessId: businessId,
+      partyType: 'customer',
+      amount: 23600,
+      date: '2026-09-02',
+      mode: 'Cash',
+      invoiceIds: [walkInInvoiceId],
+      partyId: null,
+      partyName: 'Walk-in customer',
+    );
+
+    expect((await repo.invoice(businessId, walkInInvoiceId))!.status, 'Paid');
   });
 
   test('cash and bank balances follow the direction of the money', () async {
@@ -454,6 +476,38 @@ void main() {
     final allTotals = await repo.dashboardTotals(businessId, fromDate: '2026-01-01');
 
     expect(septTotals['salesToday']!, lessThan(allTotals['salesToday']!));
+  });
+
+  test('dashboardPerformance returns dynamic trends and history for all timeframes', () async {
+    final custId = await repo.upsertCustomer(
+      Customer(name: 'Trend Customer', phone: '9999922222'),
+      businessIdOverride: businessId,
+    );
+    final pId = await addProduct(stock: 100);
+    final now = DateTime.now();
+    final todayStr = isoDate(now);
+    await sell(productId: pId, customerId: custId, qty: 1, amountPaid: 10000, date: todayStr);
+
+    final perfToday = await repo.dashboardPerformance(businessId, 'Today');
+    expect(perfToday.comparisonLabel, 'vs yesterday');
+    expect(perfToday.salesHistory.length, 7);
+    expect(perfToday.profitHistory.length, 7);
+    expect(perfToday.salesTrend.formatted, isNotEmpty);
+
+    final perfWeek = await repo.dashboardPerformance(businessId, 'This Week');
+    expect(perfWeek.comparisonLabel, 'vs last week');
+    expect(perfWeek.salesHistory.length, 7);
+    expect(perfWeek.profitHistory.length, 7);
+
+    final perfMonth = await repo.dashboardPerformance(businessId, 'This Month');
+    expect(perfMonth.comparisonLabel, 'vs last month');
+    expect(perfMonth.salesHistory.length, greaterThanOrEqualTo(28));
+    expect(perfMonth.profitHistory.length, greaterThanOrEqualTo(28));
+
+    final perfYear = await repo.dashboardPerformance(businessId, 'This Year');
+    expect(perfYear.comparisonLabel, 'vs last year');
+    expect(perfYear.salesHistory.length, 12);
+    expect(perfYear.profitHistory.length, 12);
   });
 }
 

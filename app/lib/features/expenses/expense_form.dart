@@ -89,23 +89,10 @@ class _ExpenseFormSheetState extends State<ExpenseFormSheet> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    final dt = dateTimeFor(date);
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: dt,
-                      firstDate: DateTime(dt.year - 2),
-                      lastDate: DateTime(dt.year + 2),
-                    );
-                    if (picked != null) setState(() => date = isoDate(picked));
-                  },
-                  icon: const Icon(Icons.calendar_today_rounded, size: 16),
-                  label: Text(date),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    alignment: Alignment.centerLeft,
-                  ),
+                child: AppDateField(
+                  date: date,
+                  label: 'Date',
+                  onDateSelected: (d) => setState(() => date = d),
                 ),
               ),
             ]),

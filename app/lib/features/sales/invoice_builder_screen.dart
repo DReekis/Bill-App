@@ -805,7 +805,38 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           TextButton.icon(onPressed: _addItem, icon: const Icon(Icons.add_rounded, size: 18), label: const Text('Add item')),
         ]),
         if (lines.isEmpty)
-          const AppEmptyState(icon: Icons.shopping_cart_outlined, title: 'No items yet', subtitle: 'Tap add item to bill a product')
+          AppEmptyState(
+            icon: Icons.shopping_cart_outlined,
+            title: 'No items yet',
+            subtitle: 'Choose a product from inventory or scan barcode',
+            action: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _addItem,
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text('Add Product'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: const Color(0xFF335C8D),
+                    side: BorderSide(color: const Color(0xFF335C8D).withValues(alpha: 0.4)),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _scanBarcode,
+                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 16),
+                  label: const Text('Scan Barcode'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: StitchColors.textSecondary,
+                    side: BorderSide(color: StitchColors.outline.withValues(alpha: 0.6)),
+                  ),
+                ),
+              ],
+            ),
+          )
         else
           ...lines.map((l) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -846,15 +877,21 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                 Text(formatPaise(q?.total.paise ?? 0), style: moneyStyle(fontSize: 18, weight: FontWeight.w800, color: StitchColors.textPrimary)),
-                Text('${lines.length} item(s)', style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                Text(
+                  lines.isEmpty
+                      ? 'No items added'
+                      : '${lines.length} ${lines.length == 1 ? "item" : "items"}',
+                  style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary),
+                ),
               ]),
             ),
             Expanded(
               child: AsyncButton(
                 loading: saving,
-                icon: Icons.receipt_long_rounded,
-                label: q == null ? 'Add items to continue' : 'Save & checkout',
-                onPressed: q == null ? () {} : _checkout,
+                icon: lines.isEmpty ? Icons.add_rounded : Icons.receipt_long_rounded,
+                label: lines.isEmpty ? 'Add items' : 'Save & checkout',
+                backgroundColor: lines.isEmpty ? const Color(0xFF4A6DA7) : StitchColors.primary,
+                onPressed: lines.isEmpty ? _addItem : _checkout,
               ),
             ),
           ]),
