@@ -26,6 +26,7 @@ import '../reports/reports_menu_screen.dart';
 import '../banking/cash_bank_hub_screen.dart';
 import '../gst/gst_center_screen.dart';
 import '../shell/business_switcher_sheet.dart';
+import '../../l10n/app_localizations.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.onSwitchTab, this.onDataChanged});
@@ -581,6 +582,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
+        final l10n = ctx.l10n;
         final bottomInset = MediaQuery.of(ctx).padding.bottom;
         return Container(
           decoration: const BoxDecoration(
@@ -606,27 +608,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.shopping_cart_outlined, 'Sale', 'New Sale'),
-                    _actionItem(ctx, Icons.shopping_bag_outlined, 'Purchase', 'Purchase'),
-                    _actionItem(ctx, Icons.description_outlined, 'Estimate', 'Estimate'),
+                    _actionItem(ctx, Icons.shopping_cart_outlined, l10n.text('sale'), 'New Sale'),
+                    _actionItem(ctx, Icons.shopping_bag_outlined, l10n.text('purchase'), 'Purchase'),
+                    _actionItem(ctx, Icons.description_outlined, l10n.text('estimate'), 'Estimate'),
                   ]),
                   const SizedBox(height: 20),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.assignment_outlined, 'Order', 'Sales Order'),
-                    _actionItem(ctx, Icons.local_shipping_outlined, 'Challan', 'Challan'),
-                    _actionItem(ctx, Icons.person_add_outlined, 'Customer', 'Customer'),
+                    _actionItem(ctx, Icons.assignment_outlined, l10n.text('order'), 'Sales Order'),
+                    _actionItem(ctx, Icons.local_shipping_outlined, l10n.text('challan'), 'Challan'),
+                    _actionItem(ctx, Icons.person_add_outlined, l10n.text('customer'), 'Customer'),
                   ]),
                   const SizedBox(height: 20),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.inventory_2_outlined, 'Product', 'Product'),
-                    _actionItem(ctx, Icons.payments_outlined, 'Payment In', 'Payment In'),
-                    _actionItem(ctx, Icons.outbox_outlined, 'Payment Out', 'Payment Out'),
+                    _actionItem(ctx, Icons.inventory_2_outlined, l10n.text('item'), 'Product'),
+                    _actionItem(ctx, Icons.payments_outlined, l10n.text('payment_in'), 'Payment In'),
+                    _actionItem(ctx, Icons.outbox_outlined, l10n.text('payment_out'), 'Payment Out'),
                   ]),
                   const SizedBox(height: 20),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.account_balance_outlined, 'GST Center', 'GST Center'),
-                    _actionItem(ctx, Icons.account_balance_wallet_outlined, 'Cash & Bank', 'Cash & Bank'),
-                    _actionItem(ctx, Icons.bar_chart_rounded, 'Reports', 'Reports'),
+                    _actionItem(ctx, Icons.account_balance_outlined, l10n.text('gst'), 'GST Center'),
+                    _actionItem(ctx, Icons.account_balance_wallet_outlined, l10n.text('cash_bank'), 'Cash & Bank'),
+                    _actionItem(ctx, Icons.bar_chart_rounded, l10n.text('reports'), 'Reports'),
                   ]),
                 ],
               ),
@@ -719,11 +721,11 @@ class _ReferenceDashboard extends StatelessWidget {
 
   String amount(int? value) => value == null ? '₹0' : formatPaise(value);
 
-  String _greeting() {
+  String _greeting(AppLocalizations l10n) {
     final hour = DateTime.now().hour;
-    if (hour >= 4 && hour < 12) return 'Good morning';
-    if (hour >= 12 && hour < 17) return 'Good afternoon';
-    return 'Good evening';
+    if (hour >= 4 && hour < 12) return l10n.text('good_morning');
+    if (hour >= 12 && hour < 17) return l10n.text('good_afternoon');
+    return l10n.text('good_evening');
   }
 
   String shortDate(DateTime date) => '${date.day} ${const [
@@ -743,6 +745,7 @@ class _ReferenceDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final t = totals;
     final name = business?.ownerName?.split(' ').first ?? 'Rahul';
     final alertCount = (low > 0 ? 1 : 0) + (out > 0 ? 1 : 0) + (overdueCount > 0 ? 1 : 0);
@@ -864,11 +867,11 @@ class _ReferenceDashboard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('${_greeting()}, $name 👋',
+                    Text('${_greeting(l10n)}, $name 👋',
                         style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
                     const SizedBox(height: 4),
-                    const Text("Here's your business summary",
-                        style: TextStyle(fontSize: 14, color: StitchColors.textSecondary, fontWeight: FontWeight.w500)),
+                    Text(l10n.text('business_summary'),
+                        style: const TextStyle(fontSize: 14, color: StitchColors.textSecondary, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),
@@ -901,30 +904,30 @@ class _ReferenceDashboard extends StatelessWidget {
           ),
           const SizedBox(height: 32),
 
-          const Text('Business Overview',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          Text(l10n.text('business_overview'),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(
                 child: _OverviewCard(
-                    label: 'Revenue',
+                    label: l10n.text('revenue'),
                     value: formatPaise(totals?['taxableToday'] ?? 0),
-                    change: '7-day trend',
+                    change: l10n.text('trend_7day'),
                     data: salesHistory,
                     color: const Color(0xFF00C853))),
             const SizedBox(width: 16),
             Expanded(
                 child: _OverviewCard(
-                    label: 'Net Profit',
+                    label: l10n.text('net_profit'),
                     value: formatPaise(profitToday),
-                    change: '7-day trend',
+                    change: l10n.text('trend_7day'),
                     data: profitHistory,
                     color: const Color(0xFF00C853))),
           ]),
           const SizedBox(height: 32),
 
-          const Text('Quick Actions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          Text(l10n.text('quick_actions'),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 16),
           GridView.count(
             crossAxisCount: 4,
@@ -934,43 +937,45 @@ class _ReferenceDashboard extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              _ReferenceAction(Icons.shopping_cart_outlined, 'Create Sale', 'New Sale', onQuick, primary: true),
-              _ReferenceAction(Icons.shopping_bag_outlined, 'Add Purchase', 'Purchase', onQuick),
-              _ReferenceAction(Icons.account_balance_outlined, 'GST Center', 'GST Center', onQuick),
-              _ReferenceAction(Icons.account_balance_wallet_outlined, 'Cash & Bank', 'Cash & Bank', onQuick),
-              _ReferenceAction(Icons.inventory_2_outlined, 'Add Product', 'Product', onQuick),
-              _ReferenceAction(Icons.description_outlined, 'Estimate', 'Estimate', onQuick),
-              _ReferenceAction(Icons.assignment_outlined, 'Sales Order', 'Sales Order', onQuick),
-              _ReferenceAction(Icons.bar_chart_rounded, 'Reports', 'Reports', onQuick),
+              _ReferenceAction(Icons.shopping_cart_outlined, l10n.text('sale'), 'New Sale', onQuick, primary: true),
+              _ReferenceAction(Icons.shopping_bag_outlined, l10n.text('purchase'), 'Purchase', onQuick),
+              _ReferenceAction(Icons.account_balance_outlined, l10n.text('gst'), 'GST Center', onQuick),
+              _ReferenceAction(Icons.account_balance_wallet_outlined, l10n.text('cash_bank'), 'Cash & Bank', onQuick),
+              _ReferenceAction(Icons.inventory_2_outlined, l10n.text('item'), 'Product', onQuick),
+              _ReferenceAction(Icons.description_outlined, l10n.text('estimate'), 'Estimate', onQuick),
+              _ReferenceAction(Icons.assignment_outlined, l10n.text('order'), 'Sales Order', onQuick),
+              _ReferenceAction(Icons.bar_chart_rounded, l10n.text('reports'), 'Reports', onQuick),
             ],
           ),
           const SizedBox(height: 32),
 
           Row(children: [
-            const Text('Alerts & Notifications',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            Text(l10n.text('alerts_and_notifications'),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const Spacer(),
             TextButton(
               onPressed: onOpenNotifications,
-              child: const Row(children: [
-                Text('View All', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF3F51B5))),
-                SizedBox(width: 4),
-                Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFF3F51B5)),
+              child: Row(children: [
+                Text(l10n.text('view_all'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF3F51B5))),
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFF3F51B5)),
               ])),
           ]),
           const SizedBox(height: 8),
           _AlertRow(
               icon: Icons.warning_amber_rounded,
               color: const Color(0xFFF44336),
-              title: 'Low Stock: $low products',
+              title: l10n.isHindi ? 'कम स्टॉक: $low सामान' : 'Low Stock: $low products',
               onTap: onShowLowStock),
           const SizedBox(height: 12),
           _AlertRow(
               icon: Icons.access_time_rounded,
               color: const Color(0xFFFFA000),
               title: overdueCount > 0
-                  ? 'Overdue: ₹${formatPaise(overdueAmount)} from $overdueCount invoices'
-                  : 'Overdue: No overdue invoices',
+                  ? (l10n.isHindi
+                      ? 'बकाया: ₹${formatPaise(overdueAmount)} ($overdueCount बिल)'
+                      : 'Overdue: ₹${formatPaise(overdueAmount)} from $overdueCount invoices')
+                  : (l10n.isHindi ? 'बकाया: कोई बकाया नहीं' : 'Overdue: No overdue invoices'),
               onTap: onShowOverdue),
           if (out > 0)
             Padding(
@@ -978,20 +983,20 @@ class _ReferenceDashboard extends StatelessWidget {
                 child: _AlertRow(
                     icon: Icons.error_outline_rounded,
                     color: const Color(0xFFF44336),
-                    title: 'Out of stock: $out products',
+                    title: l10n.isHindi ? 'स्टॉक खत्म: $out सामान' : 'Out of stock: $out products',
                     onTap: onShowOutOfStock)),
 
           const SizedBox(height: 32),
           Row(children: [
-            const Text('Recent Transactions',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            Text(l10n.text('recent_transactions'),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const Spacer(),
             TextButton(
               onPressed: onViewAllTransactions,
-              child: const Row(children: [
-                Text('View All', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.primary)),
-                SizedBox(width: 4),
-                Icon(Icons.chevron_right_rounded, size: 18, color: StitchColors.primary),
+              child: Row(children: [
+                Text(l10n.text('view_all'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.primary)),
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right_rounded, size: 18, color: StitchColors.primary),
               ])),
           ]),
           const SizedBox(height: 8),
@@ -1007,21 +1012,21 @@ class _ReferenceDashboard extends StatelessWidget {
                 children: [
                   Icon(Icons.receipt_long_outlined, size: 40, color: Colors.grey.shade400),
                   const SizedBox(height: 8),
-                  const Text('No transactions recorded yet',
-                      style: TextStyle(fontWeight: FontWeight.w600, color: StitchColors.textSecondary, fontSize: 14)),
+                  Text(l10n.text('no_transactions'),
+                      style: const TextStyle(fontWeight: FontWeight.w600, color: StitchColors.textSecondary, fontSize: 14)),
                   const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       FilledButton.icon(
                         icon: const Icon(Icons.add_shopping_cart_rounded, size: 16),
-                        label: const Text('Create Sale'),
+                        label: Text(l10n.text('sale')),
                         onPressed: () => onQuick('New Sale'),
                       ),
                       const SizedBox(width: 12),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.shopping_bag_outlined, size: 16),
-                        label: const Text('Add Purchase'),
+                        label: Text(l10n.text('purchase')),
                         onPressed: () => onQuick('Purchase'),
                       ),
                     ],
@@ -1154,7 +1159,22 @@ class _Snapshot extends StatelessWidget {
   final ValueChanged<String>? onSelectTimeframe;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final timeframeLabel = switch (timeframe) {
+      'Today' => l10n.text('today'),
+      'This Week' => l10n.text('this_week'),
+      'This Month' => l10n.text('this_month'),
+      'This Year' => l10n.text('this_year'),
+      _ => timeframe,
+    };
+    final snapshotTitle = timeframe == 'Today'
+        ? l10n.text('todays_snapshot')
+        : (l10n.isHindi
+            ? '$timeframeLabel ${l10n.text('snapshot')}'
+            : "$timeframe's ${l10n.text('snapshot')}");
+
+    return Container(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         decoration: BoxDecoration(
             gradient: const LinearGradient(
@@ -1175,7 +1195,7 @@ class _Snapshot extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(timeframe == 'Today' ? "Today's Snapshot" : "$timeframe's Snapshot",
+                Text(snapshotTitle,
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
                 PopupMenuButton<String>(
                   initialValue: timeframe,
@@ -1183,11 +1203,11 @@ class _Snapshot extends StatelessWidget {
                   onSelected: (val) => onSelectTimeframe?.call(val),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   color: Colors.white,
-                  itemBuilder: (ctx) => const [
-                    PopupMenuItem(value: 'Today', child: Text('Today')),
-                    PopupMenuItem(value: 'This Week', child: Text('This Week')),
-                    PopupMenuItem(value: 'This Month', child: Text('This Month')),
-                    PopupMenuItem(value: 'This Year', child: Text('This Year')),
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem(value: 'Today', child: Text(l10n.text('today'))),
+                    PopupMenuItem(value: 'This Week', child: Text(l10n.text('this_week'))),
+                    PopupMenuItem(value: 'This Month', child: Text(l10n.text('this_month'))),
+                    PopupMenuItem(value: 'This Year', child: Text(l10n.text('this_year'))),
                   ],
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -1196,7 +1216,7 @@ class _Snapshot extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(children: [
-                      Text(timeframe, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                      Text(timeframeLabel, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
                       const SizedBox(width: 4),
                       const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 16),
                     ]),
@@ -1208,14 +1228,15 @@ class _Snapshot extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _SnapshotValue('Sales', amount(totals?['salesToday']), '12.4%', color: const Color(0xFF4CAF50)),
-                _SnapshotValue('Purchases', amount(totals?['purchasesToday']), '8.6%', color: const Color(0xFF4CAF50)),
-                _SnapshotValue('Expenses', amount(totals?['expensesToday']), '3.2%', color: const Color(0xFFFF5252), isNegative: true),
+                _SnapshotValue(l10n.text('sales'), amount(totals?['salesToday']), '12.4%', color: const Color(0xFF4CAF50)),
+                _SnapshotValue(l10n.text('purchases'), amount(totals?['purchasesToday']), '8.6%', color: const Color(0xFF4CAF50)),
+                _SnapshotValue(l10n.text('expenses'), amount(totals?['expensesToday']), '3.2%', color: const Color(0xFFFF5252), isNegative: true),
               ],
             ),
           ],
         ),
       );
+  }
 }
 
 class _SnapshotValue extends StatelessWidget {
@@ -1390,13 +1411,18 @@ class _ReferenceAction extends StatelessWidget {
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(icon,
                 color: primary ? Colors.white : const Color(0xFF3F51B5), size: 28),
-            const SizedBox(height: 10),
-            Text(label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: primary ? Colors.white : StitchColors.textPrimary))
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: primary ? Colors.white : StitchColors.textPrimary)),
+            ),
           ])));
 }
 

@@ -20,6 +20,7 @@ import '../shell/audit_log_screen.dart';
 import '../shell/business_edit_screen.dart';
 import '../shell/business_switcher_sheet.dart';
 import 'import_screen.dart';
+import '../../l10n/app_localizations.dart';
 
 export '../customers/parties_tab.dart' show PartiesTab;
 
@@ -51,6 +52,8 @@ class _MoreTabState extends State<MoreTab> {
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
     final sync = context.watch<SyncEngine>();
+    final l10n = context.l10n;
+    final isHi = session.localeCode == 'hi';
     final biz = business;
     void nav(Widget screen) {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen)).then((_) => _load());
@@ -58,14 +61,14 @@ class _MoreTabState extends State<MoreTab> {
 
     return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 90), children: [
       Row(children: [
-        const Expanded(
-          child: Text('More', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        Expanded(
+          child: Text(l10n.text('more'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
         ),
         if (session.hasPin)
           TextButton.icon(
             onPressed: () => session.lock(),
             icon: const Icon(Icons.lock_outline_rounded, size: 16),
-            label: const Text('Lock'),
+            label: Text(l10n.text('lock')),
           ),
       ]),
       const SizedBox(height: 6),
@@ -83,7 +86,7 @@ class _MoreTabState extends State<MoreTab> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(biz?.name ?? 'My Business', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 2),
-                Text(biz?.gstin?.isNotEmpty == true ? 'GSTIN ${biz!.gstin}' : 'Tap to switch business',
+                Text(biz?.gstin?.isNotEmpty == true ? 'GSTIN ${biz!.gstin}' : (isHi ? 'व्यापार बदलने के लिए टैप करें' : 'Tap to switch business'),
                     style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
               ]),
             ),
@@ -97,23 +100,23 @@ class _MoreTabState extends State<MoreTab> {
         ),
       ),
       const SizedBox(height: 18),
-      _menuTile(context, Icons.swap_horiz_rounded, 'Switch business', () => showBusinessSwitcher(context).then((changed) {
+      _menuTile(context, Icons.swap_horiz_rounded, isHi ? 'व्यापार बदलें' : 'Switch business', () => showBusinessSwitcher(context).then((changed) {
         if (changed == true) _load();
       })),
-      _menuTile(context, Icons.account_balance_outlined, 'GST Compliance Center', () => nav(const GstCenterScreen())),
-      _menuTile(context, Icons.account_balance_wallet_outlined, 'Cash & Bank Accounts Hub', () => nav(const CashBankHubScreen())),
-      _menuTile(context, Icons.bar_chart_rounded, 'Reports & analytics', () => nav(const ReportsScreen())),
-      _menuTile(context, Icons.upload_file_rounded, 'Bulk import', () => nav(const ImportScreen())),
-      _menuTile(context, Icons.history_rounded, 'Audit log', () => nav(const AuditLogScreen())),
-      _menuTile(context, Icons.cloud_sync_rounded, 'Data sync', () => _syncMenu(context, sync), trailing: sync.pendingCount > 0
-          ? Text('${sync.pendingCount} pending', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.warning))
+      _menuTile(context, Icons.account_balance_outlined, isHi ? 'जीएसटी केंद्र' : 'GST Compliance Center', () => nav(const GstCenterScreen())),
+      _menuTile(context, Icons.account_balance_wallet_outlined, isHi ? 'कैश व बैंक खाते' : 'Cash & Bank Accounts Hub', () => nav(const CashBankHubScreen())),
+      _menuTile(context, Icons.bar_chart_rounded, isHi ? 'रिपोर्ट्स' : 'Reports & analytics', () => nav(const ReportsScreen())),
+      _menuTile(context, Icons.upload_file_rounded, isHi ? 'डेटा आयात' : 'Bulk import', () => nav(const ImportScreen())),
+      _menuTile(context, Icons.history_rounded, isHi ? 'ऑडिट लॉग' : 'Audit log', () => nav(const AuditLogScreen())),
+      _menuTile(context, Icons.cloud_sync_rounded, isHi ? 'डेटा सिंक' : 'Data sync', () => _syncMenu(context, sync), trailing: sync.pendingCount > 0
+          ? Text(isHi ? '${sync.pendingCount} बाकी' : '${sync.pendingCount} pending', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.warning))
           : null),
-      _menuTile(context, Icons.backup_outlined, 'Backup & export', () => nav(const BackupExportScreen())),
-      _menuTile(context, Icons.translate_rounded, 'Language / भाषा (${session.localeCode == 'hi' ? 'हिन्दी' : 'English'})', () => _languageSelector(context, session)),
+      _menuTile(context, Icons.backup_outlined, isHi ? 'बैकअप व निर्यात' : 'Backup & export', () => nav(const BackupExportScreen())),
+      _menuTile(context, Icons.translate_rounded, 'Language / भाषा (${isHi ? 'हिन्दी' : 'English'})', () => _languageSelector(context, session)),
       _menuTile(
         context,
         Icons.security_rounded,
-        'Screen security (block capture)',
+        isHi ? 'स्क्रीन सुरक्षा (स्क्रीनशॉट रोकें)' : 'Screen security (block capture)',
         () => session.setFlagSecure(!session.flagSecureEnabled),
         trailing: Switch(
           value: session.flagSecureEnabled,
@@ -124,24 +127,26 @@ class _MoreTabState extends State<MoreTab> {
         _menuTile(
           context,
           Icons.fingerprint_rounded,
-          'Biometric unlock (Fingerprint/Face)',
+          isHi ? 'बायोमेट्रिक अनलॉक' : 'Biometric unlock (Fingerprint/Face)',
           () => session.setBiometricEnabled(!session.biometricEnabled),
           trailing: Switch(
             value: session.biometricEnabled,
             onChanged: (val) => session.setBiometricEnabled(val),
           ),
         ),
-      _menuTile(context, Icons.tune_rounded, 'Invoice settings', () => nav(const BusinessEditScreen())),
+      _menuTile(context, Icons.tune_rounded, isHi ? 'बिल सेटिंग्स' : 'Invoice settings', () => nav(const BusinessEditScreen())),
       _menuTile(
         context,
         Icons.lock_rounded,
-        session.hasPin ? 'App lock · PIN set' : 'App lock (set PIN)',
+        session.hasPin
+            ? (isHi ? 'ऐप लॉक · पिन सेट है' : 'App lock · PIN set')
+            : (isHi ? 'ऐप लॉक (पिन सेट करें)' : 'App lock (set PIN)'),
         () => _pinSettings(context),
       ),
       _menuTile(
         context,
         Icons.admin_panel_settings_rounded,
-        'Role: ${session.currentRole}',
+        isHi ? 'भूमिका: ${session.currentRole}' : 'Role: ${session.currentRole}',
         () => _switchRole(context, session),
       ),
       const SizedBox(height: 18),

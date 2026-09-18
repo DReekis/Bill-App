@@ -21,6 +21,8 @@ backend/prisma/*.db
 backend/prisma/*.db-journal
 backend/prisma/*.db-wal
 backend/prisma/*.db-shm
+backend/backups/*.db
+backend/backups/
 backend/.env
 backend/.env.local
 backend/.env.production
