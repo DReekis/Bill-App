@@ -260,37 +260,55 @@ class QuickActionSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    const primary = StitchColors.primary;
-    const green = StitchColors.success;
     final actions = [
       {
         'icon': Icons.add_shopping_cart_rounded,
         'label': l10n.text('sale'),
         'action': 'New Sale',
-        'c': primary
+        'c': const Color(0xFF3F51B5),
       },
-      {'icon': Icons.local_shipping_rounded, 'label': l10n.text('purchase'), 'action': 'Purchase', 'c': green},
-      {'icon': Icons.call_received_rounded, 'label': l10n.text('payment_in'), 'action': 'Payment In', 'c': green},
+      {
+        'icon': Icons.local_shipping_rounded,
+        'label': l10n.text('purchase'),
+        'action': 'Purchase',
+        'c': const Color(0xFF2E7D32),
+      },
+      {
+        'icon': Icons.call_received_rounded,
+        'label': l10n.text('payment_in'),
+        'action': 'Payment In',
+        'c': const Color(0xFF00C853),
+      },
       {
         'icon': Icons.call_made_rounded,
         'label': l10n.text('payment_out'),
         'action': 'Payment Out',
-        'c': StitchColors.error
+        'c': const Color(0xFFE53935),
       },
       {
         'icon': Icons.currency_rupee_rounded,
         'label': l10n.text('expenses'),
         'action': 'Expense',
-        'c': StitchColors.error
+        'c': const Color(0xFFE53935),
       },
       {
         'icon': Icons.person_add_alt_1_rounded,
         'label': l10n.text('customer'),
         'action': 'Customer',
-        'c': primary
+        'c': const Color(0xFF00897B),
       },
-      {'icon': Icons.storefront_outlined, 'label': l10n.text('supplier'), 'action': 'Supplier', 'c': primary},
-      {'icon': Icons.inventory_2_outlined, 'label': l10n.text('item'), 'action': 'Product', 'c': primary},
+      {
+        'icon': Icons.storefront_outlined,
+        'label': l10n.text('supplier'),
+        'action': 'Supplier',
+        'c': const Color(0xFFE65100),
+      },
+      {
+        'icon': Icons.inventory_2_outlined,
+        'label': l10n.text('item'),
+        'action': 'Product',
+        'c': const Color(0xFF7B1FA2),
+      },
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),

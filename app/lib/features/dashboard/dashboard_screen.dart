@@ -608,27 +608,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.shopping_cart_outlined, l10n.text('sale'), 'New Sale'),
-                    _actionItem(ctx, Icons.shopping_bag_outlined, l10n.text('purchase'), 'Purchase'),
-                    _actionItem(ctx, Icons.description_outlined, l10n.text('estimate'), 'Estimate'),
+                    _actionItem(ctx, Icons.shopping_cart_outlined, l10n.text('sale'), 'New Sale', const Color(0xFF3F51B5)),
+                    _actionItem(ctx, Icons.shopping_bag_outlined, l10n.text('purchase'), 'Purchase', const Color(0xFF2E7D32)),
+                    _actionItem(ctx, Icons.description_outlined, l10n.text('estimate'), 'Estimate', const Color(0xFF0288D1)),
                   ]),
                   const SizedBox(height: 20),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.assignment_outlined, l10n.text('order'), 'Sales Order'),
-                    _actionItem(ctx, Icons.local_shipping_outlined, l10n.text('challan'), 'Challan'),
-                    _actionItem(ctx, Icons.person_add_outlined, l10n.text('customer'), 'Customer'),
+                    _actionItem(ctx, Icons.assignment_outlined, l10n.text('order'), 'Sales Order', const Color(0xFFE65100)),
+                    _actionItem(ctx, Icons.local_shipping_outlined, l10n.text('challan'), 'Challan', const Color(0xFF5E35B1)),
+                    _actionItem(ctx, Icons.person_add_outlined, l10n.text('customer'), 'Customer', const Color(0xFF00897B)),
                   ]),
                   const SizedBox(height: 20),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.inventory_2_outlined, l10n.text('item'), 'Product'),
-                    _actionItem(ctx, Icons.payments_outlined, l10n.text('payment_in'), 'Payment In'),
-                    _actionItem(ctx, Icons.outbox_outlined, l10n.text('payment_out'), 'Payment Out'),
+                    _actionItem(ctx, Icons.inventory_2_outlined, l10n.text('item'), 'Product', const Color(0xFF7B1FA2)),
+                    _actionItem(ctx, Icons.payments_outlined, l10n.text('payment_in'), 'Payment In', const Color(0xFF00C853)),
+                    _actionItem(ctx, Icons.outbox_outlined, l10n.text('payment_out'), 'Payment Out', const Color(0xFFE53935)),
                   ]),
                   const SizedBox(height: 20),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.account_balance_outlined, l10n.text('gst'), 'GST Center'),
-                    _actionItem(ctx, Icons.account_balance_wallet_outlined, l10n.text('cash_bank'), 'Cash & Bank'),
-                    _actionItem(ctx, Icons.bar_chart_rounded, l10n.text('reports'), 'Reports'),
+                    _actionItem(ctx, Icons.account_balance_outlined, l10n.text('gst'), 'GST Center', const Color(0xFF00838F)),
+                    _actionItem(ctx, Icons.account_balance_wallet_outlined, l10n.text('cash_bank'), 'Cash & Bank', const Color(0xFF1B5E20)),
+                    _actionItem(ctx, Icons.bar_chart_rounded, l10n.text('reports'), 'Reports', const Color(0xFF5C6BC0)),
                   ]),
                 ],
               ),
@@ -639,34 +639,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _actionItem(BuildContext context, IconData icon, String label, String action) => InkWell(
+  Widget _actionItem(BuildContext context, IconData icon, String label, String action, Color color) => InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () {
           Navigator.pop(context);
           _quick(action);
         },
         child: SizedBox(
-          width: 88,
+          width: 84,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 52,
-                height: 52,
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
-                  color: StitchColors.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, color: StitchColors.primary, size: 24),
+                child: Icon(icon, color: color, size: 24),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 7),
               Text(
                 label,
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: StitchColors.textPrimary),
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: StitchColors.textPrimary),
               ),
             ],
           ),
@@ -931,20 +931,20 @@ class _ReferenceDashboard extends StatelessWidget {
           const SizedBox(height: 16),
           GridView.count(
             crossAxisCount: 4,
-            childAspectRatio: 0.88,
+            childAspectRatio: 0.84,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              _ReferenceAction(Icons.shopping_cart_outlined, l10n.text('sale'), 'New Sale', onQuick, primary: true),
-              _ReferenceAction(Icons.shopping_bag_outlined, l10n.text('purchase'), 'Purchase', onQuick),
-              _ReferenceAction(Icons.account_balance_outlined, l10n.text('gst'), 'GST Center', onQuick),
-              _ReferenceAction(Icons.account_balance_wallet_outlined, l10n.text('cash_bank'), 'Cash & Bank', onQuick),
-              _ReferenceAction(Icons.inventory_2_outlined, l10n.text('item'), 'Product', onQuick),
-              _ReferenceAction(Icons.description_outlined, l10n.text('estimate'), 'Estimate', onQuick),
-              _ReferenceAction(Icons.assignment_outlined, l10n.text('order'), 'Sales Order', onQuick),
-              _ReferenceAction(Icons.bar_chart_rounded, l10n.text('reports'), 'Reports', onQuick),
+              _ReferenceAction(Icons.shopping_cart_outlined, l10n.text('sale'), 'New Sale', onQuick, color: const Color(0xFF3F51B5)),
+              _ReferenceAction(Icons.shopping_bag_outlined, l10n.text('purchase'), 'Purchase', onQuick, color: const Color(0xFF2E7D32)),
+              _ReferenceAction(Icons.account_balance_outlined, l10n.text('gst'), 'GST Center', onQuick, color: const Color(0xFF00897B)),
+              _ReferenceAction(Icons.account_balance_wallet_outlined, l10n.text('cash_bank'), 'Cash & Bank', onQuick, color: const Color(0xFF1B5E20)),
+              _ReferenceAction(Icons.inventory_2_outlined, l10n.text('item'), 'Product', onQuick, color: const Color(0xFF7B1FA2)),
+              _ReferenceAction(Icons.description_outlined, l10n.text('estimate'), 'Estimate', onQuick, color: const Color(0xFF0288D1)),
+              _ReferenceAction(Icons.assignment_outlined, l10n.text('order'), 'Sales Order', onQuick, color: const Color(0xFFE65100)),
+              _ReferenceAction(Icons.bar_chart_rounded, l10n.text('reports'), 'Reports', onQuick, color: const Color(0xFF5C6BC0)),
             ],
           ),
           const SizedBox(height: 32),
@@ -1228,9 +1228,9 @@ class _Snapshot extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _SnapshotValue(l10n.text('sales'), amount(totals?['salesToday']), '12.4%', color: const Color(0xFF4CAF50)),
-                _SnapshotValue(l10n.text('purchases'), amount(totals?['purchasesToday']), '8.6%', color: const Color(0xFF4CAF50)),
-                _SnapshotValue(l10n.text('expenses'), amount(totals?['expensesToday']), '3.2%', color: const Color(0xFFFF5252), isNegative: true),
+                _SnapshotValue(l10n.text('sales'), amount(totals?['salesToday']), '12.4%', isNegative: false),
+                _SnapshotValue(l10n.text('purchases'), amount(totals?['purchasesToday']), '8.6%', isNegative: false),
+                _SnapshotValue(l10n.text('expenses'), amount(totals?['expensesToday']), '3.2%', isNegative: true),
               ],
             ),
           ],
@@ -1240,48 +1240,85 @@ class _Snapshot extends StatelessWidget {
 }
 
 class _SnapshotValue extends StatelessWidget {
-  const _SnapshotValue(this.label, this.value, this.change, {required this.color, this.isNegative = false});
+  const _SnapshotValue(this.label, this.value, this.change, {this.isNegative = false});
   final String label, value, change;
-  final Color color;
   final bool isNegative;
 
   @override
-  Widget build(BuildContext context) => Expanded(
-          child: Column(children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: Colors.white,
+  Widget build(BuildContext context) {
+    final badgeBg = isNegative
+        ? const Color(0xFFFF5252).withValues(alpha: 0.22)
+        : const Color(0xFF00E676).withValues(alpha: 0.20);
+    final badgeBorder = isNegative
+        ? const Color(0xFFFF8A80).withValues(alpha: 0.45)
+        : const Color(0xFF69F0AE).withValues(alpha: 0.45);
+    final badgeFg = isNegative
+        ? const Color(0xFFFF8A80)
+        : const Color(0xFF69F0AE);
+
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.85),
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(value,
+          const SizedBox(height: 8),
+          Text(
+            value,
             style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5)),
-        const SizedBox(height: 10),
-        Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
             decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8)),
+              color: badgeBg,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: badgeBorder, width: 0.8),
+              boxShadow: [
+                BoxShadow(
+                  color: isNegative
+                      ? const Color(0xFFFF5252).withValues(alpha: 0.15)
+                      : const Color(0xFF00E676).withValues(alpha: 0.15),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(isNegative ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded, size: 10, color: color),
+                Icon(
+                  isNegative ? Icons.trending_down_rounded : Icons.trending_up_rounded,
+                  size: 13,
+                  color: badgeFg,
+                ),
                 const SizedBox(width: 4),
-                Text(change,
-                    style: TextStyle(
-                        color: color,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800)),
+                Text(
+                  change,
+                  style: TextStyle(
+                    color: badgeFg,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.2,
+                  ),
+                ),
               ],
-            )),
-      ]));
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _OverviewCard extends StatelessWidget {
@@ -1388,42 +1425,98 @@ class _SparklinePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-class _ReferenceAction extends StatelessWidget {
+class _ReferenceAction extends StatefulWidget {
   const _ReferenceAction(this.icon, this.label, this.action, this.onTap,
-      {this.primary = false});
+      {required this.color});
   final IconData icon;
   final String label, action;
   final ValueChanged<String> onTap;
-  final bool primary;
+  final Color color;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-      onTap: () => onTap(action),
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-          decoration: BoxDecoration(
-              color: primary ? const Color(0xFF3F51B5) : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: primary ? const Color(0xFF3F51B5) : StitchColors.outline.withValues(alpha: 0.7)),
-              boxShadow: [
-                if (!primary) BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 4, offset: const Offset(0, 2)),
-              ]),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(icon,
-                color: primary ? Colors.white : const Color(0xFF3F51B5), size: 28),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(label,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+  State<_ReferenceAction> createState() => _ReferenceActionState();
+}
+
+class _ReferenceActionState extends State<_ReferenceAction> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.color;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.translationValues(0, _isHovered ? -3 : 0, 0),
+        decoration: BoxDecoration(
+          color: _isHovered ? color.withValues(alpha: 0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _isHovered
+                ? color.withValues(alpha: 0.55)
+                : StitchColors.outline.withValues(alpha: 0.7),
+            width: _isHovered ? 1.5 : 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: _isHovered
+                  ? color.withValues(alpha: 0.20)
+                  : Colors.black.withValues(alpha: 0.02),
+              blurRadius: _isHovered ? 12 : 4,
+              offset: Offset(0, _isHovered ? 5 : 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => widget.onTap(widget.action),
+            borderRadius: BorderRadius.circular(16),
+            splashColor: color.withValues(alpha: 0.15),
+            highlightColor: color.withValues(alpha: 0.08),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedScale(
+                  scale: _isHovered ? 1.08 : 1.0,
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: _isHovered ? 0.16 : 0.10),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(widget.icon, color: color, size: 24),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    widget.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: primary ? Colors.white : StitchColors.textPrimary)),
+                      color: _isHovered ? color : StitchColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ])));
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _AlertRow extends StatelessWidget {
