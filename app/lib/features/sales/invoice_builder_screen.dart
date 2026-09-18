@@ -463,28 +463,8 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Save invoice — ${q.total}',
-                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      ),
-                      onPressed: () {
-                        final totalRupees = q.total.paise / 100.0;
-                        paidController.text = totalRupees == totalRupees.roundToDouble()
-                            ? totalRupees.round().toString()
-                            : totalRupees.toStringAsFixed(2);
-                        setSheetState(() {});
-                      },
-                      icon: const Icon(Icons.bolt_rounded, size: 16, color: StitchColors.primary),
-                      label: const Text('Pay Full', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                    ),
-                  ],
-                ),
+                Text('Save invoice — ${q.total}',
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 14),
                 AppAmountField(
                   controller: paidController,
@@ -500,38 +480,6 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                     },
                     child: const Text('Full', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    ActionChip(
-                      avatar: const Icon(Icons.check_circle_outline_rounded, size: 15, color: StitchColors.primary),
-                      label: Text('Full: ₹${formatPaise(q.total.paise)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-                      backgroundColor: StitchColors.primary.withValues(alpha: 0.08),
-                      side: BorderSide(color: StitchColors.primary.withValues(alpha: 0.25)),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () {
-                        final totalRupees = q.total.paise / 100.0;
-                        paidController.text = totalRupees == totalRupees.roundToDouble()
-                            ? totalRupees.round().toString()
-                            : totalRupees.toStringAsFixed(2);
-                        setSheetState(() {});
-                      },
-                    ),
-                    ActionChip(
-                      avatar: const Icon(Icons.money_off_rounded, size: 15, color: StitchColors.textSecondary),
-                      label: const Text('Credit: ₹0', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () {
-                        paidController.text = '0';
-                        setSheetState(() {});
-                      },
-                    ),
-                  ],
                 ),
                 if (biz.taxRegistered) ...[
                   const SizedBox(height: 12),
@@ -915,23 +863,43 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     );
   }
 
-  Widget _invoiceDiscountRow(QuoteResult q) => Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text('Invoice discount', style: TextStyle(fontSize: 12.5)),
-          if (invoiceDiscountValue <= 0.0)
-            TextButton(onPressed: () => _setDiscount(), child: const Text('Add'))
-          else
-            Row(children: [
-              Text('-${formatPaise(q.invoiceDiscount.paise)}',
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: StitchColors.success)),
-              IconButton(
+  Widget _invoiceDiscountRow(QuoteResult q) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Invoice discount', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500)),
+            if (invoiceDiscountValue <= 0.0)
+              TextButton(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                ),
                 onPressed: () => _setDiscount(),
-                icon: const Icon(Icons.edit_outlined, size: 16),
-                visualDensity: VisualDensity.compact,
+                child: const Text('Add'),
+              )
+            else
+              InkWell(
+                onTap: () => _setDiscount(),
+                borderRadius: BorderRadius.circular(4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.edit_outlined, size: 14, color: StitchColors.textSecondary),
+                    const SizedBox(width: 4),
+                    Text(
+                      '-${formatPaise(q.invoiceDiscount.paise)}',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: StitchColors.success,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ]),
-        ],
+          ],
+        ),
       );
 
   Future<void> _setDiscount() async {
