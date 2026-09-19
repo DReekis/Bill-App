@@ -374,9 +374,9 @@ class _PartyPickerSheetState extends State<_PartyPickerSheet> {
     if (!mounted) return;
     setState(() {
       _parties = result is List<Customer>
-          ? result.map((c) => (id: c.id as int?, name: c.name, phone: c.phone)).toList()
+          ? result.map((c) => (id: c.id, name: c.name, phone: c.phone)).toList()
           : (result as List<Supplier>)
-              .map((s) => (id: s.id as int?, name: s.name, phone: s.phone))
+              .map((s) => (id: s.id, name: s.name, phone: s.phone))
               .toList();
       _loading = false;
     });

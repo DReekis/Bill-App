@@ -152,3 +152,34 @@ test('Full Business Flow: Entities, Sync Push & Pull', async () => {
   assert.ok(pullBody.changes.length >= 1);
   assert.ok(pullBody.serverTime);
 });
+
+test('GET /api/v1/gst/lookup/:gstin resolves business profile and deterministic fallback', async () => {
+  // Test demo sandbox profile
+  const demoRes = await app.inject({
+    method: 'GET',
+    url: '/api/v1/gst/lookup/29AAAAA0000A1Z5',
+  });
+  assert.equal(demoRes.statusCode, 200);
+  const demoBody = demoRes.json() as any;
+  assert.equal(demoBody.valid, true);
+  assert.equal(demoBody.stateCode, '29');
+  assert.equal(demoBody.state, 'Karnataka');
+  assert.equal(demoBody.businessName, 'Modern Retail Store');
+  assert.equal(demoBody.pan, 'AAAAA0000A');
+  assert.equal(demoBody.constitution, 'Private Limited Company');
+
+  // Test deterministic fallback for unknown valid format
+  const fallbackRes = await app.inject({
+    method: 'GET',
+    url: '/api/v1/gst/lookup/27ABCFE1234F1Z5',
+  });
+  assert.equal(fallbackRes.statusCode, 200);
+  const fallbackBody = fallbackRes.json() as any;
+  assert.equal(fallbackBody.valid, true);
+  assert.equal(fallbackBody.stateCode, '27');
+  assert.equal(fallbackBody.state, 'Maharashtra');
+  assert.equal(fallbackBody.pan, 'ABCFE1234F');
+  assert.equal(fallbackBody.constitution, 'Partnership / LLP');
+});
+
+

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/gst_service.dart';
 import '../../core/models.dart';
 import '../../data/repositories.dart';
 import '../../utils/widgets.dart';
@@ -23,6 +24,25 @@ class _SupplierFormSheetState extends State<SupplierFormSheet> {
   final _opening = TextEditingController();
   int creditPeriod = 0;
   bool saving = false;
+
+  Future<void> _checkGst(String val) async {
+    final clean = val.trim().toUpperCase();
+    if (clean.length == 15 && GstService.isValidGstinFormat(clean)) {
+      final info = await GstService.instance.lookup(clean);
+      if (!mounted) return;
+      setState(() {
+        if (_state.text.trim().isEmpty && info.state != null) {
+          _state.text = info.state!;
+        }
+        if (_name.text.trim().isEmpty && info.effectiveName.isNotEmpty) {
+          _name.text = info.effectiveName;
+        }
+        if (_address.text.trim().isEmpty && info.address != null && info.address!.isNotEmpty) {
+          _address.text = info.address!;
+        }
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -95,7 +115,13 @@ class _SupplierFormSheetState extends State<SupplierFormSheet> {
             AppTextField(controller: _email, label: 'Email', keyboardType: TextInputType.emailAddress),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: AppTextField(controller: _gstin, label: 'GSTIN')),
+              Expanded(
+                child: AppTextField(
+                  controller: _gstin,
+                  label: 'GSTIN',
+                  onChanged: _checkGst,
+                ),
+              ),
               const SizedBox(width: 12),
               Expanded(child: AppTextField(controller: _state, label: 'State')),
             ]),

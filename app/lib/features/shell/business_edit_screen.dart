@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api_client.dart';
+import '../../core/gst_service.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
 import '../../data/repositories.dart';
@@ -27,6 +29,9 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
   Business? business;
   bool saving = false;
   bool taxRegistered = true;
+
+  bool fetchingGst = false;
+  String? gstStatusMessage;
 
   Future<void> _load() async {
     if (widget.isNew) {
@@ -64,6 +69,71 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _owner.dispose();
+    _gstin.dispose();
+    _state.dispose();
+    _city.dispose();
+    _prefix.dispose();
+    _upiId.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchGstDetails([String? specificGstin]) async {
+    final target = (specificGstin ?? _gstin.text).trim().toUpperCase();
+    if (target.isEmpty) return;
+    if (target.length != 15) {
+      showAppMessage(context, 'GSTIN must be 15 characters', error: true);
+      return;
+    }
+
+    setState(() {
+      fetchingGst = true;
+      gstStatusMessage = null;
+    });
+
+    try {
+      final session = context.read<Session>();
+      final client = session.token != null ? (ApiClient()..setToken(session.token!)) : null;
+      final info = await GstService.instance.lookup(target, apiClient: client);
+      if (!mounted) return;
+
+      setState(() {
+        if (info.effectiveName.isNotEmpty) {
+          _name.text = info.effectiveName;
+        }
+        if (info.effectiveOwner.isNotEmpty) {
+          _owner.text = info.effectiveOwner;
+        }
+        if (info.state != null && info.state!.isNotEmpty) {
+          _state.text = info.state!;
+        }
+        if (info.city != null && info.city!.isNotEmpty) {
+          _city.text = info.city!;
+        }
+        taxRegistered = true;
+        gstStatusMessage = info.isOnlineFetched
+            ? '✓ Verified GSTIN (${info.status} • ${info.state ?? "India"})'
+            : '✓ Identified (${info.constitution ?? "GST Registered"} • ${info.state ?? "India"})';
+      });
+
+      showAppMessage(
+        context,
+        info.effectiveName.isNotEmpty
+            ? 'Business details loaded for ${info.effectiveName}'
+            : 'GST details identified (${info.state ?? ""})',
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => gstStatusMessage = 'Could not auto-fill: $e');
+      }
+    } finally {
+      if (mounted) setState(() => fetchingGst = false);
+    }
   }
 
   Future<void> _save() async {
@@ -135,21 +205,68 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
         body: business == null
             ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
             : ListView(padding: const EdgeInsets.all(16), children: [
+                if (widget.isNew) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: StitchColors.primary.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: StitchColors.primary.withValues(alpha: 0.2)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.bolt_rounded, color: StitchColors.primary, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Enter your GST number below to auto-fill business name, owner & state!',
+                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: StitchColors.primary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                AppTextField(
+                  controller: _gstin,
+                  label: 'GSTIN (15 characters)',
+                  hint: 'e.g. 29AAAAA0000A1Z5',
+                  onChanged: (v) {
+                    final clean = v.trim().toUpperCase();
+                    if (clean.length == 15) {
+                      _fetchGstDetails(clean);
+                    } else if (gstStatusMessage != null) {
+                      setState(() => gstStatusMessage = null);
+                    }
+                  },
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return null;
+                    return GstService.isValidGstinFormat(v.trim()) ? null : 'Invalid GSTIN format';
+                  },
+                ),
+                if (gstStatusMessage != null) ...[
+                  const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Text(
+                      gstStatusMessage!,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: StitchColors.success),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
                 AppTextField(controller: _name, label: 'Business name *'),
                 const SizedBox(height: 12),
                 AppTextField(controller: _owner, label: 'Owner name'),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: AppTextField(controller: _gstin, label: 'GSTIN')),
-                  const SizedBox(width: 12),
-                  Expanded(child: AppTextField(controller: _prefix, label: 'Invoice prefix')),
-                ]),
                 const SizedBox(height: 12),
                 Row(children: [
                   Expanded(child: AppTextField(controller: _state, label: 'State')),
                   const SizedBox(width: 12),
                   Expanded(child: AppTextField(controller: _city, label: 'City')),
                 ]),
+                const SizedBox(height: 12),
+                AppTextField(controller: _prefix, label: 'Invoice prefix', hint: 'INV'),
                 const SizedBox(height: 12),
                 AppTextField(controller: _upiId, label: 'UPI VPA (for QR payment, e.g. store@upi)'),
                 const SizedBox(height: 8),
