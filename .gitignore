@@ -13,10 +13,13 @@ Thumbs.db
 *.iml
 *.ipr
 *.iws
+PROJECT_STATE.md
 
 # Node / Backend
 node_modules/
 backend/node_modules/
+dist/
+backend/dist/
 backend/prisma/*.db
 backend/prisma/*.db-journal
 backend/prisma/*.db-wal
