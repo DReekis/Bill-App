@@ -2506,6 +2506,235 @@ class Repository {
     return rows.map(Invoice.fromMap).toList();
   }
 
+  Future<ReceivablesSummary> receivablesSummary(int businessId) async {
+    final db = await _database;
+    final custList = await customers(businessId);
+    final today = todayIso();
+    final todayDt = DateTime.now();
+
+    final items = <PartyReceivable>[];
+    var totalReceivable = 0;
+    var overdueCount = 0;
+    var overdueAmount = 0;
+
+    for (final c in custList) {
+      if (c.id == null) continue;
+      final bal = await partyBalance(businessId, 'customer', c.id!);
+      if (bal <= 0) continue;
+
+      totalReceivable += bal;
+
+      final invRows = await db.query(
+        'invoices',
+        where: "business_id = ? AND customer_id = ? AND status != 'Paid'",
+        whereArgs: [businessId, c.id],
+        orderBy: 'due_date ASC, date ASC',
+      );
+
+      final pendingInvoices = <PendingInvoiceItem>[];
+      var customerHasOverdue = false;
+      var maxOverdueDays = 0;
+      String? oldestDueDate;
+
+      for (final r in invRows) {
+        final inv = Invoice.fromMap(r);
+        final pending = (inv.total - inv.amountPaid);
+        if (pending <= 0) continue;
+
+        var isOverdue = false;
+        var overdueDays = 0;
+        if (inv.dueDate != null && inv.dueDate!.isNotEmpty) {
+          if (inv.dueDate!.compareTo(today) < 0) {
+            isOverdue = true;
+            customerHasOverdue = true;
+            final dueDt = DateTime.tryParse(inv.dueDate!);
+            if (dueDt != null) {
+              overdueDays = todayDt.difference(dueDt).inDays;
+              if (overdueDays > maxOverdueDays) maxOverdueDays = overdueDays;
+            }
+          }
+          if (oldestDueDate == null || inv.dueDate!.compareTo(oldestDueDate) < 0) {
+            oldestDueDate = inv.dueDate;
+          }
+        }
+
+        pendingInvoices.add(PendingInvoiceItem(
+          invoiceId: inv.id!,
+          invoiceNumber: inv.number,
+          date: inv.date,
+          dueDate: inv.dueDate,
+          total: inv.total,
+          amountPaid: inv.amountPaid,
+          pendingAmount: pending,
+          isOverdue: isOverdue,
+          overdueDays: overdueDays,
+        ));
+      }
+
+      if (customerHasOverdue) {
+        overdueCount++;
+        overdueAmount += bal;
+      }
+
+      items.add(PartyReceivable(
+        customerId: c.id!,
+        customerName: c.name,
+        phone: c.phone,
+        whatsapp: c.whatsapp,
+        balance: bal,
+        pendingInvoices: pendingInvoices,
+        oldestDueDate: oldestDueDate,
+        maxOverdueDays: maxOverdueDays,
+      ));
+    }
+
+    // Include walk-in/unassigned unpaid invoices if any
+    final walkInRows = await db.query(
+      'invoices',
+      where: "business_id = ? AND (customer_id IS NULL OR customer_id = 0) AND status != 'Paid'",
+      whereArgs: [businessId],
+      orderBy: 'due_date ASC, date ASC',
+    );
+    final walkInGroups = <String, List<Invoice>>{};
+    for (final r in walkInRows) {
+      final inv = Invoice.fromMap(r);
+      final pending = inv.total - inv.amountPaid;
+      if (pending <= 0) continue;
+      final name = (inv.customerName != null && inv.customerName!.trim().isNotEmpty)
+          ? inv.customerName!.trim()
+          : 'Walk-in Customer';
+      walkInGroups.putIfAbsent(name, () => []).add(inv);
+    }
+    for (final entry in walkInGroups.entries) {
+      final name = entry.key;
+      final invoices = entry.value;
+      var groupBalance = 0;
+      final pendingItems = <PendingInvoiceItem>[];
+      var customerHasOverdue = false;
+      var maxOverdueDays = 0;
+      String? oldestDueDate;
+
+      for (final inv in invoices) {
+        final pending = inv.total - inv.amountPaid;
+        groupBalance += pending;
+        var isOverdue = false;
+        var overdueDays = 0;
+        if (inv.dueDate != null && inv.dueDate!.isNotEmpty) {
+          if (inv.dueDate!.compareTo(today) < 0) {
+            isOverdue = true;
+            customerHasOverdue = true;
+            final dueDt = DateTime.tryParse(inv.dueDate!);
+            if (dueDt != null) {
+              overdueDays = todayDt.difference(dueDt).inDays;
+              if (overdueDays > maxOverdueDays) maxOverdueDays = overdueDays;
+            }
+          }
+          if (oldestDueDate == null || inv.dueDate!.compareTo(oldestDueDate) < 0) {
+            oldestDueDate = inv.dueDate;
+          }
+        }
+        pendingItems.add(PendingInvoiceItem(
+          invoiceId: inv.id!,
+          invoiceNumber: inv.number,
+          date: inv.date,
+          dueDate: inv.dueDate,
+          total: inv.total,
+          amountPaid: inv.amountPaid,
+          pendingAmount: pending,
+          isOverdue: isOverdue,
+          overdueDays: overdueDays,
+        ));
+      }
+
+      if (groupBalance > 0) {
+        totalReceivable += groupBalance;
+        if (customerHasOverdue) {
+          overdueCount++;
+          overdueAmount += groupBalance;
+        }
+        items.add(PartyReceivable(
+          customerId: 0,
+          customerName: name,
+          phone: null,
+          whatsapp: null,
+          balance: groupBalance,
+          pendingInvoices: pendingItems,
+          oldestDueDate: oldestDueDate,
+          maxOverdueDays: maxOverdueDays,
+        ));
+      }
+    }
+
+    items.sort((a, b) {
+      if (a.maxOverdueDays != b.maxOverdueDays) {
+        return b.maxOverdueDays.compareTo(a.maxOverdueDays);
+      }
+      return b.balance.compareTo(a.balance);
+    });
+
+    return ReceivablesSummary(
+      totalReceivable: totalReceivable,
+      partyCount: items.length,
+      overdueCount: overdueCount,
+      overdueAmount: overdueAmount,
+      items: items,
+    );
+  }
+
+  Future<PayablesSummary> payablesSummary(int businessId) async {
+    final db = await _database;
+    final suppList = await suppliers(businessId);
+    final items = <PartyPayable>[];
+    var totalPayable = 0;
+
+    for (final s in suppList) {
+      if (s.id == null) continue;
+      final bal = await partyBalance(businessId, 'supplier', s.id!);
+      if (bal <= 0) continue;
+
+      totalPayable += bal;
+      items.add(PartyPayable(
+        supplierId: s.id!,
+        supplierName: s.name,
+        phone: s.phone,
+        whatsapp: s.whatsapp,
+        balance: bal,
+      ));
+    }
+
+    // Check direct / unassigned purchases on credit under supplier:0
+    final directBal = await partyBalance(businessId, 'supplier', 0);
+    if (directBal > 0) {
+      totalPayable += directBal;
+      final expRows = await db.query(
+        'expenses',
+        columns: ['vendor'],
+        where: "business_id = ? AND category = 'Purchase'",
+        whereArgs: [businessId],
+        orderBy: 'id DESC',
+        limit: 1,
+      );
+      final vendorName = expRows.isNotEmpty && expRows.first['vendor'] != null
+          ? expRows.first['vendor'] as String
+          : 'Direct Vendor';
+      items.add(PartyPayable(
+        supplierId: 0,
+        supplierName: vendorName,
+        phone: null,
+        whatsapp: null,
+        balance: directBal,
+      ));
+    }
+
+    items.sort((a, b) => b.balance.compareTo(a.balance));
+
+    return PayablesSummary(
+      totalPayable: totalPayable,
+      partyCount: items.length,
+      items: items,
+    );
+  }
+
   Future<Map<String, int>> periodTotals(int businessId, String fromDate) async {
     final db = await _database;
     Future<int> sumOf(String table, String column, String whereClause, List<Object?> args) async {

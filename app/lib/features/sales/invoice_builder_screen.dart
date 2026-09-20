@@ -13,6 +13,7 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../customers/customer_form.dart';
 import '../inventory/product_form.dart';
+import '../inventory/multi_product_picker_sheet.dart';
 import 'barcode_scanner_screen.dart';
 
 class InvoiceBuilderScreen extends StatefulWidget {
@@ -376,22 +377,46 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   }
 
   void _addItem() {
+    final initialMap = <int, double>{};
+    for (final l in lines) {
+      if (l.product.id != null) {
+        initialMap[l.product.id!] = l.qty;
+      }
+    }
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _ProductPickerSheet(
+      builder: (context) => MultiProductPickerSheet(
         products: products ?? const [],
-        onPick: (product) {
-          Navigator.pop(context);
-          _editLine(_LineEdit(
-            product: product,
-            qty: 1,
-            price: product.salePrice,
-            discountPercent: 0,
-            gstRate: product.gstRate,
-            taxIncluded: product.taxIncluded,
-          ));
+        initialQuantities: initialMap,
+        onItemsSelected: (selectedItems) {
+          setState(() {
+            for (final item in selectedItems) {
+              final existingIndex = lines.indexWhere((l) => l.product.id == item.product.id);
+              if (existingIndex >= 0) {
+                lines[existingIndex].qty = item.quantity;
+                lines[existingIndex].price = item.unitPrice;
+              } else {
+                lines.add(_LineEdit(
+                  product: item.product,
+                  qty: item.quantity,
+                  price: item.unitPrice,
+                  discountPercent: 0,
+                  gstRate: item.product.gstRate,
+                  taxIncluded: item.product.taxIncluded,
+                ));
+              }
+            }
+          });
+          _saveDraft();
+          showAppMessage(
+            context,
+            selectedItems.length == 1
+                ? 'Added ${selectedItems.first.product.name} to bill'
+                : 'Added ${selectedItems.length} items to bill',
+          );
         },
         onAddNew: () async {
           Navigator.pop(context);
@@ -400,14 +425,19 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             isScrollControlled: true,
             builder: (context) => ProductFormSheet(
               onSaved: _refreshProducts,
-              onSavedProduct: (p) => _editLine(_LineEdit(
-                product: p,
-                qty: 1,
-                price: p.salePrice,
-                discountPercent: 0,
-                gstRate: p.gstRate,
-                taxIncluded: p.taxIncluded,
-              )),
+              onSavedProduct: (p) {
+                setState(() {
+                  lines.add(_LineEdit(
+                    product: p,
+                    qty: 1,
+                    price: p.salePrice,
+                    discountPercent: 0,
+                    gstRate: p.gstRate,
+                    taxIncluded: p.taxIncluded,
+                  ));
+                });
+                _saveDraft();
+              },
               businessId: context.read<Session>().businessId!,
             ),
           );
@@ -1053,403 +1083,6 @@ class _LineTile extends StatelessWidget {
   }
 
   static String _qty(num q) => q == q.roundToDouble() ? q.round().toString() : q.toStringAsFixed(2);
-}
-
-class _ProductPickerSheet extends StatefulWidget {
-  const _ProductPickerSheet({
-    required this.products,
-    required this.onPick,
-    required this.onAddNew,
-    this.onScanBarcode,
-  });
-  final List<Product> products;
-  final ValueChanged<Product> onPick;
-  final VoidCallback onAddNew;
-  final VoidCallback? onScanBarcode;
-
-  @override
-  State<_ProductPickerSheet> createState() => _ProductPickerSheetState();
-}
-
-class _ProductPickerSheetState extends State<_ProductPickerSheet> {
-  final TextEditingController _searchController = TextEditingController();
-  String _selectedCategory = 'All';
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  static String _qty(num q) =>
-      q == q.roundToDouble() ? q.round().toString() : q.toStringAsFixed(2);
-
-  List<String> _getCategories() {
-    final cats = <String>['All'];
-    for (final p in widget.products) {
-      final c = p.category?.trim();
-      if (c != null && c.isNotEmpty && !cats.contains(c)) {
-        cats.add(c);
-      }
-    }
-    return cats;
-  }
-
-  List<Product> _getFilteredProducts() {
-    final query = _searchController.text.trim().toLowerCase();
-    return widget.products.where((p) {
-      final matchesCategory = _selectedCategory == 'All' ||
-          (p.category != null && p.category!.trim() == _selectedCategory);
-      if (!matchesCategory) return false;
-
-      if (query.isEmpty) return true;
-      final name = p.name.toLowerCase();
-      final sku = (p.sku ?? '').toLowerCase();
-      final barcode = (p.barcode ?? '').toLowerCase();
-      final hsn = (p.hsn ?? '').toLowerCase();
-      final brand = (p.brand ?? '').toLowerCase();
-
-      return name.contains(query) ||
-          sku.contains(query) ||
-          barcode.contains(query) ||
-          hsn.contains(query) ||
-          brand.contains(query);
-    }).toList();
-  }
-
-  Widget _buildStockBadge(num stock) {
-    if (stock <= 0) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: StitchColors.error.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: const Text(
-          'Out of stock',
-          style: TextStyle(
-            color: StitchColors.error,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-    } else if (stock <= 5) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: StitchColors.warning.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          'Low stock (${_qty(stock)})',
-          style: const TextStyle(
-            color: StitchColors.warning,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-    } else {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: StitchColors.success.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          '${_qty(stock)} in stock',
-          style: const TextStyle(
-            color: StitchColors.success,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final categories = _getCategories();
-    final filtered = _getFilteredProducts();
-    final isSearching = _searchController.text.trim().isNotEmpty;
-    final topSellers = widget.products.take(6).toList();
-
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 10, bottom: 6),
-              width: 38,
-              height: 4.5,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Add Item to Bill',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: widget.onAddNew,
-                        icon: const Icon(Icons.add_rounded, size: 18),
-                        label: const Text('New Product'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _searchController,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      hintText: 'Search by name, SKU, or barcode...',
-                      hintStyle: const TextStyle(fontSize: 13, color: StitchColors.textTertiary),
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20, color: StitchColors.textSecondary),
-                      suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (isSearching)
-                            IconButton(
-                              icon: const Icon(Icons.close_rounded, size: 18),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() {});
-                              },
-                            ),
-                          if (widget.onScanBarcode != null)
-                            IconButton(
-                              tooltip: 'Scan Barcode',
-                              icon: const Icon(Icons.qr_code_scanner_rounded, color: StitchColors.primary),
-                              onPressed: widget.onScanBarcode,
-                            ),
-                        ],
-                      ),
-                      filled: true,
-                      fillColor: StitchColors.surfaceVariant.withValues(alpha: 0.5),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (categories.length > 1)
-              SizedBox(
-                height: 38,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: categories.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (ctx, i) {
-                    final cat = categories[i];
-                    final isSelected = cat == _selectedCategory;
-                    return ChoiceChip(
-                      label: Text(cat),
-                      selected: isSelected,
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                        color: isSelected ? StitchColors.primary : StitchColors.textPrimary,
-                      ),
-                      selectedColor: StitchColors.primary.withValues(alpha: 0.12),
-                      backgroundColor: StitchColors.surfaceVariant.withValues(alpha: 0.5),
-                      side: BorderSide(
-                        color: isSelected ? StitchColors.primary : Colors.transparent,
-                        width: 1,
-                      ),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      showCheckmark: false,
-                      onSelected: (_) => setState(() => _selectedCategory = cat),
-                    );
-                  },
-                ),
-              ),
-            const SizedBox(height: 8),
-            if (!isSearching && _selectedCategory == 'All' && topSellers.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.bolt_rounded, size: 16, color: StitchColors.primary),
-                    const SizedBox(width: 4),
-                    Text(
-                      'QUICK ADD',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 6),
-              SizedBox(
-                height: 84,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: topSellers.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (ctx, i) {
-                    final p = topSellers[i];
-                    return InkWell(
-                      onTap: () => widget.onPick(p),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        width: 135,
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: StitchColors.surfaceVariant.withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              p.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  formatPaise(p.salePrice),
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: StitchColors.primary),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: const BoxDecoration(
-                                    color: StitchColors.primary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(Icons.add_rounded, size: 14, color: Colors.white),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Divider(height: 1),
-            ],
-            Expanded(
-              child: filtered.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.search_off_rounded, size: 48, color: Colors.grey.shade400),
-                            const SizedBox(height: 8),
-                            Text(
-                              isSearching ? 'No products match "${_searchController.text}"' : 'No products found',
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: StitchColors.textSecondary),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 12),
-                            OutlinedButton.icon(
-                              onPressed: widget.onAddNew,
-                              icon: const Icon(Icons.add_rounded, size: 16),
-                              label: const Text('Create This Product'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (ctx, i) {
-                        final p = filtered[i];
-                        final details = <String>[];
-                        if (p.category != null && p.category!.isNotEmpty) details.add(p.category!);
-                        if (p.sku != null && p.sku!.isNotEmpty) details.add('SKU: ${p.sku}');
-                        if (p.barcode != null && p.barcode!.isNotEmpty) details.add('BC: ${p.barcode}');
-
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                          leading: InitialsAvatar(p.name, size: 40),
-                          title: Text(
-                            p.name,
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (details.isNotEmpty)
-                                Text(
-                                  details.join(' • '),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary),
-                                ),
-                              const SizedBox(height: 3),
-                              _buildStockBadge(p.stock),
-                            ],
-                          ),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                formatPaise(p.salePrice),
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-                              ),
-                              const SizedBox(height: 2),
-                              const Text(
-                                '+ Add',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: StitchColors.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          onTap: () => widget.onPick(p),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _LineEditorSheet extends StatefulWidget {

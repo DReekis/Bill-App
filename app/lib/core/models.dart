@@ -1769,3 +1769,93 @@ class DashboardPerformance {
   final List<double> profitHistory;
 }
 
+class PendingInvoiceItem {
+  const PendingInvoiceItem({
+    required this.invoiceId,
+    required this.invoiceNumber,
+    required this.date,
+    this.dueDate,
+    required this.total,
+    required this.amountPaid,
+    required this.pendingAmount,
+    required this.isOverdue,
+    required this.overdueDays,
+  });
+
+  final int invoiceId;
+  final String invoiceNumber;
+  final String date;
+  final String? dueDate;
+  final int total;
+  final int amountPaid;
+  final int pendingAmount;
+  final bool isOverdue;
+  final int overdueDays;
+}
+
+class PartyReceivable {
+  const PartyReceivable({
+    required this.customerId,
+    required this.customerName,
+    this.phone,
+    this.whatsapp,
+    required this.balance,
+    required this.pendingInvoices,
+    this.oldestDueDate,
+    this.maxOverdueDays = 0,
+  });
+
+  final int customerId;
+  final String customerName;
+  final String? phone;
+  final String? whatsapp;
+  final int balance;
+  final List<PendingInvoiceItem> pendingInvoices;
+  final String? oldestDueDate;
+  final int maxOverdueDays;
+}
+
+class ReceivablesSummary {
+  const ReceivablesSummary({
+    required this.totalReceivable,
+    required this.partyCount,
+    required this.overdueCount,
+    required this.overdueAmount,
+    required this.items,
+  });
+
+  final int totalReceivable;
+  final int partyCount;
+  final int overdueCount;
+  final int overdueAmount;
+  final List<PartyReceivable> items;
+}
+
+class PartyPayable {
+  const PartyPayable({
+    required this.supplierId,
+    required this.supplierName,
+    this.phone,
+    this.whatsapp,
+    required this.balance,
+  });
+
+  final int supplierId;
+  final String supplierName;
+  final String? phone;
+  final String? whatsapp;
+  final int balance;
+}
+
+class PayablesSummary {
+  const PayablesSummary({
+    required this.totalPayable,
+    required this.partyCount,
+    required this.items,
+  });
+
+  final int totalPayable;
+  final int partyCount;
+  final List<PartyPayable> items;
+}
+

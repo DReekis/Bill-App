@@ -8,6 +8,8 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../inventory/multi_product_picker_sheet.dart';
+import '../inventory/product_form.dart';
 import '../suppliers/supplier_form.dart';
 
 class _PurchaseLine {
@@ -128,36 +130,71 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
       showAppMessage(context, 'Add products first from the Stock tab', error: true);
       return;
     }
-    showModalBottomSheet<int>(
+
+    final initialMap = <int, double>{};
+    for (final l in lines) {
+      if (l.product?.id != null) {
+        initialMap[l.product!.id!] = l.qty;
+      }
+    }
+
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          children: all
-              .map((p) => ListTile(
-                    leading: InitialsAvatar(p.name, size: 36),
-                    title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('${_qty(p.stock)} in stock'),
-                    onTap: () => Navigator.pop(context, p.id),
-                  ))
-              .toList(),
-        ),
+      backgroundColor: Colors.transparent,
+      builder: (context) => MultiProductPickerSheet(
+        products: all,
+        isPurchase: true,
+        title: 'Select Purchase Items',
+        actionLabel: 'Add to Purchase',
+        initialQuantities: initialMap,
+        onItemsSelected: (selectedItems) {
+          setState(() {
+            for (final item in selectedItems) {
+              final existingIndex = lines.indexWhere((l) => l.product?.id == item.product.id);
+              if (existingIndex >= 0) {
+                lines[existingIndex].qty = item.quantity;
+                lines[existingIndex].price = item.unitPrice;
+              } else {
+                lines.add(_PurchaseLine(
+                  product: item.product,
+                  qty: item.quantity,
+                  price: item.unitPrice,
+                  tax: item.product.gstRate,
+                ));
+              }
+            }
+          });
+          showAppMessage(
+            context,
+            selectedItems.length == 1
+                ? 'Added ${selectedItems.first.product.name} to purchase'
+                : 'Added ${selectedItems.length} items to purchase',
+          );
+        },
+        onAddNew: () async {
+          Navigator.pop(context);
+          await showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            builder: (context) => ProductFormSheet(
+              onSaved: _load,
+              onSavedProduct: (p) {
+                setState(() {
+                  lines.add(_PurchaseLine(
+                    product: p,
+                    qty: 1,
+                    price: p.purchasePrice == 0 ? 100 : p.purchasePrice,
+                    tax: p.gstRate,
+                  ));
+                });
+              },
+              businessId: context.read<Session>().businessId!,
+            ),
+          );
+        },
       ),
-    ).then((productId) {
-      if (productId == null) return;
-      for (final p in all) {
-        if (p.id != productId) continue;
-        final newLine = _PurchaseLine(
-          product: p,
-          qty: 1,
-          price: p.purchasePrice == 0 ? 100 : p.purchasePrice,
-          tax: p.gstRate,
-        );
-        setState(() => lines.add(newLine));
-        return;
-      }
-    });
+    );
   }
 
   void _editLine(int index) {
@@ -214,73 +251,504 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
       showAppMessage(context, 'No active business', error: true);
       return;
     }
-    if (supplierId == null && !directVendor) {
-      showAppMessage(context, 'Select a supplier first', error: true);
-      return;
-    }
-    final paid = TextEditingController(text: (total / 100).toStringAsFixed(2));
+
+    // Payment Type: 0 = Credit, 1 = Advance / Partial, 2 = Paid in Full
+    int paymentType = (supplierId != null && !directVendor) ? 0 : 2;
+
+    final paid = TextEditingController(
+      text: paymentType == 0
+          ? '0'
+          : (paymentType == 2 ? (total / 100).toStringAsFixed(2) : ''),
+    );
     String date = todayIso();
     String? mode = 'Cash';
     final notes = TextEditingController();
+    final vendorSearchController = TextEditingController(
+      text: (supplierId != null && !directVendor) ? (supplierName ?? '') : '',
+    );
+    final newVendorPhone = TextEditingController();
+    bool isCreatingNewVendor = false;
+
     final commit = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Purchase — ${formatPaise(total.toInt())}',
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 14),
-                AppAmountField(controller: paid, label: 'Paid now'),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: mode,
-                  decoration: inputDecoration('Payment mode'),
-                  items: paymentModes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                  onChanged: (v) => setSheetState(() => mode = v),
+        builder: (context, setSheetState) {
+          final totalPaise = total.toInt();
+          final currentPaidPaise = _toPaise(paid.text);
+          final balanceDuePaise = (totalPaise - currentPaidPaise).clamp(0, totalPaise);
+          final allSupps = suppliers ?? const <Supplier>[];
+          final query = vendorSearchController.text.trim().toLowerCase();
+          final filteredSupps = allSupps.where((s) {
+            if (query.isEmpty) return true;
+            return s.name.toLowerCase().contains(query) || (s.phone?.contains(query) ?? false);
+          }).toList();
+          final bool exactMatch = allSupps.any((s) => s.name.trim().toLowerCase() == query);
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Header with Total
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Purchase Payment',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: StitchColors.primaryContainer,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            formatPaise(totalPaise),
+                            style: const TextStyle(
+                              color: StitchColors.primary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Segmented Payment Type Selector: Credit vs Advance vs Full
+                    SegmentedButton<int>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                          value: 0,
+                          label: Text('Credit', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                          icon: Icon(Icons.account_balance_wallet_outlined, size: 16),
+                        ),
+                        ButtonSegment(
+                          value: 1,
+                          label: Text('Advance', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                          icon: Icon(Icons.payments_outlined, size: 16),
+                        ),
+                        ButtonSegment(
+                          value: 2,
+                          label: Text('Paid in Full', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                          icon: Icon(Icons.check_circle_outline_rounded, size: 16),
+                        ),
+                      ],
+                      selected: {paymentType},
+                      onSelectionChanged: (s) {
+                        setSheetState(() {
+                          paymentType = s.first;
+                          if (paymentType == 0) {
+                            paid.text = '0';
+                            mode = 'Credit';
+                          } else if (paymentType == 2) {
+                            paid.text = (total / 100).toStringAsFixed(2);
+                            if (mode == 'Credit') mode = 'Cash';
+                          } else if (paymentType == 1) {
+                            if (paid.text == '0' || paid.text == (total / 100).toStringAsFixed(2)) {
+                              paid.text = '';
+                            }
+                            if (mode == 'Credit') mode = 'Cash';
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // If Credit or Partial -> Supplier Search & Selection
+                    if (paymentType == 0 || paymentType == 1) ...[
+                      if (supplierId != null && !directVendor) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F8F4),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFA5D6A7)),
+                          ),
+                          child: Row(
+                            children: [
+                              InitialsAvatar(supplierName ?? 'Supplier', size: 36),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      supplierName ?? 'Supplier',
+                                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                    ),
+                                    const Text(
+                                      'Selected Supplier for Credit',
+                                      style: TextStyle(fontSize: 11, color: Color(0xFF2E7D32), fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: () {
+                                  setSheetState(() {
+                                    supplierId = null;
+                                    supplierName = null;
+                                    directVendor = false;
+                                    vendorSearchController.clear();
+                                    isCreatingNewVendor = false;
+                                  });
+                                },
+                                icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                                label: const Text('Change'),
+                                style: TextButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  foregroundColor: const Color(0xFF1B8A4C),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF8E1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFFE082)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.person_search_rounded, size: 18, color: Color(0xFFE65100)),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Select Supplier for Credit *',
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFE65100)),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: vendorSearchController,
+                                decoration: InputDecoration(
+                                  hintText: 'Search or enter supplier name...',
+                                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                                  suffixIcon: vendorSearchController.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.clear_rounded, size: 18),
+                                          onPressed: () {
+                                            setSheetState(() {
+                                              vendorSearchController.clear();
+                                              isCreatingNewVendor = false;
+                                            });
+                                          },
+                                        )
+                                      : null,
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(color: StitchColors.primary, width: 1.5),
+                                  ),
+                                ),
+                                onChanged: (v) {
+                                  setSheetState(() {
+                                    isCreatingNewVendor = false;
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                              if (filteredSupps.isNotEmpty || query.isNotEmpty)
+                                Container(
+                                  constraints: const BoxConstraints(maxHeight: 150),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.grey.shade300),
+                                  ),
+                                  child: ListView(
+                                    shrinkWrap: true,
+                                    padding: EdgeInsets.zero,
+                                    children: [
+                                      ...filteredSupps.map((s) => ListTile(
+                                            dense: true,
+                                            leading: InitialsAvatar(s.name, size: 28),
+                                            title: Text(s.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                                            subtitle: s.phone != null && s.phone!.isNotEmpty
+                                                ? Text(s.phone!, style: const TextStyle(fontSize: 11))
+                                                : null,
+                                            trailing: const Icon(Icons.chevron_right_rounded, size: 18, color: Colors.grey),
+                                            onTap: () {
+                                              setSheetState(() {
+                                                supplierId = s.id;
+                                                supplierName = s.name;
+                                                directVendor = false;
+                                                isCreatingNewVendor = false;
+                                                vendorSearchController.text = s.name;
+                                              });
+                                            },
+                                          )),
+                                      if (query.isNotEmpty && !exactMatch)
+                                        ListTile(
+                                          dense: true,
+                                          leading: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: const BoxDecoration(color: Color(0xFFE8F5E9), shape: BoxShape.circle),
+                                            child: const Icon(Icons.add_rounded, size: 18, color: Color(0xFF2E7D32)),
+                                          ),
+                                          title: Text(
+                                            '+ Add "${vendorSearchController.text.trim()}"',
+                                            style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF2E7D32), fontSize: 13),
+                                          ),
+                                          subtitle: const Text('Add and select as new supplier', style: TextStyle(fontSize: 11)),
+                                          onTap: () {
+                                            setSheetState(() {
+                                              isCreatingNewVendor = true;
+                                            });
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                )
+                              else if (allSupps.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Text(
+                                    'Type supplier name above to add them automatically',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+                                  ),
+                                ),
+
+                              if (isCreatingNewVendor || (query.isNotEmpty && !exactMatch && filteredSupps.isEmpty)) ...[
+                                const SizedBox(height: 8),
+                                AppTextField(
+                                  controller: newVendorPhone,
+                                  label: 'Phone Number (Optional)',
+                                  keyboardType: TextInputType.phone,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                    ],
+
+                    // Advance field for Partial
+                    if (paymentType == 1) ...[
+                      AppAmountField(
+                        controller: paid,
+                        label: 'Advance Amount Paid Now',
+                      ),
+                      const SizedBox(height: 8),
+                      // Quick Chips for Advance
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            if (totalPaise > 200000)
+                              _quickChip('₹1,000', 1000, paid, setSheetState),
+                            if (totalPaise > 400000)
+                              _quickChip('₹2,000', 2000, paid, setSheetState),
+                            if (totalPaise > 1000000)
+                              _quickChip('₹5,000', 5000, paid, setSheetState),
+                            _quickChip('50%', (total / 200).round(), paid, setSheetState),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // Payment Mode (for Advance or Full)
+                    if (paymentType != 0) ...[
+                      DropdownButtonFormField<String>(
+                        initialValue: (mode != null && mode != 'Credit') ? mode : 'Cash',
+                        decoration: inputDecoration(paymentType == 1 ? 'Advance Payment Mode' : 'Payment Mode'),
+                        items: paymentModes
+                            .where((m) => m != 'Credit')
+                            .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                            .toList(),
+                        onChanged: (v) => setSheetState(() => mode = v),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    // Live Balance Status Card
+                    if (paymentType == 0) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFDF4F4),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFFCDD2)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFFEBEE),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.arrow_upward_rounded, color: Color(0xFFC62828), size: 18),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Balance to pay: ${formatPaise(totalPaise)}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14,
+                                      color: Color(0xFFC62828),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'This entire purchase will be added to "To Pay"',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ] else if (paymentType == 1) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF8E1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFFE082)),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Total Bill:', style: TextStyle(fontSize: 13, color: StitchColors.textSecondary)),
+                                Text(formatPaise(totalPaise), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Advance Paid (${mode ?? 'Cash'}):', style: const TextStyle(fontSize: 13, color: StitchColors.textSecondary)),
+                                Text('- ${formatPaise(currentPaidPaise)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.success)),
+                              ],
+                            ),
+                            const Divider(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Balance to pay (To Pay):', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFFC62828))),
+                                Text(formatPaise(balanceDuePaise), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFFC62828))),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFA5D6A7)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32), size: 18),
+                            SizedBox(width: 8),
+                            Text(
+                              'Paid in Full • No balance owed',
+                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF2E7D32)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    AppTextField(controller: notes, label: 'Notes (optional)'),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: AsyncButton(
+                        label: 'Save purchase',
+                        onPressed: () {
+                          if (paymentType == 0 || paymentType == 1) {
+                            final hasExisting = supplierId != null && !directVendor;
+                            final hasTyped = vendorSearchController.text.trim().isNotEmpty;
+                            if (!hasExisting && !hasTyped) {
+                              showAppMessage(context, 'Please select or enter a supplier for credit purchase', error: true);
+                              return;
+                            }
+                          }
+                          Navigator.pop(context, true);
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final dt = dateTimeFor(date);
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: dt,
-                      firstDate: DateTime(dt.year - 2),
-                      lastDate: DateTime(dt.year + 2),
-                    );
-                    if (picked != null) setSheetState(() => date = isoDate(picked));
-                  },
-                  icon: const Icon(Icons.calendar_today_rounded, size: 16),
-                  label: Text(date),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    alignment: Alignment.centerLeft,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                AppTextField(controller: notes, label: 'Notes (optional)'),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: AsyncButton(
-                    label: 'Save purchase',
-                    onPressed: () => Navigator.pop(context, true),
-                  ),
-                ),
-              ]),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
     if (commit != true) return;
     setState(() => saving = true);
     try {
+      // If vendor was entered by name, auto-create the supplier!
+      if ((paymentType == 0 || paymentType == 1) && (supplierId == null || directVendor) && vendorSearchController.text.trim().isNotEmpty) {
+        final name = vendorSearchController.text.trim();
+        final phone = newVendorPhone.text.trim().isEmpty ? null : newVendorPhone.text.trim();
+        final newId = await Repository.instance.upsertSupplier(Supplier(
+          name: name,
+          phone: phone,
+        ));
+        supplierId = newId;
+        supplierName = name;
+        directVendor = false;
+      }
+
       final items = lines
           .map((l) => (
                 l.product?.id,
@@ -290,7 +758,7 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
                 l.tax,
               ))
           .toList();
-      final paidAmount = _toPaise(paid.text);
+      final paidAmount = paymentType == 0 ? 0 : _toPaise(paid.text);
       await Repository.instance.createPurchase(
         businessId: businessId,
         supplierId: supplierId,
@@ -298,7 +766,7 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
         date: date,
         items: items,
         amountPaid: paidAmount,
-        paymentMode: paidAmount > 0 ? (mode ?? 'Cash') : null,
+        paymentMode: paidAmount > 0 ? (mode ?? 'Cash') : 'Credit',
         notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
       );
       if (mounted) {
@@ -310,6 +778,20 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
     } finally {
       if (mounted) setState(() => saving = false);
     }
+  }
+
+  Widget _quickChip(String label, int amountRupees, TextEditingController paid, StateSetter setSheetState) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ActionChip(
+        label: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+        onPressed: () {
+          setSheetState(() {
+            paid.text = amountRupees.toString();
+          });
+        },
+      ),
+    );
   }
 
   void _recomputeTotal() {

@@ -94,6 +94,29 @@ void main() {
       expect(info.state, 'Karnataka');
       expect(info.pan, 'AABPB1234A');
       expect(info.constitution, 'Sole Proprietorship');
+      expect(info.businessName, isNotNull);
+      expect(info.businessName!.isNotEmpty, isTrue);
+      expect(info.city, 'Bengaluru');
+      expect(info.address, isNotNull);
+      expect(info.address!.contains('Karnataka'), isTrue);
+    });
+
+    test('parseDeterministic guarantees non-empty businessName, city, and address for valid GSTIN', () {
+      final arb = GstService.parseDeterministic('27ABCFE1234F1Z5');
+      expect(arb.valid, isTrue);
+      expect(arb.stateCode, '27');
+      expect(arb.state, 'Maharashtra');
+      expect(arb.city, 'Mumbai');
+      expect(arb.pinCode, '400001');
+      expect(arb.businessName, isNotNull);
+      expect(arb.businessName!.isNotEmpty, isTrue);
+      expect(arb.address, isNotNull);
+      expect(arb.address!.contains('Mumbai'), isTrue);
+
+      final enterprise = GstService.parseDeterministic('27AAPFU0939F1ZV');
+      expect(enterprise.businessName, 'Apex Electronics & Trade');
+      expect(enterprise.city, 'Mumbai');
+      expect(enterprise.pinCode, '400007');
     });
 
     test('GstBusinessInfo effectiveName and effectiveOwner fallback correctly', () {

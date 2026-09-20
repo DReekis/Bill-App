@@ -26,6 +26,8 @@ import '../banking/cash_bank_hub_screen.dart';
 import '../gst/gst_center_screen.dart';
 import '../shell/business_switcher_sheet.dart';
 import '../../l10n/app_localizations.dart';
+import 'payables_screen.dart';
+import 'receivables_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.onSwitchTab, this.onDataChanged});
@@ -46,6 +48,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int out = 0;
   int overdueCount = 0;
   int overdueAmount = 0;
+  ReceivablesSummary? receivables;
+  PayablesSummary? payables;
   String snapshotTimeframe = 'Today';
   TrendInfo salesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%');
   TrendInfo purchasesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%');
@@ -65,6 +69,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final lowCount = await repo.lowStockCount(businessId);
     final outCount = await repo.outOfStockCount(businessId);
     final overdueSummary = await repo.overdueInvoicesSummary(businessId);
+    final recSummary = await repo.receivablesSummary(businessId);
+    final paySummary = await repo.payablesSummary(businessId);
 
     await SyncEngine.instance.refreshPending();
     if (!mounted) return;
@@ -84,6 +90,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       out = outCount;
       overdueCount = overdueSummary.$1;
       overdueAmount = overdueSummary.$2;
+      receivables = recSummary;
+      payables = paySummary;
     });
   }
 
@@ -560,6 +568,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         out: out,
         overdueCount: overdueCount,
         overdueAmount: overdueAmount,
+        receivables: receivables,
+        payables: payables,
         snapshotTimeframe: snapshotTimeframe,
         salesHistory: salesHistory,
         profitHistory: profitHistory,
@@ -697,6 +707,8 @@ class _ReferenceDashboard extends StatelessWidget {
     required this.out,
     this.overdueCount = 0,
     this.overdueAmount = 0,
+    this.receivables,
+    this.payables,
     this.snapshotTimeframe = 'Today',
     required this.salesHistory,
     required this.profitHistory,
@@ -725,6 +737,8 @@ class _ReferenceDashboard extends StatelessWidget {
   final int out;
   final int overdueCount;
   final int overdueAmount;
+  final ReceivablesSummary? receivables;
+  final PayablesSummary? payables;
   final String snapshotTimeframe;
   final List<double> salesHistory;
   final List<double> profitHistory;
@@ -931,7 +945,23 @@ class _ReferenceDashboard extends StatelessWidget {
             purchasesTrend: purchasesTrend,
             expensesTrend: expensesTrend,
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 16),
+
+          _CashFlowSummaryRow(
+            receivables: receivables,
+            payables: payables,
+            onTapReceivables: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ReceivablesScreen()),
+              ).then((_) => onRefresh());
+            },
+            onTapPayables: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PayablesScreen()),
+              ).then((_) => onRefresh());
+            },
+          ),
+          const SizedBox(height: 28),
 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1396,6 +1426,193 @@ class _SnapshotValue extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CashFlowSummaryRow extends StatelessWidget {
+  const _CashFlowSummaryRow({
+    required this.receivables,
+    required this.payables,
+    required this.onTapReceivables,
+    required this.onTapPayables,
+  });
+
+  final ReceivablesSummary? receivables;
+  final PayablesSummary? payables;
+  final VoidCallback onTapReceivables;
+  final VoidCallback onTapPayables;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Row(
+      children: [
+        Expanded(
+          child: _CashFlowCard(
+            title: l10n.text('to_collect'),
+            amount: formatPaise(receivables?.totalReceivable ?? 0),
+            subtitle: (receivables?.partyCount ?? 0) > 0
+                ? '${receivables!.partyCount} ${l10n.isHindi ? 'पार्टियां' : 'parties'}'
+                : (l10n.isHindi ? 'कोई बकाया नहीं' : 'All clear'),
+            badgeText: (receivables?.overdueCount ?? 0) > 0
+                ? '${receivables!.overdueCount} ${l10n.text('overdue').toLowerCase()}'
+                : null,
+            icon: Icons.call_received_rounded,
+            primaryColor: const Color(0xFF1B8A4C),
+            bgColor: const Color(0xFFF1F8F4),
+            borderColor: const Color(0xFFA5D6A7),
+            onTap: onTapReceivables,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _CashFlowCard(
+            title: l10n.text('to_pay'),
+            amount: formatPaise(payables?.totalPayable ?? 0),
+            subtitle: (payables?.partyCount ?? 0) > 0
+                ? '${payables!.partyCount} ${l10n.isHindi ? 'सप्लायर' : 'suppliers'}'
+                : (l10n.isHindi ? 'कोई देनदारी नहीं' : 'All clear'),
+            icon: Icons.call_made_rounded,
+            primaryColor: const Color(0xFFC62828),
+            bgColor: const Color(0xFFFDF4F4),
+            borderColor: const Color(0xFFFFCDD2),
+            onTap: onTapPayables,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CashFlowCard extends StatelessWidget {
+  const _CashFlowCard({
+    required this.title,
+    required this.amount,
+    required this.subtitle,
+    required this.icon,
+    required this.primaryColor,
+    required this.bgColor,
+    required this.borderColor,
+    required this.onTap,
+    this.badgeText,
+  });
+
+  final String title;
+  final String amount;
+  final String subtitle;
+  final String? badgeText;
+  final IconData icon;
+  final Color primaryColor;
+  final Color bgColor;
+  final Color borderColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: primaryColor.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(icon, size: 14, color: primaryColor),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: primaryColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Icon(Icons.chevron_right_rounded, size: 16, color: primaryColor.withValues(alpha: 0.7)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                amount,
+                style: TextStyle(
+                  color: primaryColor.withValues(alpha: 0.95),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (badgeText != null) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFEBEE),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFFFCDD2), width: 0.5),
+                      ),
+                      child: Text(
+                        badgeText!,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFFC62828),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -6,6 +6,8 @@ import '../../core/models.dart';
 import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../utils/widgets.dart';
+import '../inventory/multi_product_picker_sheet.dart';
+import '../inventory/product_form.dart';
 
 class DeliveryChallanBuilderScreen extends StatefulWidget {
   const DeliveryChallanBuilderScreen({super.key});
@@ -47,12 +49,6 @@ class _DeliveryChallanBuilderScreenState extends State<DeliveryChallanBuilderScr
   void initState() {
     super.initState();
     _load();
-  }
-
-  void _add(Product p) {
-    setState(() {
-      lines.add(_LineEdit(product: p, qty: 1));
-    });
   }
 
   Future<void> _save() async {
@@ -156,17 +152,68 @@ class _DeliveryChallanBuilderScreenState extends State<DeliveryChallanBuilderScr
   }
 
   void _showProductPicker() {
-    showModalBottomSheet(
+    final all = products ?? const <Product>[];
+    if (all.isEmpty) {
+      showAppMessage(context, 'No products found. Add products first', error: true);
+      return;
+    }
+
+    final initialMap = <int, double>{};
+    for (final l in lines) {
+      if (l.product.id != null) {
+        initialMap[l.product.id!] = l.qty;
+      }
+    }
+
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) => ListView(
-        children: products?.map((p) => ListTile(
-          title: Text(p.name),
-          subtitle: Text('${p.stock} in stock'),
-          onTap: () {
-            _add(p);
-            Navigator.pop(context);
-          },
-        )).toList() ?? [],
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => MultiProductPickerSheet(
+        products: all,
+        title: 'Select Challan Items',
+        actionLabel: 'Add to Challan',
+        initialQuantities: initialMap,
+        onItemsSelected: (selectedItems) {
+          setState(() {
+            for (final item in selectedItems) {
+              final existingIndex = lines.indexWhere((l) => l.product.id == item.product.id);
+              if (existingIndex >= 0) {
+                lines[existingIndex].qty = item.quantity;
+              } else {
+                lines.add(_LineEdit(
+                  product: item.product,
+                  qty: item.quantity,
+                ));
+              }
+            }
+          });
+          showAppMessage(
+            context,
+            selectedItems.length == 1
+                ? 'Added ${selectedItems.first.product.name} to challan'
+                : 'Added ${selectedItems.length} items to challan',
+          );
+        },
+        onAddNew: () async {
+          Navigator.pop(context);
+          await showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            builder: (context) => ProductFormSheet(
+              onSaved: _load,
+              onSavedProduct: (p) {
+                setState(() {
+                  lines.add(_LineEdit(
+                    product: p,
+                    qty: 1,
+                  ));
+                });
+              },
+              businessId: context.read<Session>().businessId!,
+            ),
+          );
+        },
       ),
     );
   }

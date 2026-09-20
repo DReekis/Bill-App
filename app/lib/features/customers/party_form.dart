@@ -127,6 +127,10 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
         _pan.text = extractedPan;
       }
 
+      final prevAutoName = _gstInfo?.effectiveName;
+      final prevAutoAddress = _gstInfo?.address;
+      final prevAutoCity = _gstInfo?.city;
+
       setState(() => _isGstLoading = true);
       try {
         final info = await GstService.instance.lookup(clean);
@@ -136,26 +140,30 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
           if ((_state.text.trim().isEmpty || force) && info.state != null) {
             _state.text = info.state!;
           }
-          if ((_name.text.trim().isEmpty || force) &&
+          if ((_name.text.trim().isEmpty || force || _name.text == prevAutoName) &&
               info.effectiveName.isNotEmpty) {
             _name.text = info.effectiveName;
           }
           if ((_pan.text.trim().isEmpty || force) && info.pan != null) {
             _pan.text = info.pan!;
           }
-          if ((_city.text.trim().isEmpty || force) && info.city != null) {
+          if ((_city.text.trim().isEmpty || force || _city.text == prevAutoCity) && info.city != null) {
             _city.text = info.city!;
           }
           if (info.address != null && info.address!.isNotEmpty) {
-            if (_billingAddress.text.trim().isEmpty || force) {
+            if (_billingAddress.text.trim().isEmpty || force || _billingAddress.text == prevAutoAddress) {
               _billingAddress.text = info.address!;
             }
             if (_sameAsBilling &&
-                (_shippingAddress.text.trim().isEmpty || force)) {
+                (_shippingAddress.text.trim().isEmpty || force || _shippingAddress.text == prevAutoAddress)) {
               _shippingAddress.text = info.address!;
             }
           }
         });
+
+        if (info.effectiveName.isNotEmpty) {
+          showAppMessage(context, 'Party details auto-filled from GSTIN');
+        }
       } finally {
         if (mounted) setState(() => _isGstLoading = false);
       }
@@ -465,6 +473,28 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
                                 ),
                               ),
                             ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.auto_awesome, size: 12, color: Color(0xFF7C3AED)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Details auto-filled',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF7C3AED),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ],
