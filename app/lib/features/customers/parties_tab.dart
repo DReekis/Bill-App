@@ -11,6 +11,7 @@ import '../customers/customer_detail_screen.dart';
 import '../customers/customer_form.dart';
 import '../suppliers/supplier_detail_screen.dart';
 import '../suppliers/supplier_form.dart';
+import '../../l10n/app_localizations.dart';
 
 class PartiesTab extends StatefulWidget {
   const PartiesTab({super.key});
@@ -23,14 +24,15 @@ class _PartiesTabState extends State<PartiesTab> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
         child: SegmentedButton<int>(
-   showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: 0, label: Text('Customers')),
-            ButtonSegment(value: 1, label: Text('Suppliers')),
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(value: 0, label: Text(l10n.isHindi ? 'ग्राहक' : 'Customers')),
+            ButtonSegment(value: 1, label: Text(l10n.isHindi ? 'सप्लायर' : 'Suppliers')),
           ],
           selected: {segment},
           onSelectionChanged: (s) => setState(() => segment = s.first),
@@ -97,7 +99,10 @@ class _CustomerListTabState extends State<CustomerListTab> {
             child: TextField(
               controller: search,
               onChanged: (v) => setState(() => query = v),
-              decoration: const InputDecoration(hintText: 'Search customers or phone', prefixIcon: Icon(Icons.search_rounded, size: 20)),
+              decoration: InputDecoration(
+                hintText: context.l10n.isHindi ? 'ग्राहक या फोन खोजें' : 'Search customers or phone',
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -116,8 +121,11 @@ class _CustomerListTabState extends State<CustomerListTab> {
         child: items == null
             ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
             : filtered.isEmpty
-                ? ListView(children: const [
-                    AppEmptyState(icon: Icons.people_alt_outlined, title: 'No customers found')
+                ? ListView(children: [
+                    AppEmptyState(
+                      icon: Icons.people_alt_outlined,
+                      title: context.l10n.isHindi ? 'कोई ग्राहक नहीं मिला' : 'No customers found',
+                    )
                   ])
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
@@ -245,7 +253,10 @@ class _SupplierListTabState extends State<SupplierListTab> {
             child: TextField(
               controller: search,
               onChanged: (v) => setState(() => query = v),
-              decoration: const InputDecoration(hintText: 'Search suppliers', prefixIcon: Icon(Icons.search_rounded, size: 20)),
+              decoration: InputDecoration(
+                hintText: context.l10n.isHindi ? 'सप्लायर खोजें' : 'Search suppliers',
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -264,8 +275,11 @@ class _SupplierListTabState extends State<SupplierListTab> {
         child: items == null
             ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
             : filtered.isEmpty
-                ? ListView(children: const [
-                    AppEmptyState(icon: Icons.storefront_outlined, title: 'No suppliers found')
+                ? ListView(children: [
+                    AppEmptyState(
+                      icon: Icons.storefront_outlined,
+                      title: context.l10n.isHindi ? 'कोई सप्लायर नहीं मिला' : 'No suppliers found',
+                    )
                   ])
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),

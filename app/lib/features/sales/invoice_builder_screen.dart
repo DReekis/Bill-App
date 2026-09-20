@@ -338,7 +338,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                 );
               },
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Add new customer'),
+              label: const Text('Add new party'),
             ),
           ]),
         );

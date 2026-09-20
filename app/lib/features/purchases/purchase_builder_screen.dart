@@ -114,7 +114,7 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
                 );
               },
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Add new supplier'),
+              label: const Text('Add new party'),
             ),
           ]),
         );

@@ -13,7 +13,6 @@ import '../inventory/product_list_screen.dart';
 import '../more/more_screen.dart';
 import '../payments/payment_form.dart';
 import '../purchases/purchase_builder_screen.dart';
-import '../reports/reports_screen.dart';
 import '../sales/invoice_builder_screen.dart';
 import '../sales/invoice_list_tab.dart';
 import '../suppliers/supplier_form.dart';
@@ -33,7 +32,7 @@ class _AppShellState extends State<AppShell> {
     Icons.home_filled,
     Icons.receipt_long_outlined,
     Icons.inventory_2_outlined,
-    Icons.bar_chart_rounded,
+    Icons.people_alt_outlined,
     Icons.more_horiz_rounded,
   ];
 
@@ -102,6 +101,7 @@ class _AppShellState extends State<AppShell> {
             isScrollControlled: true,
             builder: (_) => ExpenseFormSheet(
                 onSaved: _reloadTabs, businessId: session.businessId!));
+      case 'Party':
       case 'Customer':
         showModalBottomSheet<void>(
             context: context,
@@ -134,7 +134,7 @@ class _AppShellState extends State<AppShell> {
       l10n.text('home'),
       l10n.text('transactions'),
       l10n.text('items'),
-      l10n.text('reports'),
+      l10n.text('parties'),
       l10n.text('more'),
     ];
     return Scaffold(
@@ -188,7 +188,7 @@ class _AppShellState extends State<AppShell> {
             ),
             InvoiceListTab(key: ValueKey('invoices-$_dataVersion-${session.localeCode}')),
             ProductListTab(key: ValueKey('products-$_dataVersion-${session.localeCode}')),
-            ReportsScreen(key: ValueKey('reports-$_dataVersion-${session.localeCode}')),
+            PartiesTab(key: ValueKey('parties-$_dataVersion-${session.localeCode}')),
             MoreTab(key: ValueKey('more-$_dataVersion-${session.localeCode}')),
           ],
         ),
@@ -293,15 +293,9 @@ class QuickActionSheet extends StatelessWidget {
       },
       {
         'icon': Icons.person_add_alt_1_rounded,
-        'label': l10n.text('customer'),
-        'action': 'Customer',
+        'label': l10n.text('parties'),
+        'action': 'Party',
         'c': const Color(0xFF00897B),
-      },
-      {
-        'icon': Icons.storefront_outlined,
-        'label': l10n.text('supplier'),
-        'action': 'Supplier',
-        'c': const Color(0xFFE65100),
       },
       {
         'icon': Icons.inventory_2_outlined,

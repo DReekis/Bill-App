@@ -7,6 +7,7 @@ import 'day_book_screen.dart';
 import 'balance_sheet_screen.dart';
 import 'pl_report_screen.dart';
 import 'bank_transfer_form.dart';
+import 'reports_screen.dart';
 
 class ReportsMenuScreen extends StatelessWidget {
   const ReportsMenuScreen({super.key});
@@ -18,6 +19,13 @@ class ReportsMenuScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _ReportTile(
+            icon: Icons.insights_rounded,
+            title: 'Business Analytics & Insights',
+            subtitle: 'Sales, Profit, Expenses & Best Selling Items',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportsScreen())),
+          ),
+          const SizedBox(height: 16),
           _ReportTile(
             icon: Icons.account_balance_outlined,
             title: 'GST Compliance Center',

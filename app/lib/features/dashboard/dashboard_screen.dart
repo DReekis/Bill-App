@@ -528,6 +528,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             context: context,
             isScrollControlled: true,
             builder: (_) => switch (action) {
+                  'Party' =>
+                    CustomerFormSheet(onSaved: onDone, businessId: businessId),
                   'Customer' =>
                     CustomerFormSheet(onSaved: onDone, businessId: businessId),
                   'Supplier' =>
@@ -628,7 +630,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
                     _actionItem(ctx, Icons.assignment_outlined, l10n.text('order'), 'Sales Order', const Color(0xFFE65100)),
                     _actionItem(ctx, Icons.local_shipping_outlined, l10n.text('challan'), 'Challan', const Color(0xFF5E35B1)),
-                    _actionItem(ctx, Icons.person_add_outlined, l10n.text('customer'), 'Customer', const Color(0xFF00897B)),
+                    _actionItem(ctx, Icons.person_add_outlined, l10n.text('parties'), 'Party', const Color(0xFF00897B)),
                   ]),
                   const SizedBox(height: 20),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [

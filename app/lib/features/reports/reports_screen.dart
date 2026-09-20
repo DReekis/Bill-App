@@ -7,6 +7,7 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import 'reports_menu_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -68,7 +69,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget build(BuildContext context) {
     final t = totals;
     return Scaffold(
-      appBar: AppBar(title: const Text('Reports & analytics')),
+      appBar: AppBar(
+        title: const Text('Reports & analytics'),
+        actions: [
+          IconButton(
+            tooltip: 'All Reports & Statements',
+            icon: const Icon(Icons.menu_book_rounded),
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const ReportsMenuScreen())),
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(padding: const EdgeInsets.all(16), children: [
