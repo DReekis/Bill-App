@@ -16,6 +16,7 @@ class AppDatabase {
           defaultTargetPlatform == TargetPlatform.iOS);
 
   Future<Database> get database async {
+    if (_db != null) return _db!;
     if (kIsWeb) return _connectWeb();
     if (_supportsSqlite) return _connect();
     return _connectFfi();
@@ -81,6 +82,15 @@ class AppDatabase {
     } catch (_) {}
     try {
       await db.execute("ALTER TABLE bank_accounts ADD COLUMN account_type TEXT DEFAULT 'Current';");
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE quotations ADD COLUMN is_proforma INTEGER DEFAULT 0;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE quotation_items ADD COLUMN discount_percent REAL DEFAULT 0;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE quotation_items ADD COLUMN unit TEXT;');
     } catch (_) {}
   }
 
@@ -334,7 +344,8 @@ class AppDatabase {
         igst INTEGER DEFAULT 0,
         total INTEGER DEFAULT 0,
         status TEXT DEFAULT 'Open',
-        notes TEXT
+        notes TEXT,
+        is_proforma INTEGER DEFAULT 0
       )
     ''');
 
@@ -352,8 +363,10 @@ class AppDatabase {
         quantity REAL DEFAULT 0,
         price INTEGER DEFAULT 0,
         discount INTEGER DEFAULT 0,
+        discount_percent REAL DEFAULT 0,
         taxable INTEGER DEFAULT 0,
-        tax INTEGER DEFAULT 0
+        tax INTEGER DEFAULT 0,
+        unit TEXT
       )
     ''');
 

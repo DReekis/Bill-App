@@ -305,14 +305,14 @@ class Repository {
       return id;
     }
     final before = await db.query('products', where: 'id = ?', whereArgs: [product.id]);
-    final beforeStock = before.isNotEmpty ? (before.first['stock'] as int? ?? 0) : 0;
+    final beforeStock = before.isNotEmpty ? ((before.first['stock'] as num?)?.toInt() ?? 0) : 0;
     await db.update('products', map, where: 'id = ?', whereArgs: [product.id]);
     if (product.stock != beforeStock) {
       await db.insert('stock_moves', {
         'business_id': businessId,
         'product_id': product.id,
-        'change_qty': product.stock - beforeStock,
-        'qty_after': product.stock,
+        'change_qty': (product.stock - beforeStock).toDouble(),
+        'qty_after': product.stock.toDouble(),
         'move_type': 'adjustment',
         'date': todayIso(),
       });
@@ -347,27 +347,31 @@ class Repository {
   }
 
   Future<void> adjustStock(Product product, double change, String moveType,
-      {String? refType, int? refId}) async {
+      {String? refType, int? refId, String? reason}) async {
     final db = await _database;
     final businessId = session.businessId;
     if (businessId == null) return;
-    final newQty = product.stock + change;
+    final newQty = (product.stock + change).round();
     final success = await db.update(
       'products',
       {'stock': newQty},
       where: 'id = ?', whereArgs: [product.id],
     );
     if (success == 0) return;
+    final effectiveMoveType = (reason != null && reason.trim().isNotEmpty)
+        ? '$moveType: ${reason.trim()}'
+        : moveType;
     await db.insert('stock_moves', {
       'business_id': businessId,
       'product_id': product.id,
       'change_qty': change,
-      'qty_after': newQty,
-      'move_type': moveType,
+      'qty_after': newQty.toDouble(),
+      'move_type': effectiveMoveType,
       'ref_type': refType,
       'ref_id': refId,
       'date': todayIso(),
     });
+    product.stock = newQty;
   }
 
   Future<int> finalizeSale({
@@ -873,15 +877,63 @@ class Repository {
 
   Future<int> finalizeQuotation(Quotation quote) async {
     final db = await _database;
+    final bizId = quote.businessId ?? session.businessId!;
     final id = await db.transaction<int>((txn) async {
-      final qId = await txn.insert('quotations', quote.toMap()..['business_id'] = quote.businessId ?? session.businessId);
+      final qMap = <String, Object?>{
+        'business_id': bizId,
+        'number': quote.number,
+        'customer_id': quote.customerId,
+        'customer_name': quote.customerName,
+        'date': quote.date,
+        'expiry_date': quote.expiryDate,
+        'gst_type': quote.gstType,
+        'subtotal': quote.subtotal,
+        'discount': quote.discount,
+        'taxable': quote.taxable,
+        'cgst': quote.cgst,
+        'sgst': quote.sgst,
+        'igst': quote.igst,
+        'total': quote.total,
+        'status': quote.status,
+        'notes': quote.notes,
+        'is_proforma': quote.isProforma ? 1 : 0,
+      };
+
+      int qId;
+      try {
+        qId = await txn.insert('quotations', qMap);
+      } catch (e) {
+        final fallbackMap = Map<String, Object?>.from(qMap)..remove('is_proforma');
+        qId = await txn.insert('quotations', fallbackMap);
+      }
+
       for (final line in quote.lines) {
-        await txn.insert('quotation_items', line.toMap()..['quotation_id'] = qId);
+        final itemMap = <String, Object?>{
+          'quotation_id': qId,
+          'product_id': line.productId,
+          'name': line.name,
+          'hsn': line.hsn,
+          'gst_rate': line.gstRate,
+          'quantity': line.quantity,
+          'price': line.price,
+          'discount': line.discount,
+          'discount_percent': line.discountPercent,
+          'taxable': line.taxable,
+          'tax': line.tax,
+          'unit': line.unit,
+        };
+        try {
+          await txn.insert('quotation_items', itemMap);
+        } catch (_) {
+          final fallbackItemMap = Map<String, Object?>.from(itemMap)
+            ..remove('discount_percent')
+            ..remove('unit');
+          await txn.insert('quotation_items', fallbackItemMap);
+        }
       }
       return qId;
     });
-    await _audit(quote.businessId ?? session.businessId!,
-        action: 'create', entity: 'quotation', entityId: id);
+    await _audit(bizId, action: 'create', entity: 'quotation', entityId: id);
     return id;
   }
 

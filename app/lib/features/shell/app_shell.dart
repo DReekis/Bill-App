@@ -13,8 +13,9 @@ import '../inventory/product_list_screen.dart';
 import '../more/more_screen.dart';
 import '../payments/payment_form.dart';
 import '../purchases/purchase_builder_screen.dart';
+import '../reports/reports_menu_screen.dart';
+import '../reports/reports_screen.dart';
 import '../sales/invoice_builder_screen.dart';
-import '../sales/invoice_list_tab.dart';
 import '../suppliers/supplier_form.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -30,9 +31,9 @@ class _AppShellState extends State<AppShell> {
   int _dataVersion = 0;
   static const _icons = [
     Icons.home_filled,
-    Icons.receipt_long_outlined,
-    Icons.inventory_2_outlined,
     Icons.people_alt_outlined,
+    Icons.inventory_2_outlined,
+    Icons.bar_chart_rounded,
     Icons.more_horiz_rounded,
   ];
 
@@ -132,9 +133,9 @@ class _AppShellState extends State<AppShell> {
     final l10n = context.l10n;
     final titles = [
       l10n.text('home'),
-      l10n.text('transactions'),
+      l10n.text('party'),
       l10n.text('items'),
-      l10n.text('parties'),
+      l10n.text('reports'),
       l10n.text('more'),
     ];
     return Scaffold(
@@ -150,6 +151,15 @@ class _AppShellState extends State<AppShell> {
                     onTap: _syncNow),
               ]),
               actions: [
+                if (_index == 3)
+                  IconButton(
+                    tooltip: 'All Reports & Statements',
+                    icon: const Icon(Icons.menu_book_rounded),
+                    onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const ReportsMenuScreen())),
+                  ),
                 if (session.hasPin)
                   IconButton(
                     tooltip: 'Lock app',
@@ -168,7 +178,7 @@ class _AppShellState extends State<AppShell> {
                 ),
               ],
             ),
-      floatingActionButton: _index == 0
+      floatingActionButton: (_index == 0 || _index == 3)
           ? null
           : FloatingActionButton(
               onPressed: _openQuickActions,
@@ -186,9 +196,9 @@ class _AppShellState extends State<AppShell> {
               }),
               onDataChanged: _reloadTabs,
             ),
-            InvoiceListTab(key: ValueKey('invoices-$_dataVersion-${session.localeCode}')),
-            ProductListTab(key: ValueKey('products-$_dataVersion-${session.localeCode}')),
             PartiesTab(key: ValueKey('parties-$_dataVersion-${session.localeCode}')),
+            ProductListTab(key: ValueKey('products-$_dataVersion-${session.localeCode}')),
+            ReportsTab(key: ValueKey('reports-$_dataVersion-${session.localeCode}')),
             MoreTab(key: ValueKey('more-$_dataVersion-${session.localeCode}')),
           ],
         ),

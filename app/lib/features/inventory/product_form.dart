@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/models.dart';
 import '../../data/repositories.dart';
+import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 
 class ProductFormSheet extends StatefulWidget {
@@ -36,6 +37,9 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
   final _minSelling = TextEditingController();
   final _brand = TextEditingController();
   final _description = TextEditingController();
+  final _openingStock = TextEditingController(text: '0');
+  final _addStock = TextEditingController();
+  final _lowStockThreshold = TextEditingController(text: '5');
   String? unit;
   int gstRate = 0;
   bool taxIncluded = false;
@@ -66,9 +70,31 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
       _mrp.text = _rupees(p.mrp);
       _minSelling.text = _rupees(p.minSellingPrice);
       _description.text = p.description ?? '';
+      _lowStockThreshold.text = p.lowStockThreshold.toString();
     } else if (widget.initialBarcode != null && widget.initialBarcode!.isNotEmpty) {
       _barcode.text = widget.initialBarcode!;
     }
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _sku.dispose();
+    _category.dispose();
+    _hsn.dispose();
+    _barcode.dispose();
+    _purchasePrice.dispose();
+    _salePrice.dispose();
+    _wholesale.dispose();
+    _retail.dispose();
+    _mrp.dispose();
+    _minSelling.dispose();
+    _brand.dispose();
+    _description.dispose();
+    _openingStock.dispose();
+    _addStock.dispose();
+    _lowStockThreshold.dispose();
+    super.dispose();
   }
 
   static String _rupees(int paise) => paise == 0 ? '' : (paise / 100).toStringAsFixed(2);
@@ -84,6 +110,12 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
     }
     setState(() => saving = true);
     try {
+      final currentStock = widget.product?.stock ?? 0;
+      final addedStock = int.tryParse(_addStock.text.trim()) ?? 0;
+      final openingStock = int.tryParse(_openingStock.text.trim()) ?? 0;
+      final finalStock = widget.product != null ? (currentStock + addedStock) : openingStock;
+      final lowStock = int.tryParse(_lowStockThreshold.text.trim()) ?? 5;
+
       final product = Product(
         id: widget.product?.id,
         name: _name.text.trim(),
@@ -104,9 +136,9 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
         hasBatch: hasBatch,
         hasSerial: hasSerial,
         description: _description.text.trim(),
-        stock: widget.product?.stock ?? 0,
+        stock: finalStock,
         costAverage: widget.product?.costAverage ?? _toPaise(_purchasePrice.text),
-        lowStockThreshold: widget.product?.lowStockThreshold ?? 5,
+        lowStockThreshold: lowStock,
       );
       await Repository.instance.upsertProduct(product, businessIdOverride: widget.businessId);
       if (mounted) Navigator.of(context).pop();
@@ -210,6 +242,77 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
               const SizedBox(width: 12),
               Expanded(child: AppAmountField(controller: _minSelling, label: 'Min. selling price')),
             ]),
+            const SizedBox(height: 12),
+            if (editing)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFBBF7D0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.inventory_2_outlined, size: 18, color: StitchColors.success),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Current Stock: ${widget.product!.stock} ${widget.product!.unit}',
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: StitchColors.textPrimary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: AppTextField(
+                            controller: _addStock,
+                            label: 'Add to stock (+ units)',
+                            keyboardType: TextInputType.number,
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: AppTextField(
+                            controller: _lowStockThreshold,
+                            label: 'Low stock alert at',
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if ((int.tryParse(_addStock.text.trim()) ?? 0) > 0) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Additive Update: ${widget.product!.stock} + ${_addStock.text.trim()} = ${widget.product!.stock + (int.tryParse(_addStock.text.trim()) ?? 0)} ${widget.product!.unit}',
+                        style: const TextStyle(color: StitchColors.success, fontWeight: FontWeight.w700, fontSize: 12),
+                      ),
+                    ],
+                  ],
+                ),
+              )
+            else
+              Row(children: [
+                Expanded(
+                  child: AppTextField(
+                    controller: _openingStock,
+                    label: 'Opening stock',
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppTextField(
+                    controller: _lowStockThreshold,
+                    label: 'Low stock alert at',
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ]),
             const SizedBox(height: 12),
             Row(children: [
               Expanded(

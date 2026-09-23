@@ -14,6 +14,8 @@ class Session extends ChangeNotifier {
   bool flagSecureEnabled = false;
   bool biometricEnabled = false;
   bool _locked = true;
+  /// API key for gstincheck.co.in — free signup at https://gstincheck.co.in
+  String gstnApiKey = '';
 
   Locale get locale => Locale(localeCode);
 
@@ -34,6 +36,7 @@ class Session extends ChangeNotifier {
   static const _kLocaleCode = 'session.localeCode';
   static const _kFlagSecure = 'session.flagSecure';
   static const _kBiometric = 'session.biometric';
+  static const _kGstnApiKey = 'session.gstnApiKey';
 
   bool get hasPin => (_prefs?.getString(_kPinHash) ?? '').isNotEmpty;
   bool get locked => _locked && hasPin;
@@ -50,6 +53,7 @@ class Session extends ChangeNotifier {
     localeCode = _prefs!.getString(_kLocaleCode) ?? 'en';
     flagSecureEnabled = _prefs!.getBool(_kFlagSecure) ?? false;
     biometricEnabled = _prefs!.getBool(_kBiometric) ?? false;
+    gstnApiKey = _prefs!.getString(_kGstnApiKey) ?? '';
     if (flagSecureEnabled) {
       SecurityService.instance.setFlagSecure(true);
     }
@@ -178,6 +182,13 @@ class Session extends ChangeNotifier {
     _prefs ??= await SharedPreferences.getInstance();
     biometricEnabled = enabled;
     await _prefs!.setBool(_kBiometric, enabled);
+    notifyListeners();
+  }
+
+  Future<void> saveGstnApiKey(String key) async {
+    _prefs ??= await SharedPreferences.getInstance();
+    gstnApiKey = key.trim();
+    await _prefs!.setString(_kGstnApiKey, gstnApiKey);
     notifyListeners();
   }
 

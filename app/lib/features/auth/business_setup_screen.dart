@@ -64,34 +64,44 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
       if (!mounted) return;
 
       setState(() {
-        if (info.effectiveName.isNotEmpty) {
-          name.text = info.effectiveName;
-        }
-        if (info.effectiveOwner.isNotEmpty) {
-          owner.text = info.effectiveOwner;
-        }
+        // State is always safely derived from the GSTIN prefix
         if (info.state != null && info.state!.isNotEmpty) {
           stateController.text = info.state!;
         }
-        if (info.city != null && info.city!.isNotEmpty) {
-          city.text = info.city!;
-        }
-        if (info.industry != null && businessIndustries.contains(info.industry)) {
-          industry = info.industry;
-        }
         taxRegistered = true;
         gstValid = info.valid;
-        gstStatusMessage = info.isOnlineFetched
-            ? '✓ Verified GSTIN (${info.status} • ${info.state ?? "India"})'
-            : '✓ Identified (${info.constitution ?? "GST Registered"} • ${info.state ?? "India"})';
+
+        // Only fill name, owner, city, industry from real online-fetched data
+        if (info.isOnlineFetched) {
+          if (info.effectiveName.isNotEmpty) {
+            name.text = info.effectiveName;
+          }
+          if (info.effectiveOwner.isNotEmpty) {
+            owner.text = info.effectiveOwner;
+          }
+          if (info.city != null && info.city!.isNotEmpty) {
+            city.text = info.city!;
+          }
+          if (info.industry != null && businessIndustries.contains(info.industry)) {
+            industry = info.industry;
+          }
+          gstStatusMessage = '✓ Verified GSTIN (${info.status} • ${info.state ?? "India"})';
+        } else {
+          gstStatusMessage = '✓ Format valid (${info.constitution ?? "GST Registered"} • ${info.state ?? "India"}) — enter name & address manually';
+        }
       });
 
-      showAppMessage(
-        context,
-        info.effectiveName.isNotEmpty
-            ? 'Business details auto-filled for ${info.effectiveName}'
-            : 'GST location & taxpayer details auto-filled',
-      );
+      if (info.isOnlineFetched && info.effectiveName.isNotEmpty) {
+        showAppMessage(
+          context,
+          'Business details auto-filled for ${info.effectiveName}',
+        );
+      } else {
+        showAppMessage(
+          context,
+          'State auto-filled from GSTIN. Please enter your business name.',
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => gstStatusMessage = 'Could not auto-fill: $e');

@@ -16,6 +16,7 @@ import '../../utils/widgets.dart';
 import '../banking/cash_bank_hub_screen.dart';
 import '../gst/gst_center_screen.dart';
 import '../reports/reports_screen.dart';
+import '../sales/invoice_list_tab.dart';
 import '../shell/audit_log_screen.dart';
 import '../shell/business_edit_screen.dart';
 import '../shell/business_switcher_sheet.dart';
@@ -103,6 +104,7 @@ class _MoreTabState extends State<MoreTab> {
       _menuTile(context, Icons.swap_horiz_rounded, isHi ? 'व्यापार बदलें' : 'Switch business', () => showBusinessSwitcher(context).then((changed) {
         if (changed == true) _load();
       })),
+      _menuTile(context, Icons.receipt_long_outlined, isHi ? 'सभी लेन-देन' : 'All Transactions', () => nav(const TransactionListScreen())),
       _menuTile(context, Icons.account_balance_outlined, isHi ? 'जीएसटी केंद्र' : 'GST Compliance Center', () => nav(const GstCenterScreen())),
       _menuTile(context, Icons.account_balance_wallet_outlined, isHi ? 'कैश व बैंक खाते' : 'Cash & Bank Accounts Hub', () => nav(const CashBankHubScreen())),
       _menuTile(context, Icons.bar_chart_rounded, isHi ? 'रिपोर्ट्स' : 'Reports & analytics', () => nav(const ReportsScreen())),
@@ -135,6 +137,15 @@ class _MoreTabState extends State<MoreTab> {
           ),
         ),
       _menuTile(context, Icons.tune_rounded, isHi ? 'बिल सेटिंग्स' : 'Invoice settings', () => nav(const BusinessEditScreen())),
+      _menuTile(
+        context,
+        Icons.gpp_good_rounded,
+        isHi ? 'GSTIN ऑटो-फिल API कुंजी' : 'GSTIN Autofill API Key',
+        () => _showGstnApiKeyDialog(context, session),
+        trailing: session.gstnApiKey.isNotEmpty
+            ? const Icon(Icons.check_circle_rounded, color: StitchColors.success, size: 18)
+            : const Icon(Icons.warning_amber_rounded, color: StitchColors.warning, size: 18),
+      ),
       _menuTile(
         context,
         Icons.lock_rounded,
@@ -239,6 +250,74 @@ class _MoreTabState extends State<MoreTab> {
             const SizedBox(height: 12),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showGstnApiKeyDialog(BuildContext context, Session session) {
+    final controller = TextEditingController(text: session.gstnApiKey);
+    final isHi = session.localeCode == 'hi';
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.gpp_good_rounded, color: StitchColors.primary),
+            const SizedBox(width: 8),
+            Text(
+              isHi ? 'GSTIN ऑटो-फिल API कुंजी' : 'GSTIN Autofill API Key',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isHi
+                  ? 'gstincheck.co.in से API कुंजी दर्ज करें ताकि GSTIN डालने पर पार्टी का नाम और पता अपने आप भर सके। यदि कुंजी नहीं है, तो ऐप स्मार्ट ऑफलाइन पद्धति का उपयोग करेगा।'
+                  : 'Enter your free API key (e.g. from gstincheck.co.in) to automatically fetch full business names and addresses for any GSTIN. If blank, smart offline resolution is used.',
+              style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              decoration: InputDecoration(
+                labelText: 'API Key',
+                hintText: 'e.g. gstin_live_...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (session.gstnApiKey.isNotEmpty)
+            TextButton(
+              onPressed: () async {
+                await session.saveGstnApiKey('');
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  showAppMessage(context, 'API key cleared');
+                }
+              },
+              child: const Text('Clear', style: TextStyle(color: StitchColors.error)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await session.saveGstnApiKey(controller.text.trim());
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (context.mounted) {
+                showAppMessage(context, 'GSTIN API key saved');
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }

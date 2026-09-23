@@ -7,6 +7,7 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../../l10n/app_localizations.dart';
 import 'invoice_builder_screen.dart';
 import 'invoice_detail_screen.dart';
 import '../purchases/purchase_builder_screen.dart';
@@ -488,6 +489,23 @@ class _TransactionListTabState extends State<TransactionListTab> {
                       ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class TransactionListScreen extends StatelessWidget {
+  const TransactionListScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.text('transactions')),
+      ),
+      body: const SafeArea(
+        child: TransactionListTab(),
       ),
     );
   }

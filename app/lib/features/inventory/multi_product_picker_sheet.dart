@@ -548,7 +548,56 @@ class _MultiProductPickerSheetState extends State<MultiProductPickerSheet> {
               const Divider(height: 1),
             ],
 
-            // Main Product List
+            // Main Product List with Bulk Selection Header
+            if (filtered.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
+                child: Row(
+                  children: [
+                    Text(
+                      '${filtered.length} products',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: StitchColors.textSecondary),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      onPressed: () {
+                        final allChecked = filtered.every((p) => (_selectedQuantities[p.id] ?? 0) > 0);
+                        setState(() {
+                          if (allChecked) {
+                            for (final p in filtered) {
+                              if (p.id != null) _selectedQuantities.remove(p.id!);
+                            }
+                          } else {
+                            for (final p in filtered) {
+                              if (p.id != null && (_selectedQuantities[p.id] ?? 0) == 0) {
+                                _selectedQuantities[p.id!] = 1;
+                              }
+                            }
+                          }
+                        });
+                      },
+                      icon: Icon(
+                        filtered.every((p) => (_selectedQuantities[p.id] ?? 0) > 0)
+                            ? Icons.check_box_rounded
+                            : Icons.select_all_rounded,
+                        size: 16,
+                        color: StitchColors.primary,
+                      ),
+                      label: Text(
+                        filtered.every((p) => (_selectedQuantities[p.id] ?? 0) > 0)
+                            ? 'Deselect All'
+                            : 'Select All',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.primary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             Expanded(
               child: filtered.isEmpty
                   ? Center(
@@ -610,47 +659,76 @@ class _MultiProductPickerSheetState extends State<MultiProductPickerSheet> {
                           ),
                           child: Row(
                             children: [
-                              // Avatar
-                              InitialsAvatar(p.name, size: 42),
-                              const SizedBox(width: 12),
+                              // Multi-check Checkbox
+                              SizedBox(
+                                width: 34,
+                                height: 34,
+                                child: Checkbox(
+                                  value: isSelected,
+                                  activeColor: StitchColors.primary,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                  onChanged: (checked) {
+                                    if (checked == true) {
+                                      _updateQuantity(p, 1);
+                                    } else {
+                                      _updateQuantity(p, 0);
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 4),
 
-                              // Info
+                              // Avatar
+                              InitialsAvatar(p.name, size: 38),
+                              const SizedBox(width: 10),
+
+                              // Info with row tap to toggle check
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      p.name,
-                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    if (details.isNotEmpty)
+                                child: InkWell(
+                                  onTap: () {
+                                    if (isSelected) {
+                                      _updateQuantity(p, 0);
+                                    } else {
+                                      _updateQuantity(p, 1);
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
                                       Text(
-                                        details.join(' • '),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary),
+                                        p.name,
+                                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                                       ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
+                                      const SizedBox(height: 2),
+                                      if (details.isNotEmpty)
                                         Text(
-                                          formatPaise(price),
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w800,
-                                            color: StitchColors.primary,
+                                          details.join(' • '),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary),
+                                        ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            formatPaise(price),
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w800,
+                                              color: StitchColors.primary,
+                                            ),
                                           ),
-                                        ),
-                                        Text(
-                                          ' / ${p.unit}',
-                                          style: const TextStyle(fontSize: 11, color: StitchColors.textTertiary),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        _buildStockBadge(p.stock),
-                                      ],
-                                    ),
-                                  ],
+                                          Text(
+                                            ' / ${p.unit}',
+                                            style: const TextStyle(fontSize: 11, color: StitchColors.textTertiary),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          _buildStockBadge(p.stock),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
 

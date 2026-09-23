@@ -168,18 +168,21 @@ test('GET /api/v1/gst/lookup/:gstin resolves business profile and deterministic 
   assert.equal(demoBody.pan, 'AAAAA0000A');
   assert.equal(demoBody.constitution, 'Private Limited Company');
 
-  // Test deterministic fallback for unknown valid format
-  const fallbackRes = await app.inject({
+  // Test 16GPZPD6335F1ZH (Balaji Enterprise)
+  const balajiRes = await app.inject({
     method: 'GET',
-    url: '/api/v1/gst/lookup/27ABCFE1234F1Z5',
+    url: '/api/v1/gst/lookup/16GPZPD6335F1ZH',
   });
-  assert.equal(fallbackRes.statusCode, 200);
-  const fallbackBody = fallbackRes.json() as any;
-  assert.equal(fallbackBody.valid, true);
-  assert.equal(fallbackBody.stateCode, '27');
-  assert.equal(fallbackBody.state, 'Maharashtra');
-  assert.equal(fallbackBody.pan, 'ABCFE1234F');
-  assert.equal(fallbackBody.constitution, 'Partnership / LLP');
+  assert.equal(balajiRes.statusCode, 200);
+  const balajiBody = balajiRes.json() as any;
+  assert.equal(balajiBody.valid, true);
+  assert.equal(balajiBody.stateCode, '16');
+  assert.equal(balajiBody.state, 'Tripura');
+  assert.equal(balajiBody.businessName, 'BALAJI ENTERPRISE');
+  assert.equal(balajiBody.pan, 'GPZPD6335F');
+  assert.equal(balajiBody.city, 'Dharmanagar');
+  assert.equal(balajiBody.address, '09, Dharmanagar, Dharmanagar, North Tripura, Tripura');
+  assert.equal(balajiBody.constitution, 'Sole Proprietorship');
 });
 
 

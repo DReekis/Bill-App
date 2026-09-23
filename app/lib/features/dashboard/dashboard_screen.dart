@@ -19,6 +19,7 @@ import '../sales/invoice_builder_screen.dart';
 import '../sales/quotation_builder_screen.dart';
 import '../sales/sales_order_builder_screen.dart';
 import '../sales/invoice_detail_screen.dart';
+import '../sales/invoice_list_tab.dart';
 import '../suppliers/supplier_form.dart';
 import '../search/search_screen.dart';
 import '../reports/reports_menu_screen.dart';
@@ -580,7 +581,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         profitTrend: profitTrend,
         comparisonLabel: comparisonLabel,
         recent: recent,
-        onViewAllTransactions: () => widget.onSwitchTab?.call(1),
+        onViewAllTransactions: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const TransactionListScreen(),
+            ),
+          );
+        },
         onQuick: _quick,
         onRefresh: _load,
         onSelectTimeframe: _loadTotalsForTimeframe,

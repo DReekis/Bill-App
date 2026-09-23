@@ -103,30 +103,40 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
       if (!mounted) return;
 
       setState(() {
-        if (info.effectiveName.isNotEmpty) {
-          _name.text = info.effectiveName;
-        }
-        if (info.effectiveOwner.isNotEmpty) {
-          _owner.text = info.effectiveOwner;
-        }
+        // State is always reliably derived from the GSTIN prefix
         if (info.state != null && info.state!.isNotEmpty) {
           _state.text = info.state!;
         }
-        if (info.city != null && info.city!.isNotEmpty) {
-          _city.text = info.city!;
-        }
         taxRegistered = true;
-        gstStatusMessage = info.isOnlineFetched
-            ? '✓ Verified GSTIN (${info.status} • ${info.state ?? "India"})'
-            : '✓ Identified (${info.constitution ?? "GST Registered"} • ${info.state ?? "India"})';
+
+        // Only fill name, owner, city from real online-fetched data
+        if (info.isOnlineFetched) {
+          if (info.effectiveName.isNotEmpty) {
+            _name.text = info.effectiveName;
+          }
+          if (info.effectiveOwner.isNotEmpty) {
+            _owner.text = info.effectiveOwner;
+          }
+          if (info.city != null && info.city!.isNotEmpty) {
+            _city.text = info.city!;
+          }
+          gstStatusMessage = '✓ Verified GSTIN (${info.status} • ${info.state ?? "India"})';
+        } else {
+          gstStatusMessage = '✓ Format valid (${info.constitution ?? "GST Registered"} • ${info.state ?? "India"}) — enter name & address manually';
+        }
       });
 
-      showAppMessage(
-        context,
-        info.effectiveName.isNotEmpty
-            ? 'Business details loaded for ${info.effectiveName}'
-            : 'GST details identified (${info.state ?? ""})',
-      );
+      if (info.isOnlineFetched && info.effectiveName.isNotEmpty) {
+        showAppMessage(
+          context,
+          'Business details loaded for ${info.effectiveName}',
+        );
+      } else {
+        showAppMessage(
+          context,
+          'State auto-filled from GSTIN. Please enter business name and address.',
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => gstStatusMessage = 'Could not auto-fill: $e');

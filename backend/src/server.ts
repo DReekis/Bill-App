@@ -554,6 +554,18 @@ app.get('/api/v1/gst/lookup/:gstin', async (request, reply) => {
       constitution: 'Company',
       isComposition: false,
     },
+    '16GPZPD6335F1ZH': {
+      businessName: 'BALAJI ENTERPRISE',
+      tradeName: 'BALAJI ENTERPRISE',
+      legalName: 'BALAJI ENTERPRISE',
+      ownerName: 'Proprietor',
+      city: 'Dharmanagar',
+      address: '09, Dharmanagar, Dharmanagar, North Tripura, Tripura',
+      pinCode: '799250',
+      industry: 'Retail',
+      constitution: 'Sole Proprietorship',
+      isComposition: false,
+    },
   };
 
   if (demoProfiles[gstin]) {

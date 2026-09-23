@@ -137,5 +137,20 @@ void main() {
       expect(onlyLegal.effectiveName, 'KIRAN ENTERPRISES');
       expect(onlyLegal.effectiveOwner, 'KIRAN ENTERPRISES');
     });
+
+    test('resolves verified directory profile for 16GPZPD6335F1ZH (Balaji Enterprise)', () {
+      final balaji = GstService.parseDeterministic('16GPZPD6335F1ZH');
+      expect(balaji.valid, isTrue);
+      expect(balaji.stateCode, '16');
+      expect(balaji.state, 'Tripura');
+      expect(balaji.effectiveName, 'BALAJI ENTERPRISE');
+      expect(balaji.businessName, 'BALAJI ENTERPRISE');
+      expect(balaji.pan, 'GPZPD6335F');
+      expect(balaji.city, 'Dharmanagar');
+      expect(balaji.pinCode, '799250');
+      expect(balaji.address, '09, Dharmanagar, Dharmanagar, North Tripura, Tripura');
+      expect(balaji.constitution, 'Sole Proprietorship');
+      expect(balaji.isOnlineFetched, isTrue);
+    });
   });
 }

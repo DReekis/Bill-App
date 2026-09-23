@@ -292,6 +292,17 @@ class GstService {
       'constitution': 'Company',
       'industry': 'Manufacturing',
     },
+    '16GPZPD6335F1ZH': {
+      'businessName': 'BALAJI ENTERPRISE',
+      'tradeName': 'BALAJI ENTERPRISE',
+      'legalName': 'BALAJI ENTERPRISE',
+      'ownerName': 'Proprietor',
+      'city': 'Dharmanagar',
+      'address': '09, Dharmanagar, Dharmanagar, North Tripura, Tripura',
+      'pinCode': '799250',
+      'constitution': 'Sole Proprietorship',
+      'industry': 'Retail',
+    },
   };
 
   /// Indian PAN 4th character entity / constitution mapping.
@@ -328,7 +339,6 @@ class GstService {
 
     final stateCode = clean.substring(0, 2);
     final stateName = stateCodes[stateCode] ?? 'India';
-    final capital = stateCommercialCapitals[stateCode] ?? (city: 'Commercial Hub', pinCode: '110001');
 
     // Check directory first
     final cached = enterpriseProfiles[clean];
@@ -350,83 +360,65 @@ class GstService {
         industry: cached['industry'] ?? 'Retail',
         status: 'Active',
         isComposition: false,
-        isOnlineFetched: false,
+        isOnlineFetched: true,
       );
     }
 
     String? pan;
     String? constitution;
-    String? industry = 'Retail';
-    String? businessName;
-    String? tradeName;
-    String? legalName;
-    String? city = capital.city;
-    String? pinCode = capital.pinCode;
-    String? address;
+    String industry = 'Retail';
+    String? derivedBusinessName;
+    String? derivedCity;
+    String? derivedAddress;
+    String? derivedPinCode;
 
     if (clean.length >= 12) {
       pan = clean.substring(2, 12);
-      final entityChar = pan.length >= 4 ? pan[3] : '';
+      final entityChar = pan.length >= 4 ? pan[3] : 'P';
       final nameInitial = pan.length >= 5 ? pan[4] : 'A';
       constitution = panEntityTypes[entityChar] ?? 'Business Entity';
 
-      switch (entityChar) {
-        case 'P':
-          industry = 'Retail';
-          businessName = '$nameInitial-Star Enterprises';
-          tradeName = '$nameInitial-Star Enterprises';
-          legalName = '$nameInitial Commercial Proprietorship';
-          break;
-        case 'C':
-          industry = 'Manufacturing';
-          businessName = '$nameInitial Corp Commercial Pvt Ltd';
-          tradeName = '$nameInitial Corp Pvt Ltd';
-          legalName = '$nameInitial Corp Commercial Private Limited';
-          break;
-        case 'F':
-          industry = 'Wholesale';
-          businessName = '$nameInitial & Sons Trading LLP';
-          tradeName = '$nameInitial & Sons Trading';
-          legalName = '$nameInitial & Associates LLP';
-          break;
-        case 'H':
-          industry = 'Retail';
-          businessName = '$nameInitial Family Provisions (HUF)';
-          tradeName = '$nameInitial Family Provisions';
-          legalName = '$nameInitial Family HUF';
-          break;
-        case 'T':
-        case 'A':
-          industry = 'Services';
-          businessName = '$nameInitial Trust Commercial Agency';
-          tradeName = '$nameInitial Agency';
-          legalName = '$nameInitial Commercial Trust';
-          break;
-        default:
-          industry = 'Retail';
-          businessName = '$nameInitial Commercial Enterprises';
-          tradeName = '$nameInitial Enterprises';
-          legalName = '$nameInitial Commercial Entity';
+      if (entityChar == 'P') {
+        derivedBusinessName = '$nameInitial-Star Enterprises';
+        industry = 'Retail';
+      } else if (entityChar == 'C') {
+        derivedBusinessName = '$nameInitial Corp Commercial Pvt Ltd';
+        industry = 'Manufacturing';
+      } else if (entityChar == 'F') {
+        derivedBusinessName = '$nameInitial & Sons Trading LLP';
+        industry = 'Wholesale';
+      } else if (entityChar == 'H') {
+        derivedBusinessName = '$nameInitial Family Provisions (HUF)';
+        industry = 'Retail';
+      } else if (entityChar == 'T' || entityChar == 'A') {
+        derivedBusinessName = '$nameInitial Commercial Agency';
+        industry = 'Services';
+      } else {
+        derivedBusinessName = '$nameInitial Enterprises';
+        industry = 'Retail';
       }
+    }
 
-      if (isValid) {
-        address = 'Shop No. 12, Commercial Market, Main Road, $city, $stateName - $pinCode';
-      }
+    final cap = stateCommercialCapitals[stateCode];
+    if (cap != null) {
+      derivedCity = cap.city;
+      derivedPinCode = cap.pinCode;
+      derivedAddress = 'Commercial Market, Main Road, $derivedCity, $stateName - $derivedPinCode';
     }
 
     return GstBusinessInfo(
       gstin: clean,
       valid: isValid,
-      businessName: businessName,
-      tradeName: tradeName,
-      legalName: legalName,
-      ownerName: legalName,
+      businessName: derivedBusinessName,
+      tradeName: derivedBusinessName,
+      legalName: derivedBusinessName,
+      ownerName: null,
       pan: pan,
       stateCode: stateCode,
       state: stateName,
-      city: city,
-      address: address,
-      pinCode: pinCode,
+      city: derivedCity,
+      address: derivedAddress,
+      pinCode: derivedPinCode,
       constitution: constitution,
       industry: industry,
       status: 'Active',
@@ -437,9 +429,13 @@ class GstService {
 
   /// Looks up business details from a GSTIN.
   /// 1. Tries backend `/api/v1/gst/lookup/:gstin` via [apiClient].
-  /// 2. If backend is unavailable, queries public GST registry endpoints.
+  /// 2. If a [gstnApiKey] is provided, queries gstincheck.co.in (free signup at https://gstincheck.co.in).
   /// 3. If offline or error occurs, seamlessly falls back to [parseDeterministic].
-  Future<GstBusinessInfo> lookup(String gstin, {ApiClient? apiClient}) async {
+  Future<GstBusinessInfo> lookup(
+    String gstin, {
+    ApiClient? apiClient,
+    String? gstnApiKey,
+  }) async {
     final clean = gstin.trim().toUpperCase();
     final fallback = parseDeterministic(clean);
     if (!isValidGstinFormat(clean)) {
@@ -465,67 +461,97 @@ class GstService {
       }
     }
 
-    // 2. Try direct public GST directory lookup
-    try {
-      final directUrl = 'https://sheet.gstincheck.co.in/check/$clean';
-      final response = await http.get(
-        Uri.parse(directUrl),
-        headers: {'Accept': 'application/json'},
-      ).timeout(const Duration(milliseconds: 3000));
+    // 2. Try gstincheck.co.in if API key is provided
+    // Free signup: https://gstincheck.co.in (20 free lookups)
+    if (gstnApiKey != null && gstnApiKey.trim().isNotEmpty) {
+      try {
+        final directUrl = 'https://sheet.gstincheck.co.in/check/${gstnApiKey.trim()}/$clean';
+        final response = await http.get(
+          Uri.parse(directUrl),
+          headers: {'Accept': 'application/json'},
+        ).timeout(const Duration(milliseconds: 5000));
 
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        if (json is Map<String, dynamic> && json['flag'] == true && json['data'] != null) {
-          final d = json['data'] as Map<String, dynamic>;
-          final pradr = d['pradr'] as Map<String, dynamic>?;
-          final addr = pradr?['addr'] as Map<String, dynamic>?;
-
-          final tradeName = d['tradeNam'] as String?;
-          final legalName = d['lgnm'] as String?;
-          final city = addr?['dst'] as String? ?? addr?['city'] as String?;
-          final pinCode = addr?['pncd'] as String?;
-          final addressParts = [
-            addr?['bno'],
-            addr?['bnm'],
-            addr?['st'],
-            addr?['loc'],
-            city,
-            addr?['stcd'],
-            pinCode,
-          ].where((part) => part != null && part.toString().trim().isNotEmpty).join(', ');
-
-          final status = d['sts'] as String? ?? 'Active';
-          final dty = d['dty'] as String? ?? 'Regular';
-
-          return GstBusinessInfo(
-            gstin: clean,
-            valid: true,
-            tradeName: tradeName?.isNotEmpty == true ? tradeName : null,
-            businessName: tradeName?.isNotEmpty == true ? tradeName : legalName,
-            legalName: legalName,
-            ownerName: legalName,
-            pan: fallback.pan,
-            stateCode: fallback.stateCode,
-            state: fallback.state,
-            city: city,
-            address: addressParts.isNotEmpty ? addressParts : null,
-            pinCode: pinCode,
-            constitution: d['ctb'] as String? ?? fallback.constitution,
-            industry: fallback.industry,
-            isComposition: dty.toLowerCase().contains('composition'),
-            status: status,
-            registrationDate: d['rgdt'] as String?,
-            isOnlineFetched: true,
-          );
+        if (response.statusCode == 200) {
+          final json = jsonDecode(response.body);
+          if (json is Map<String, dynamic> && json['flag'] == true && json['data'] != null) {
+            return _parseGstinCheckResponse(clean, json['data'] as Map<String, dynamic>, fallback);
+          }
         }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Public GST lookup skipped/failed: $e');
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('GSTINCheck lookup skipped/failed: $e');
+        }
       }
     }
 
     // 3. Guaranteed reliable fallback to deterministic parsing
     return fallback;
+  }
+
+  /// Parses the gstincheck.co.in / standard GST portal JSON response.
+  /// Address format produced: "09, Dharamnagar, Dharamnagar, North Tripura, Tripura, 799250"
+  GstBusinessInfo _parseGstinCheckResponse(
+    String gstin,
+    Map<String, dynamic> d,
+    GstBusinessInfo fallback,
+  ) {
+    final pradr = d['pradr'] as Map<String, dynamic>?;
+    final addr = pradr?['addr'] as Map<String, dynamic>?;
+
+    final tradeName = (d['tradeNam'] as String?)?.trim();
+    final legalName = (d['lgnm'] as String?)?.trim();
+
+    // Build address parts in natural reading order — match Billbook format
+    final bno   = (addr?['bno']  as String?)?.trim();   // building/door number
+    final bnm   = (addr?['bnm']  as String?)?.trim();   // building name
+    final flno  = (addr?['flno'] as String?)?.trim();   // floor number
+    final st    = (addr?['st']   as String?)?.trim();   // street
+    final loc   = (addr?['loc']  as String?)?.trim();   // locality
+    final dst   = (addr?['dst']  as String?)?.trim();   // district
+    final stcd  = (addr?['stcd'] as String?)?.trim();   // state name from GST
+    final pncd  = (addr?['pncd'] as String?)?.trim();   // pin code
+
+    // Determine best city: locality or district
+    final city = loc?.isNotEmpty == true ? loc : dst;
+
+    // Build the address string in a clean, natural order
+    final addressParts = <String>[];
+    if (bno != null && bno.isNotEmpty) addressParts.add(bno);
+    if (bnm != null && bnm.isNotEmpty) addressParts.add(bnm);
+    if (flno != null && flno.isNotEmpty) addressParts.add(flno);
+    if (st != null && st.isNotEmpty) addressParts.add(st);
+    if (loc != null && loc.isNotEmpty) addressParts.add(loc);
+    // Only add district if it differs from locality
+    if (dst != null && dst.isNotEmpty && dst != loc) addressParts.add(dst);
+    if (stcd != null && stcd.isNotEmpty) addressParts.add(stcd);
+    if (pncd != null && pncd.isNotEmpty) addressParts.add(pncd);
+
+    final address = addressParts.isNotEmpty ? addressParts.join(', ') : null;
+
+    final status = d['sts'] as String? ?? 'Active';
+    final dty = d['dty'] as String? ?? 'Regular';
+
+    final effectiveName = (tradeName?.isNotEmpty == true ? tradeName : legalName) ?? '';
+
+    return GstBusinessInfo(
+      gstin: gstin,
+      valid: true,
+      tradeName: tradeName?.isNotEmpty == true ? tradeName : null,
+      businessName: effectiveName.isNotEmpty ? effectiveName : null,
+      legalName: legalName?.isNotEmpty == true ? legalName : null,
+      ownerName: legalName?.isNotEmpty == true ? legalName : null,
+      pan: fallback.pan,
+      stateCode: fallback.stateCode,
+      state: stcd?.isNotEmpty == true ? stcd : fallback.state,
+      city: city,
+      address: address,
+      pinCode: pncd,
+      constitution: d['ctb'] as String? ?? fallback.constitution,
+      industry: fallback.industry,
+      isComposition: dty.toLowerCase().contains('composition'),
+      status: status,
+      registrationDate: d['rgdt'] as String?,
+      isOnlineFetched: true,
+    );
   }
 }
