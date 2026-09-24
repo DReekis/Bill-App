@@ -123,6 +123,66 @@ class Repository {
     });
   }
 
+  Future<String> peekNextInvoiceNumber(int businessId, String prefix) async {
+    final db = await _database;
+    final rows = await db.query('businesses',
+        columns: ['invoice_sequence'], where: 'id = ?', whereArgs: [businessId]);
+    final current = (rows.isNotEmpty ? (rows.first['invoice_sequence'] as int? ?? 0) : 0);
+    return InvoiceNumbering.format(prefix, current + 1);
+  }
+
+  Future<bool> isInvoiceNumberAvailable(int businessId, String number) async {
+    final db = await _database;
+    final rows = await db.query('invoices',
+        columns: ['id'],
+        where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+        whereArgs: [businessId, number.trim().toLowerCase()],
+        limit: 1);
+    return rows.isEmpty;
+  }
+
+  Future<String> nextQuotationNumber(int businessId, String prefix) async {
+    final db = await _database;
+    return db.transaction((txn) async {
+      final rows = await txn.query('businesses',
+          columns: ['quotation_sequence'], where: 'id = ?', whereArgs: [businessId]);
+      final current = (rows.isNotEmpty ? (rows.first['quotation_sequence'] as int? ?? 0) : 0);
+      final next = current + 1;
+      await txn.update('businesses', {'quotation_sequence': next},
+          where: 'id = ?', whereArgs: [businessId]);
+      return InvoiceNumbering.format(prefix, next);
+    });
+  }
+
+  Future<String> peekNextQuotationNumber(int businessId, String prefix) async {
+    final db = await _database;
+    final rows = await db.query('businesses',
+        columns: ['quotation_sequence'], where: 'id = ?', whereArgs: [businessId]);
+    final current = (rows.isNotEmpty ? (rows.first['quotation_sequence'] as int? ?? 0) : 0);
+    return InvoiceNumbering.format(prefix, current + 1);
+  }
+
+  Future<String> nextPurchaseNumber(int businessId, String prefix) async {
+    final db = await _database;
+    return db.transaction((txn) async {
+      final rows = await txn.query('businesses',
+          columns: ['purchase_sequence'], where: 'id = ?', whereArgs: [businessId]);
+      final current = (rows.isNotEmpty ? (rows.first['purchase_sequence'] as int? ?? 0) : 0);
+      final next = current + 1;
+      await txn.update('businesses', {'purchase_sequence': next},
+          where: 'id = ?', whereArgs: [businessId]);
+      return InvoiceNumbering.format(prefix, next);
+    });
+  }
+
+  Future<String> peekNextPurchaseNumber(int businessId, String prefix) async {
+    final db = await _database;
+    final rows = await db.query('businesses',
+        columns: ['purchase_sequence'], where: 'id = ?', whereArgs: [businessId]);
+    final current = (rows.isNotEmpty ? (rows.first['purchase_sequence'] as int? ?? 0) : 0);
+    return InvoiceNumbering.format(prefix, current + 1);
+  }
+
   Future<int> upsertCustomer(Customer customer, {int? businessIdOverride}) async {
     final db = await _database;
     final businessId = businessIdOverride ?? session.businessId;
@@ -1258,6 +1318,13 @@ class Repository {
     final db = await _database;
     final rows = await db.query('bank_accounts', where: 'business_id = ? AND inactive = 0', whereArgs: [businessId]);
     return rows.map(BankAccount.fromMap).toList();
+  }
+
+  Future<BankAccount?> getBankAccount(int id) async {
+    final db = await _database;
+    final rows = await db.query('bank_accounts', where: 'id = ? AND inactive = 0', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) return null;
+    return BankAccount.fromMap(rows.first);
   }
 
   Future<void> deleteBankAccount(int id) async {

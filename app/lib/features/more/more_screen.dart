@@ -17,6 +17,7 @@ import '../banking/cash_bank_hub_screen.dart';
 import '../gst/gst_center_screen.dart';
 import '../reports/reports_screen.dart';
 import '../sales/invoice_list_tab.dart';
+import '../settings/invoice_settings_screen.dart';
 import '../shell/audit_log_screen.dart';
 import '../shell/business_edit_screen.dart';
 import '../shell/business_switcher_sheet.dart';
@@ -136,7 +137,7 @@ class _MoreTabState extends State<MoreTab> {
             onChanged: (val) => session.setBiometricEnabled(val),
           ),
         ),
-      _menuTile(context, Icons.tune_rounded, isHi ? 'बिल सेटिंग्स' : 'Invoice settings', () => nav(const BusinessEditScreen())),
+      _menuTile(context, Icons.tune_rounded, isHi ? 'बिल सेटिंग्स' : 'Invoice settings', () => nav(const InvoiceSettingsScreen())),
       _menuTile(
         context,
         Icons.gpp_good_rounded,

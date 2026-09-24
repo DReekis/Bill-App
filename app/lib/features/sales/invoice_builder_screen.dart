@@ -57,6 +57,8 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   double invoiceDiscountValue = 0;
   bool saving = false;
   bool _checkedDraft = false;
+  String? invoiceNumber;
+  String invoiceDate = todayIso();
 
   QuoteResult? get quote => _quoteFor();
 
@@ -93,6 +95,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
       business = biz;
       customers = custs;
       products = prods;
+      if (invoiceNumber == null && biz != null) {
+        invoiceNumber = InvoiceNumbering.format(biz.invoicePrefix, biz.invoiceSequence + 1);
+      }
     });
     if (widget.customerId != null) {
       for (final c in custs) {
@@ -104,6 +109,74 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     } else if (!_checkedDraft) {
       _checkedDraft = true;
       await _checkDraft(businessId);
+    }
+  }
+
+  Future<void> _editInvoiceNumber() async {
+    final businessId = context.read<Session>().businessId;
+    if (businessId == null) return;
+    final controller = TextEditingController(text: invoiceNumber ?? '');
+    String? validationError;
+
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.edit_note_rounded, color: StitchColors.primary),
+              SizedBox(width: 8),
+              Text('Edit Invoice Number', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Enter a custom invoice number for this bill:', style: TextStyle(fontSize: 13, color: StitchColors.textSecondary)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.characters,
+                decoration: inputDecoration('Invoice Number', hint: 'e.g. INV-0042 or BILL/24/01').copyWith(
+                  errorText: validationError,
+                ),
+                onChanged: (val) async {
+                  if (val.trim().isEmpty) {
+                    setDialogState(() => validationError = 'Cannot be empty');
+                    return;
+                  }
+                  final available = await Repository.instance.isInvoiceNumberAvailable(businessId, val.trim());
+                  setDialogState(() {
+                    validationError = available ? null : 'Invoice number already exists!';
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isEmpty || validationError != null) return;
+                Navigator.pop(ctx, text);
+              },
+              child: const Text('Apply'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (updated != null && updated.isNotEmpty && mounted) {
+      setState(() => invoiceNumber = updated);
+      _saveDraft();
     }
   }
 
@@ -124,6 +197,8 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
       'dueDate': dueDate,
       'invoiceDiscountType': invoiceDiscountType,
       'invoiceDiscountValue': invoiceDiscountValue,
+      'invoiceNumber': invoiceNumber,
+      'invoiceDate': invoiceDate,
       'lines': lines.map((l) => {
         'productId': l.product.id,
         'productName': l.product.name,
@@ -253,6 +328,12 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           dueDate = decoded['dueDate'] as String?;
           invoiceDiscountType = (decoded['invoiceDiscountType'] as String?) ?? 'percent';
           invoiceDiscountValue = (decoded['invoiceDiscountValue'] as num?)?.toDouble() ?? 0.0;
+          if (decoded['invoiceNumber'] != null) {
+            invoiceNumber = decoded['invoiceNumber'] as String;
+          }
+          if (decoded['invoiceDate'] != null) {
+            invoiceDate = decoded['invoiceDate'] as String;
+          }
         });
       }
     } catch (_) {
@@ -477,12 +558,12 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     final q = quote;
     final biz = business;
     if (q == null || biz == null) return;
-    String invoiceDate = todayIso();
+    String invoiceDate = this.invoiceDate;
     String? checkoutDueDate = dueDate;
     String gstType = q.intraState ? 'intra' : 'inter';
     String? mode = 'Cash';
     final paidController = TextEditingController();
-    final notesController = TextEditingController();
+    final notesController = TextEditingController(text: biz.termsSales ?? '');
     final commit = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -493,8 +574,37 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Save invoice — ${q.total}',
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Save invoice — ${q.total}',
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                    InkWell(
+                      onTap: () async {
+                        Navigator.pop(context);
+                        await _editInvoiceNumber();
+                        _checkout();
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: StitchColors.primaryContainer,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(invoiceNumber ?? 'INV-0001',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: StitchColors.primary)),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.edit_rounded, size: 12, color: StitchColors.primary),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 14),
                 AppAmountField(
                   controller: paidController,
@@ -715,7 +825,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     final businessId = session.businessId!;
     setState(() => saving = true);
     try {
-      final number = await Repository.instance.nextInvoiceNumber(businessId, biz.invoicePrefix);
+      final number = (invoiceNumber != null && invoiceNumber!.trim().isNotEmpty)
+          ? invoiceNumber!.trim()
+          : await Repository.instance.nextInvoiceNumber(businessId, biz.invoicePrefix);
       final invoiceLines = <InvoiceLine>[];
       for (var i = 0; i < lines.length; i++) {
         final l = lines[i];
@@ -796,6 +908,93 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
         ],
       ),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 120), children: [
+        // Top Document Meta: Invoice Number & Date
+        Row(
+          children: [
+            Expanded(
+              child: AppCard(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: InkWell(
+                  onTap: _editInvoiceNumber,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: StitchColors.primaryContainer,
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                        child: const Icon(Icons.tag_rounded, size: 16, color: StitchColors.primary),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Invoice No.', style: TextStyle(fontSize: 10, color: StitchColors.textSecondary, fontWeight: FontWeight.w600)),
+                            Text(
+                              invoiceNumber ?? 'INV-0001',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: StitchColors.primary),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.edit_outlined, size: 14, color: StitchColors.primary),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: AppCard(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: InkWell(
+                  onTap: () async {
+                    final dt = dateTimeFor(invoiceDate);
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: dt,
+                      firstDate: DateTime(dt.year - 2),
+                      lastDate: DateTime(dt.year + 2),
+                    );
+                    if (picked != null) setState(() => invoiceDate = isoDate(picked));
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                        child: const Icon(Icons.calendar_today_rounded, size: 16, color: StitchColors.textSecondary),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Invoice Date', style: TextStyle(fontSize: 10, color: StitchColors.textSecondary, fontWeight: FontWeight.w600)),
+                            Text(
+                              displayDate(invoiceDate),
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
         AppCard(
           padding: const EdgeInsets.all(14),
           child: InkWell(

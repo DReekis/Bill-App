@@ -27,6 +27,20 @@ class Business {
     this.fyStart = '2026-04-01',
     this.currency = 'INR',
     this.decimalPlaces = 2,
+    this.invoicePhone,
+    this.invoiceEmail,
+    this.termsSales,
+    this.termsQuotation,
+    this.termsPurchase,
+    this.termsChallan,
+    this.signatureText = 'Authorised Signatory',
+    this.showEmptySignatureBox = true,
+    this.showPaymentQr = true,
+    this.bankAccountId,
+    this.quotationPrefix = 'EST',
+    this.quotationSequence = 0,
+    this.purchasePrefix = 'PUR',
+    this.purchaseSequence = 0,
   });
 
   final int? id;
@@ -54,8 +68,32 @@ class Business {
   String fyStart;
   String currency;
   int decimalPlaces;
+  String? invoicePhone;
+  String? invoiceEmail;
+  String? termsSales;
+  String? termsQuotation;
+  String? termsPurchase;
+  String? termsChallan;
+  String signatureText;
+  bool showEmptySignatureBox;
+  bool showPaymentQr;
+  int? bankAccountId;
+  String quotationPrefix;
+  int quotationSequence;
+  String purchasePrefix;
+  int purchaseSequence;
 
   int get nextSequence => invoiceSequence + 1;
+  int get nextQuotationSequence => quotationSequence + 1;
+  int get nextPurchaseSequence => purchaseSequence + 1;
+
+  String get displayInvoicePhone => (invoicePhone != null && invoicePhone!.trim().isNotEmpty)
+      ? invoicePhone!.trim()
+      : (phone ?? '');
+
+  String get displayInvoiceEmail => (invoiceEmail != null && invoiceEmail!.trim().isNotEmpty)
+      ? invoiceEmail!.trim()
+      : (email ?? '');
 
   Map<String, Object?> toMap() => {
         'name': name,
@@ -81,6 +119,20 @@ class Business {
         'allow_negative_stock': allowNegativeStock ? 1 : 0,
         'fy_start': fyStart,
         'currency': currency,
+        'invoice_phone': invoicePhone,
+        'invoice_email': invoiceEmail,
+        'terms_sales': termsSales,
+        'terms_quotation': termsQuotation,
+        'terms_purchase': termsPurchase,
+        'terms_challan': termsChallan,
+        'signature_text': signatureText,
+        'show_empty_signature_box': showEmptySignatureBox ? 1 : 0,
+        'show_payment_qr': showPaymentQr ? 1 : 0,
+        'bank_account_id': bankAccountId,
+        'quotation_prefix': quotationPrefix,
+        'quotation_sequence': quotationSequence,
+        'purchase_prefix': purchasePrefix,
+        'purchase_sequence': purchaseSequence,
       };
 
   static Business fromMap(Map<String, Object?> map) => Business(
@@ -108,6 +160,20 @@ class Business {
         allowNegativeStock: (map['allow_negative_stock'] as int? ?? 0) == 1,
         fyStart: map['fy_start'] as String? ?? '2026-04-01',
         currency: map['currency'] as String? ?? 'INR',
+        invoicePhone: map['invoice_phone'] as String?,
+        invoiceEmail: map['invoice_email'] as String?,
+        termsSales: map['terms_sales'] as String?,
+        termsQuotation: map['terms_quotation'] as String?,
+        termsPurchase: map['terms_purchase'] as String?,
+        termsChallan: map['terms_challan'] as String?,
+        signatureText: map['signature_text'] as String? ?? 'Authorised Signatory',
+        showEmptySignatureBox: (map['show_empty_signature_box'] as int? ?? 1) == 1,
+        showPaymentQr: (map['show_payment_qr'] as int? ?? 1) == 1,
+        bankAccountId: map['bank_account_id'] as int?,
+        quotationPrefix: map['quotation_prefix'] as String? ?? 'EST',
+        quotationSequence: (map['quotation_sequence'] as num?)?.toInt() ?? 0,
+        purchasePrefix: map['purchase_prefix'] as String? ?? 'PUR',
+        purchaseSequence: (map['purchase_sequence'] as num?)?.toInt() ?? 0,
       );
 }
 

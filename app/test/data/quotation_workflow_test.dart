@@ -196,7 +196,7 @@ void main() {
       ],
     ));
 
-    final q2Id = await repo.finalizeQuotation(Quotation(
+    await repo.finalizeQuotation(Quotation(
       businessId: businessId,
       number: 'EST-A2',
       customerId: c1,

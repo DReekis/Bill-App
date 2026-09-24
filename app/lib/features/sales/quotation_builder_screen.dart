@@ -55,6 +55,8 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
   Customer? selectedCustomer;
   final TextEditingController _notesController = TextEditingController();
   bool saving = false;
+  String? quotationNumber;
+  String quotationDate = todayIso();
 
   @override
   void initState() {
@@ -88,8 +90,63 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
           selectedCustomer = custs.firstWhere((c) => c.id == customerId);
           customerName = selectedCustomer?.name;
         }
+        if (quotationNumber == null && biz != null) {
+          quotationNumber = InvoiceNumbering.format(biz.quotationPrefix, biz.quotationSequence + 1);
+        }
+        if (_notesController.text.trim().isEmpty && biz?.termsQuotation != null) {
+          _notesController.text = biz!.termsQuotation!;
+        }
       });
     } catch (_) {}
+  }
+
+  Future<void> _editQuotationNumber() async {
+    final controller = TextEditingController(text: quotationNumber ?? '');
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.edit_note_rounded, color: Color(0xFFD97706)),
+            SizedBox(width: 8),
+            Text('Edit Estimate Number', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Enter a custom estimate number:', style: TextStyle(fontSize: 13, color: StitchColors.textSecondary)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: inputDecoration('Estimate Number', hint: 'e.g. EST-0001'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isEmpty) return;
+              Navigator.pop(ctx, text);
+            },
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+
+    if (updated != null && updated.isNotEmpty && mounted) {
+      setState(() => quotationNumber = updated);
+    }
   }
 
   /// Adds a product to the estimate draft or merges and auto-increments quantity
@@ -351,12 +408,16 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
       final sgst = isInterState ? 0 : (totalTax - cgst);
       final igst = isInterState ? totalTax : 0;
 
+      final quoteNumber = (quotationNumber != null && quotationNumber!.trim().isNotEmpty)
+          ? quotationNumber!.trim()
+          : await Repository.instance.nextQuotationNumber(bizId, business?.quotationPrefix ?? 'EST');
+
       final quote = Quotation(
         businessId: bizId,
-        number: 'EST-${DateTime.now().millisecondsSinceEpoch}',
+        number: quoteNumber,
         customerId: customerId,
         customerName: customerName,
-        date: todayIso(),
+        date: quotationDate,
         subtotal: subtotal,
         taxable: subtotal,
         cgst: cgst,
@@ -385,7 +446,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
       await Repository.instance.finalizeQuotation(quote);
 
       if (mounted) {
-        showAppMessage(context, 'Estimate saved successfully');
+        showAppMessage(context, 'Estimate $quoteNumber saved successfully');
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -415,6 +476,93 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
       ),
       body: Column(
         children: [
+          // Top Document Meta: Estimate Number & Date
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: Colors.white,
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: _editQuotationNumber,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.request_quote_rounded, size: 16, color: Color(0xFFD97706)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Estimate No.', style: TextStyle(fontSize: 10, color: Color(0xFF92400E), fontWeight: FontWeight.w600)),
+                                Text(
+                                  quotationNumber ?? 'EST-0001',
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFFB45309)),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.edit_outlined, size: 14, color: Color(0xFFB45309)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: InkWell(
+                    onTap: () async {
+                      final dt = dateTimeFor(quotationDate);
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: dt,
+                        firstDate: DateTime(dt.year - 2),
+                        lastDate: DateTime(dt.year + 2),
+                      );
+                      if (picked != null) setState(() => quotationDate = isoDate(picked));
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: StitchColors.outline),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.calendar_today_rounded, size: 16, color: StitchColors.textSecondary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Estimate Date', style: TextStyle(fontSize: 10, color: StitchColors.textSecondary, fontWeight: FontWeight.w600)),
+                                Text(
+                                  displayDate(quotationDate),
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
           // Customer Selection Card with Inline Add Customer button
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
@@ -529,37 +677,39 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
           Expanded(
             child: lines.isEmpty
                 ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(18),
-                            decoration: BoxDecoration(
-                              color: StitchColors.primary.withValues(alpha: 0.08),
-                              shape: BoxShape.circle,
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: StitchColors.primary.withValues(alpha: 0.08),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.playlist_add_rounded, size: 40, color: StitchColors.primary),
                             ),
-                            child: const Icon(Icons.playlist_add_rounded, size: 48, color: StitchColors.primary),
-                          ),
-                          const SizedBox(height: 14),
-                          const Text(
-                            'No items added to estimate',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Check off multiple products at once with bulk addition.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 13, color: StitchColors.textSecondary),
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            onPressed: _showProductPicker,
-                            icon: const Icon(Icons.add_rounded),
-                            label: const Text('Add Items from Catalog'),
-                          ),
-                        ],
+                            const SizedBox(height: 10),
+                            const Text(
+                              'No items added to estimate',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Check off multiple products at once with bulk addition.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 13, color: StitchColors.textSecondary),
+                            ),
+                            const SizedBox(height: 14),
+                            ElevatedButton.icon(
+                              onPressed: _showProductPicker,
+                              icon: const Icon(Icons.add_rounded),
+                              label: const Text('Add Items from Catalog'),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   )

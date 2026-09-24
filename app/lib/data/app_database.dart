@@ -92,6 +92,48 @@ class AppDatabase {
     try {
       await db.execute('ALTER TABLE quotation_items ADD COLUMN unit TEXT;');
     } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN invoice_phone TEXT;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN invoice_email TEXT;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN terms_sales TEXT;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN terms_quotation TEXT;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN terms_purchase TEXT;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN terms_challan TEXT;');
+    } catch (_) {}
+    try {
+      await db.execute("ALTER TABLE businesses ADD COLUMN signature_text TEXT DEFAULT 'Authorised Signatory';");
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN show_empty_signature_box INTEGER DEFAULT 1;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN show_payment_qr INTEGER DEFAULT 1;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN bank_account_id INTEGER;');
+    } catch (_) {}
+    try {
+      await db.execute("ALTER TABLE businesses ADD COLUMN quotation_prefix TEXT DEFAULT 'EST';");
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN quotation_sequence INTEGER DEFAULT 0;');
+    } catch (_) {}
+    try {
+      await db.execute("ALTER TABLE businesses ADD COLUMN purchase_prefix TEXT DEFAULT 'PUR';");
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE businesses ADD COLUMN purchase_sequence INTEGER DEFAULT 0;');
+    } catch (_) {}
   }
 
   /// Lets tests drive the real repository against an in-memory database.
@@ -124,7 +166,21 @@ class AppDatabase {
         invoice_sequence INTEGER DEFAULT 0,
         allow_negative_stock INTEGER DEFAULT 0,
         fy_start TEXT DEFAULT '2026-04-01',
-        currency TEXT DEFAULT 'INR'
+        currency TEXT DEFAULT 'INR',
+        invoice_phone TEXT,
+        invoice_email TEXT,
+        terms_sales TEXT,
+        terms_quotation TEXT,
+        terms_purchase TEXT,
+        terms_challan TEXT,
+        signature_text TEXT DEFAULT 'Authorised Signatory',
+        show_empty_signature_box INTEGER DEFAULT 1,
+        show_payment_qr INTEGER DEFAULT 1,
+        bank_account_id INTEGER,
+        quotation_prefix TEXT DEFAULT 'EST',
+        quotation_sequence INTEGER DEFAULT 0,
+        purchase_prefix TEXT DEFAULT 'PUR',
+        purchase_sequence INTEGER DEFAULT 0
       )
     ''');
 

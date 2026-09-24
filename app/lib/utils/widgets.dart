@@ -451,7 +451,10 @@ void showAppMessage(BuildContext context, String message, {bool error = false}) 
   });
 }
 
-InputDecoration inputDecoration(String label) => InputDecoration(labelText: label);
+InputDecoration inputDecoration(String label, {String? hint}) => InputDecoration(
+      labelText: label,
+      hintText: hint,
+    );
 
 String initialsOf(String name) {
   final names = name.trim().split(RegExp(r'\s+'));
