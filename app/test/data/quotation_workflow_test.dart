@@ -170,4 +170,79 @@ void main() {
     expect(lines.first.quantity, 7);
     expect(lines.first.price, 52000);
   });
+
+  test('quotationsForParty retrieves only quotations for the target customer with lines', () async {
+    final c1 = await repo.upsertCustomer(
+      Customer(name: 'Party Alpha', phone: '9000000001'),
+      businessIdOverride: businessId,
+    );
+    final c2 = await repo.upsertCustomer(
+      Customer(name: 'Party Beta', phone: '9000000002'),
+      businessIdOverride: businessId,
+    );
+
+    final q1Id = await repo.finalizeQuotation(Quotation(
+      businessId: businessId,
+      number: 'EST-A1',
+      customerId: c1,
+      customerName: 'Party Alpha',
+      date: '2026-09-20',
+      subtotal: 10000,
+      taxable: 10000,
+      total: 10000,
+      status: 'Open',
+      lines: [
+        InvoiceLine(name: 'Service A', quantity: 1, price: 10000),
+      ],
+    ));
+
+    final q2Id = await repo.finalizeQuotation(Quotation(
+      businessId: businessId,
+      number: 'EST-A2',
+      customerId: c1,
+      customerName: 'Party Alpha',
+      date: '2026-09-21',
+      subtotal: 20000,
+      taxable: 20000,
+      total: 20000,
+      status: 'Open',
+      lines: [
+        InvoiceLine(name: 'Service B', quantity: 2, price: 10000),
+      ],
+    ));
+
+    await repo.finalizeQuotation(Quotation(
+      businessId: businessId,
+      number: 'EST-B1',
+      customerId: c2,
+      customerName: 'Party Beta',
+      date: '2026-09-22',
+      subtotal: 30000,
+      taxable: 30000,
+      total: 30000,
+      status: 'Open',
+      lines: [
+        InvoiceLine(name: 'Service C', quantity: 3, price: 10000),
+      ],
+    ));
+
+    // Fetch for c1
+    final c1Quotes = await repo.quotationsForParty(businessId, c1);
+    expect(c1Quotes.length, 2);
+    expect(c1Quotes.map((q) => q.number).toList(), containsAll(['EST-A1', 'EST-A2']));
+    expect(c1Quotes.firstWhere((q) => q.number == 'EST-A1').lines.length, 1);
+    expect(c1Quotes.firstWhere((q) => q.number == 'EST-A1').lines.first.name, 'Service A');
+
+    // Fetch for c2
+    final c2Quotes = await repo.quotationsForParty(businessId, c2);
+    expect(c2Quotes.length, 1);
+    expect(c2Quotes.first.number, 'EST-B1');
+
+    // Test deleteQuotation
+    await repo.deleteQuotation(businessId, q1Id);
+    final afterDeleteQuotes = await repo.quotationsForParty(businessId, c1);
+    expect(afterDeleteQuotes.length, 1);
+    expect(afterDeleteQuotes.first.number, 'EST-A2');
+  });
 }
+

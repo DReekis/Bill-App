@@ -957,6 +957,34 @@ class Repository {
     return quote;
   }
 
+  Future<List<Quotation>> quotationsForParty(int businessId, int customerId) async {
+    final db = await _database;
+    final rows = await db.query(
+      'quotations',
+      where: 'business_id = ? AND customer_id = ?',
+      whereArgs: [businessId, customerId],
+      orderBy: 'date DESC, id DESC',
+    );
+    final quotes = rows.map(Quotation.fromMap).toList();
+    for (final q in quotes) {
+      if (q.id != null) {
+        final items = await db.query('quotation_items',
+            where: 'quotation_id = ?', whereArgs: [q.id], orderBy: 'id ASC');
+        q.lines = items.map(InvoiceLine.fromMap).toList();
+      }
+    }
+    return quotes;
+  }
+
+  Future<void> deleteQuotation(int businessId, int quotationId) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      await txn.delete('quotation_items', where: 'quotation_id = ?', whereArgs: [quotationId]);
+      await txn.delete('quotations', where: 'business_id = ? AND id = ?', whereArgs: [businessId, quotationId]);
+    });
+    await _audit(businessId, action: 'delete', entity: 'quotation', entityId: quotationId);
+  }
+
   Future<int> finalizeReturn(TransactionReturn ret) async {
     final db = await _database;
     final id = await db.transaction<int>((txn) async {

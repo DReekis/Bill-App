@@ -14,9 +14,10 @@ import '../inventory/product_form.dart';
 import 'barcode_scanner_screen.dart';
 
 class QuotationBuilderScreen extends StatefulWidget {
-  const QuotationBuilderScreen({super.key, this.businessId});
+  const QuotationBuilderScreen({super.key, this.businessId, this.customerId});
 
   final int? businessId;
+  final int? customerId;
 
   @override
   State<QuotationBuilderScreen> createState() => _QuotationBuilderScreenState();
@@ -58,6 +59,9 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.customerId != null) {
+      customerId = widget.customerId;
+    }
     _load();
   }
 
@@ -82,6 +86,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
         products = prods;
         if (customerId != null && custs.any((c) => c.id == customerId)) {
           selectedCustomer = custs.firstWhere((c) => c.id == customerId);
+          customerName = selectedCustomer?.name;
         }
       });
     } catch (_) {}
@@ -381,7 +386,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
 
       if (mounted) {
         showAppMessage(context, 'Estimate saved successfully');
-        Navigator.pop(context);
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) showAppMessage(context, 'Error saving estimate: $e', error: true);

@@ -610,6 +610,25 @@ Future<void> shareInvoice({
   await Printing.sharePdf(bytes: bytes, filename: '${invoice.number}.pdf');
 }
 
+Future<void> printQuotation({
+  required Business business,
+  required Quotation quotation,
+}) async {
+  final bytes = await buildQuotationPdf(business: business, quotation: quotation);
+  await Printing.layoutPdf(
+    onLayout: (_) async => bytes,
+    name: '${quotation.number}.pdf',
+  );
+}
+
+Future<void> shareQuotation({
+  required Business business,
+  required Quotation quotation,
+}) async {
+  final bytes = await buildQuotationPdf(business: business, quotation: quotation);
+  await Printing.sharePdf(bytes: bytes, filename: '${quotation.number}.pdf');
+}
+
 String _qty(double q) =>
     q == q.roundToDouble() ? q.round().toString() : q.toStringAsFixed(3);
 
