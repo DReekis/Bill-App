@@ -191,6 +191,6 @@ class ReportsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ReportsScreen(isTab: true);
+    return const ReportsMenuScreen(isTab: true);
   }
 }

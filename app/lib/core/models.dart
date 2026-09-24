@@ -1925,3 +1925,85 @@ class PayablesSummary {
   final List<PartyPayable> items;
 }
 
+class BillProfitItemRecord {
+  const BillProfitItemRecord({
+    required this.name,
+    required this.quantity,
+    this.unit = 'pc',
+    required this.salePrice,
+    required this.costPrice,
+    required this.taxable,
+    required this.totalCost,
+    required this.profit,
+    required this.margin,
+  });
+
+  final String name;
+  final double quantity;
+  final String unit;
+  final int salePrice;
+  final int costPrice;
+  final int taxable;
+  final int totalCost;
+  final int profit;
+  final double margin;
+}
+
+class BillProfitRecord {
+  const BillProfitRecord({
+    required this.invoiceId,
+    required this.number,
+    required this.customerName,
+    this.customerId,
+    required this.date,
+    required this.total,
+    required this.taxable,
+    required this.cogs,
+    required this.profit,
+    required this.margin,
+    required this.items,
+  });
+
+  final int invoiceId;
+  final String number;
+  final String customerName;
+  final int? customerId;
+  final String date;
+  final int total;
+  final int taxable;
+  final int cogs;
+  final int profit;
+  final double margin;
+  final List<BillProfitItemRecord> items;
+
+  bool get isProfitable => profit >= 0;
+}
+
+class SalesSummaryReportData {
+  const SalesSummaryReportData({
+    required this.totalGrossSales,
+    required this.totalTaxable,
+    required this.totalTax,
+    required this.totalCgst,
+    required this.totalSgst,
+    required this.totalIgst,
+    required this.totalPaid,
+    required this.totalDue,
+    required this.invoiceCount,
+    required this.paymentModes,
+    required this.invoices,
+  });
+
+  final int totalGrossSales;
+  final int totalTaxable;
+  final int totalTax;
+  final int totalCgst;
+  final int totalSgst;
+  final int totalIgst;
+  final int totalPaid;
+  final int totalDue;
+  final int invoiceCount;
+  final Map<String, int> paymentModes;
+  final List<Invoice> invoices;
+}
+

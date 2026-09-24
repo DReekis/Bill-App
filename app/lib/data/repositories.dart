@@ -2031,6 +2031,12 @@ class Repository {
     return rows.isEmpty ? 0 : (rows.first['s'] as int);
   }
 
+  Future<int> customerBalance(int businessId, int customerId) =>
+      partyBalance(businessId, 'customer', customerId);
+
+  Future<int> supplierBalance(int businessId, int supplierId) =>
+      partyBalance(businessId, 'supplier', supplierId);
+
   Future<List<LedgerEntry>> partyLedger(int businessId, String partyType, int partyId) async {
     final db = await _database;
     final suffix = partyType == 'customer' ? 'customer:$partyId' : 'supplier:$partyId';
@@ -3405,6 +3411,188 @@ class Repository {
     });
 
     return list.length > limit ? list.sublist(0, limit) : list;
+  }
+
+  Future<List<BillProfitRecord>> billWiseProfitReport(
+    int businessId, {
+    String? fromDate,
+    String? toDate,
+  }) async {
+    final db = await _database;
+    final where = <String>['business_id = ?'];
+    final args = <Object?>[businessId];
+    if (fromDate != null && fromDate.isNotEmpty) {
+      where.add('date >= ?');
+      args.add(fromDate);
+    }
+    if (toDate != null && toDate.isNotEmpty) {
+      where.add('date <= ?');
+      args.add(toDate);
+    }
+
+    final invoiceRows = await db.query(
+      'invoices',
+      where: where.join(' AND '),
+      whereArgs: args,
+      orderBy: 'date DESC, id DESC',
+    );
+
+    final results = <BillProfitRecord>[];
+
+    for (final inv in invoiceRows) {
+      final invId = inv['id'] as int;
+      final number = inv['number'] as String? ?? 'INV-$invId';
+      final customerName = inv['customer_name'] as String? ?? 'Walk-in Customer';
+      final customerId = inv['customer_id'] as int?;
+      final date = inv['date'] as String? ?? '';
+      final taxable = (inv['taxable'] as num?)?.toInt() ?? 0;
+      final total = (inv['total'] as num?)?.toInt() ?? 0;
+
+      final itemRows = await db.query(
+        'invoice_items',
+        where: 'invoice_id = ?',
+        whereArgs: [invId],
+      );
+
+      int calculatedCogs = 0;
+      final items = <BillProfitItemRecord>[];
+
+      for (final it in itemRows) {
+        final prodId = it['product_id'] as int?;
+        final name = it['name'] as String? ?? 'Product';
+        final qty = (it['quantity'] as num?)?.toDouble() ?? 1.0;
+        final price = (it['price'] as num?)?.toInt() ?? 0;
+        final itemTaxable = (it['taxable'] as num?)?.toInt() ?? (price * qty).round();
+
+        int purchasePrice = 0;
+        String unit = 'pc';
+        if (prodId != null) {
+          final pRows = await db.query('products', where: 'id = ?', whereArgs: [prodId], limit: 1);
+          if (pRows.isNotEmpty) {
+            final p = pRows.first;
+            final pp = (p['purchase_price'] as num?)?.toInt() ?? 0;
+            final ca = (p['cost_average'] as num?)?.toInt() ?? 0;
+            purchasePrice = pp > 0 ? pp : ca;
+            unit = p['unit'] as String? ?? 'pc';
+          }
+        }
+
+        final lineCost = (purchasePrice * qty).round();
+        calculatedCogs += lineCost;
+        final lineProfit = itemTaxable - lineCost;
+        final lineMargin = itemTaxable > 0 ? (lineProfit / itemTaxable) * 100 : 0.0;
+
+        items.add(BillProfitItemRecord(
+          name: name,
+          quantity: qty,
+          unit: unit,
+          salePrice: price,
+          costPrice: purchasePrice,
+          taxable: itemTaxable,
+          totalCost: lineCost,
+          profit: lineProfit,
+          margin: lineMargin,
+        ));
+      }
+
+      int finalCogs = calculatedCogs;
+      if (finalCogs == 0) {
+        final ledgerCogs = await db.rawQuery(
+          "SELECT COALESCE(SUM(debit), 0) AS c FROM ledger WHERE business_id = ? AND ref_type = 'invoice' AND ref_id = ? AND account = 'cogs'",
+          [businessId, invId],
+        );
+        if (ledgerCogs.isNotEmpty) {
+          final lc = (ledgerCogs.first['c'] as num).toInt();
+          if (lc > 0) finalCogs = lc;
+        }
+      }
+
+      final revenueBase = taxable > 0 ? taxable : total;
+      final profit = revenueBase - finalCogs;
+      final margin = revenueBase > 0 ? (profit / revenueBase) * 100 : 0.0;
+
+      results.add(BillProfitRecord(
+        invoiceId: invId,
+        number: number,
+        customerName: customerName,
+        customerId: customerId,
+        date: date,
+        total: total,
+        taxable: taxable,
+        cogs: finalCogs,
+        profit: profit,
+        margin: margin,
+        items: items,
+      ));
+    }
+
+    return results;
+  }
+
+  Future<SalesSummaryReportData> salesSummaryReport(
+    int businessId, {
+    String? fromDate,
+    String? toDate,
+  }) async {
+    final db = await _database;
+    final where = <String>['business_id = ?'];
+    final args = <Object?>[businessId];
+    if (fromDate != null && fromDate.isNotEmpty) {
+      where.add('date >= ?');
+      args.add(fromDate);
+    }
+    if (toDate != null && toDate.isNotEmpty) {
+      where.add('date <= ?');
+      args.add(toDate);
+    }
+
+    final invoiceRows = await db.query(
+      'invoices',
+      where: where.join(' AND '),
+      whereArgs: args,
+      orderBy: 'date DESC, id DESC',
+    );
+
+    int totalGross = 0;
+    int totalTaxable = 0;
+    int totalCgst = 0;
+    int totalSgst = 0;
+    int totalIgst = 0;
+    int totalPaid = 0;
+    final paymentModes = <String, int>{};
+    final invoices = <Invoice>[];
+
+    for (final row in invoiceRows) {
+      final inv = Invoice.fromMap(row);
+      invoices.add(inv);
+      totalGross += inv.total;
+      totalTaxable += inv.taxable;
+      totalCgst += inv.cgst;
+      totalSgst += inv.sgst;
+      totalIgst += inv.igst;
+      totalPaid += inv.amountPaid;
+
+      final mode = inv.paymentMode?.trim();
+      final effectiveMode = (mode != null && mode.isNotEmpty) ? mode : 'Credit';
+      paymentModes[effectiveMode] = (paymentModes[effectiveMode] ?? 0) + inv.total;
+    }
+
+    final totalTax = totalCgst + totalSgst + totalIgst;
+    final totalDue = totalGross - totalPaid;
+
+    return SalesSummaryReportData(
+      totalGrossSales: totalGross,
+      totalTaxable: totalTaxable,
+      totalTax: totalTax,
+      totalCgst: totalCgst,
+      totalSgst: totalSgst,
+      totalIgst: totalIgst,
+      totalPaid: totalPaid,
+      totalDue: totalDue > 0 ? totalDue : 0,
+      invoiceCount: invoices.length,
+      paymentModes: paymentModes,
+      invoices: invoices,
+    );
   }
 }
 
