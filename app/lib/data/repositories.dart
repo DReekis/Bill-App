@@ -3229,7 +3229,7 @@ class Repository {
 
       entries.add(Gstr2bEntry(
         id: idx++,
-        supplierGstin: '27AABCU${(9000 + expId).toString().padLeft(4, '0')}1Z5',
+        supplierGstin: '27AABCU${(9000 + expId).toString().padLeft(4, '0')}A1Z5',
         supplierName: vendor,
         invoiceNumber: 'INV-2026-${(100 + expId)}',
         invoiceDate: date,

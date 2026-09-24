@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/gst_reports_service.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
@@ -58,6 +59,19 @@ class _Gstr1ReportScreenState extends State<Gstr1ReportScreen> {
     }
   }
 
+  void _openExportModal() {
+    final b = business;
+    if (b == null) return;
+    showGstExportModal(
+      context: context,
+      returnType: GstReturnType.gstr1,
+      business: b,
+      fromDate: widget.fromDate,
+      toDate: widget.toDate,
+      periodLabel: widget.periodLabel,
+    );
+  }
+
   void _exportCsv() {
     final b = business;
     final csv = StringBuffer()
@@ -100,9 +114,23 @@ class _Gstr1ReportScreenState extends State<Gstr1ReportScreen> {
       appBar: AppBar(
         title: const Text('GSTR-1 Sales Report', style: TextStyle(fontWeight: FontWeight.w800)),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: StitchColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: business != null ? _openExportModal : null,
+              icon: const Icon(Icons.file_download_rounded, size: 16),
+              label: const Text('Export Return', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            ),
+          ),
           IconButton(
-            tooltip: 'Export CSV / Share',
-            icon: const Icon(Icons.download_rounded, color: StitchColors.primary),
+            tooltip: 'Share CSV',
+            icon: const Icon(Icons.share_outlined, color: StitchColors.textSecondary),
             onPressed: _exportCsv,
           ),
         ],

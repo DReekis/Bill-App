@@ -16,6 +16,7 @@ import '../purchases/purchase_builder_screen.dart';
 import '../reports/reports_menu_screen.dart';
 import '../reports/reports_screen.dart';
 import '../sales/invoice_builder_screen.dart';
+import '../sales/quotation_builder_screen.dart';
 import '../suppliers/supplier_form.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -85,6 +86,11 @@ class _AppShellState extends State<AppShell> {
         Navigator.of(context)
             .push(MaterialPageRoute(
                 builder: (_) => const PurchaseBuilderScreen()))
+            .then((_) => _reloadTabs());
+      case 'Estimate':
+        Navigator.of(context)
+            .push(MaterialPageRoute(
+                builder: (_) => QuotationBuilderScreen(businessId: session.businessId!)))
             .then((_) => _reloadTabs());
       case 'Payment In':
         Navigator.of(context)
@@ -284,34 +290,10 @@ class QuickActionSheet extends StatelessWidget {
         'c': const Color(0xFF2E7D32),
       },
       {
-        'icon': Icons.call_received_rounded,
-        'label': l10n.text('payment_in'),
-        'action': 'Payment In',
-        'c': const Color(0xFF00C853),
-      },
-      {
-        'icon': Icons.call_made_rounded,
-        'label': l10n.text('payment_out'),
-        'action': 'Payment Out',
-        'c': const Color(0xFFE53935),
-      },
-      {
-        'icon': Icons.currency_rupee_rounded,
-        'label': l10n.text('expenses'),
-        'action': 'Expense',
-        'c': const Color(0xFFE53935),
-      },
-      {
-        'icon': Icons.person_add_alt_1_rounded,
-        'label': l10n.text('parties'),
-        'action': 'Party',
-        'c': const Color(0xFF00897B),
-      },
-      {
-        'icon': Icons.inventory_2_outlined,
-        'label': l10n.text('item'),
-        'action': 'Product',
-        'c': const Color(0xFF7B1FA2),
+        'icon': Icons.request_quote_rounded,
+        'label': l10n.text('estimate'),
+        'action': 'Estimate',
+        'c': const Color(0xFFD97706),
       },
     ];
     return Padding(
@@ -320,10 +302,8 @@ class QuickActionSheet extends StatelessWidget {
         Text(l10n.text('quick_actions'),
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
         const SizedBox(height: 18),
-        Wrap(
-          spacing: 14,
-          runSpacing: 16,
-          alignment: WrapAlignment.center,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: actions
               .map((a) => QuickAction(
                     icon: a['icon'] as IconData,

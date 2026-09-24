@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/gst_reports_service.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
@@ -106,6 +107,19 @@ class _GstCenterScreenState extends State<GstCenterScreen> {
       ..writeln('Generated via Billket GST Center');
 
     Share.share(text.toString(), subject: 'GST Report - ${b?.name ?? 'Business'} ($periodLabel)');
+  }
+
+  void _openExport(GstReturnType type) {
+    final b = business;
+    if (b == null) return;
+    showGstExportModal(
+      context: context,
+      returnType: type,
+      business: b,
+      fromDate: fromDate,
+      toDate: toDate,
+      periodLabel: periodLabel,
+    );
   }
 
   @override
@@ -384,9 +398,33 @@ class _GstCenterScreenState extends State<GstCenterScreen> {
                   const SizedBox(height: 24),
 
                   // Returns & Reports Section
-                  const Text(
-                    'Returns & GST Reports',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  // Returns & Reports Section
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Returns & GST Reports',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: StitchColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.verified_rounded, size: 12, color: StitchColors.primary),
+                            SizedBox(width: 4),
+                            Text(
+                              'Portal Ready (v1.3)',
+                              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: StitchColors.primary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   GridView.count(
@@ -410,6 +448,7 @@ class _GstCenterScreenState extends State<GstCenterScreen> {
                             builder: (_) => Gstr1ReportScreen(fromDate: fromDate, toDate: toDate, periodLabel: periodLabel),
                           ),
                         ),
+                        onExport: () => _openExport(GstReturnType.gstr1),
                       ),
                       _ReportNavTile(
                         icon: Icons.compare_arrows_rounded,
@@ -424,6 +463,7 @@ class _GstCenterScreenState extends State<GstCenterScreen> {
                             builder: (_) => Gstr2bScreen(fromDate: fromDate, toDate: toDate),
                           ),
                         ),
+                        onExport: () => _openExport(GstReturnType.gstr2),
                       ),
                       _ReportNavTile(
                         icon: Icons.description_rounded,
@@ -438,6 +478,7 @@ class _GstCenterScreenState extends State<GstCenterScreen> {
                             builder: (_) => Gstr3bScreen(summary: s, period: periodLabel),
                           ),
                         ),
+                        onExport: () => _openExport(GstReturnType.gstr3b),
                       ),
                       _ReportNavTile(
                         icon: Icons.category_rounded,
@@ -488,6 +529,7 @@ class _ReportNavTile extends StatelessWidget {
     required this.subtitle,
     required this.metric,
     required this.onTap,
+    this.onExport,
   });
 
   final IconData icon;
@@ -497,6 +539,7 @@ class _ReportNavTile extends StatelessWidget {
   final String subtitle;
   final String metric;
   final VoidCallback onTap;
+  final VoidCallback? onExport;
 
   @override
   Widget build(BuildContext context) => InkWell(
@@ -525,7 +568,21 @@ class _ReportNavTile extends StatelessWidget {
                     decoration: BoxDecoration(color: badgeColor, borderRadius: BorderRadius.circular(10)),
                     child: Icon(icon, color: iconColor, size: 22),
                   ),
-                  const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: StitchColors.textTertiary),
+                  if (onExport != null)
+                    InkWell(
+                      onTap: onExport,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: StitchColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.file_download_rounded, size: 16, color: StitchColors.primary),
+                      ),
+                    )
+                  else
+                    const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: StitchColors.textTertiary),
                 ],
               ),
               Column(

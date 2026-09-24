@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/gst_reports_service.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
@@ -25,6 +26,7 @@ class Gstr3bScreen extends StatefulWidget {
 class _Gstr3bScreenState extends State<Gstr3bScreen> {
   bool loading = true;
   Gstr3bSummary? gstr3b;
+  Business? business;
 
   @override
   void initState() {
@@ -38,15 +40,28 @@ class _Gstr3bScreenState extends State<Gstr3bScreen> {
     setState(() => loading = true);
 
     try {
+      final b = await Repository.instance.getBusiness(bizId);
       final s = await Repository.instance.getGstr3bData(bizId, period: widget.period);
       if (!mounted) return;
       setState(() {
+        business = b;
         gstr3b = s;
         loading = false;
       });
     } catch (_) {
       if (mounted) setState(() => loading = false);
     }
+  }
+
+  void _openExportModal() {
+    final b = business;
+    if (b == null) return;
+    showGstExportModal(
+      context: context,
+      returnType: GstReturnType.gstr3b,
+      business: b,
+      periodLabel: widget.period,
+    );
   }
 
   void _shareWithCa() {
@@ -84,9 +99,23 @@ class _Gstr3bScreenState extends State<Gstr3bScreen> {
       appBar: AppBar(
         title: const Text('GSTR-3B Monthly Return', style: TextStyle(fontWeight: FontWeight.w800)),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: StitchColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: business != null ? _openExportModal : null,
+              icon: const Icon(Icons.file_download_rounded, size: 16),
+              label: const Text('Export GSTR-3B', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            ),
+          ),
           IconButton(
             tooltip: 'Share with CA',
-            icon: const Icon(Icons.share_outlined, color: StitchColors.primary),
+            icon: const Icon(Icons.share_outlined, color: StitchColors.textSecondary),
             onPressed: _shareWithCa,
           ),
         ],

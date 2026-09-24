@@ -623,46 +623,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: EdgeInsets.fromLTRB(20, 12, 20, 24 + bottomInset),
           child: SafeArea(
             top: false,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 20),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.shopping_cart_outlined, l10n.text('sale'), 'New Sale', const Color(0xFF3F51B5)),
-                    _actionItem(ctx, Icons.shopping_bag_outlined, l10n.text('purchase'), 'Purchase', const Color(0xFF2E7D32)),
-                    _actionItem(ctx, Icons.description_outlined, l10n.text('estimate'), 'Estimate', const Color(0xFF0288D1)),
-                  ]),
-                  const SizedBox(height: 20),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.assignment_outlined, l10n.text('order'), 'Sales Order', const Color(0xFFE65100)),
-                    _actionItem(ctx, Icons.local_shipping_outlined, l10n.text('challan'), 'Challan', const Color(0xFF5E35B1)),
-                    _actionItem(ctx, Icons.person_add_outlined, l10n.text('parties'), 'Party', const Color(0xFF00897B)),
-                  ]),
-                  const SizedBox(height: 20),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.inventory_2_outlined, l10n.text('item'), 'Product', const Color(0xFF7B1FA2)),
-                    _actionItem(ctx, Icons.payments_outlined, l10n.text('payment_in'), 'Payment In', const Color(0xFF00C853)),
-                    _actionItem(ctx, Icons.outbox_outlined, l10n.text('payment_out'), 'Payment Out', const Color(0xFFE53935)),
-                  ]),
-                  const SizedBox(height: 20),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                    _actionItem(ctx, Icons.account_balance_outlined, l10n.text('gst'), 'GST Center', const Color(0xFF00838F)),
-                    _actionItem(ctx, Icons.account_balance_wallet_outlined, l10n.text('cash_bank'), 'Cash & Bank', const Color(0xFF1B5E20)),
-                    _actionItem(ctx, Icons.bar_chart_rounded, l10n.text('reports'), 'Reports', const Color(0xFF5C6BC0)),
-                  ]),
-                ],
-              ),
+                ),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                  _actionItem(ctx, Icons.shopping_cart_outlined, l10n.text('sale'), 'New Sale', const Color(0xFF3F51B5)),
+                  _actionItem(ctx, Icons.shopping_bag_outlined, l10n.text('purchase'), 'Purchase', const Color(0xFF2E7D32)),
+                  _actionItem(ctx, Icons.description_outlined, l10n.text('estimate'), 'Estimate', const Color(0xFF0288D1)),
+                ]),
+              ],
             ),
           ),
         );

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/gst_reports_service.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
@@ -28,6 +29,7 @@ class _Gstr2bScreenState extends State<Gstr2bScreen> {
   bool loading = true;
   List<Gstr2bEntry> allEntries = [];
   String filterTab = 'All';
+  Business? business;
 
   @override
   void initState() {
@@ -41,6 +43,7 @@ class _Gstr2bScreenState extends State<Gstr2bScreen> {
     setState(() => loading = true);
 
     try {
+      final b = await Repository.instance.getBusiness(bizId);
       final list = await Repository.instance.getGstr2bData(
         bizId,
         from: widget.fromDate,
@@ -48,12 +51,26 @@ class _Gstr2bScreenState extends State<Gstr2bScreen> {
       );
       if (!mounted) return;
       setState(() {
+        business = b;
         allEntries = list;
         loading = false;
       });
     } catch (_) {
       if (mounted) setState(() => loading = false);
     }
+  }
+
+  void _openExportModal() {
+    final b = business;
+    if (b == null) return;
+    showGstExportModal(
+      context: context,
+      returnType: GstReturnType.gstr2,
+      business: b,
+      fromDate: widget.fromDate,
+      toDate: widget.toDate,
+      periodLabel: 'This Month',
+    );
   }
 
   Future<void> _contactSupplier(Gstr2bEntry item) async {
@@ -134,6 +151,20 @@ class _Gstr2bScreenState extends State<Gstr2bScreen> {
       appBar: AppBar(
         title: const Text('GSTR-2B Reconciliation', style: TextStyle(fontWeight: FontWeight.w800)),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: StitchColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: business != null ? _openExportModal : null,
+              icon: const Icon(Icons.file_download_rounded, size: 16),
+              label: const Text('Export GSTR-2', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            ),
+          ),
           IconButton(
             tooltip: 'Sync Portal',
             icon: const Icon(Icons.sync_rounded, color: StitchColors.primary),
