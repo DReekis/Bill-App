@@ -14,6 +14,7 @@ import 'pl_report_screen.dart';
 import 'reports_screen.dart';
 import 'sales_summary_report_screen.dart';
 import 'stock_summary_report_screen.dart';
+import 'tally_export_screen.dart';
 
 class ReportsMenuScreen extends StatelessWidget {
   const ReportsMenuScreen({super.key, this.isTab = false});
@@ -105,6 +106,19 @@ class ReportsMenuScreen extends StatelessWidget {
               icon: Icons.shopping_cart_outlined,
               title: 'Transaction Reports',
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionHistoryScreen())),
+            ),
+          ]),
+          const SizedBox(height: 24),
+
+          // Section 3: ACCOUNTING & SOFTWARE INTEGRATION
+          _buildSectionHeader('Accounting & Software Integration'),
+          const SizedBox(height: 8),
+          _buildReportCardContainer([
+            _ReportListItem(
+              icon: Icons.integration_instructions_outlined,
+              title: 'Export to Tally Prime (Direct XML)',
+              subtitle: 'One-click XML import for TallyPrime & Tally.ERP 9 (Sales, Purchases, Ledgers)',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TallyExportScreen())),
             ),
           ]),
         ],
