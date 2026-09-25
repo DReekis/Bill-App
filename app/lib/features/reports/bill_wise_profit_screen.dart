@@ -208,7 +208,7 @@ class _BillWiseProfitScreenState extends State<BillWiseProfitScreen> {
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     pw.Text('Generated: ${todayIso()}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
-                    pw.Text('Net Profit: Rs ${formatPaise(totalProfit)} (${overallMargin.toStringAsFixed(1)}%)',
+                    pw.Text('Net Profit: ${formatPaisePdf(totalProfit, prefixRs: true)} (${overallMargin.toStringAsFixed(1)}%)',
                         style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: totalProfit >= 0 ? PdfColors.green700 : PdfColors.red700)),
                   ],
                 ),
@@ -223,9 +223,9 @@ class _BillWiseProfitScreenState extends State<BillWiseProfitScreen> {
                       r.number,
                       r.date,
                       r.customerName,
-                      formatPaise(r.taxable),
-                      formatPaise(r.cogs),
-                      (r.profit >= 0 ? '+' : '') + formatPaise(r.profit),
+                      formatPaiseClean(r.taxable),
+                      formatPaiseClean(r.cogs),
+                      (r.profit >= 0 ? '+' : '-') + formatPaiseClean(r.profit.abs()),
                       '${r.margin.toStringAsFixed(1)}%',
                     ])
                 .toList(),

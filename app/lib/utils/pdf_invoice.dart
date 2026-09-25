@@ -96,7 +96,7 @@ Future<Uint8List> buildDocumentPdf({
   const slateLight = PdfColor.fromInt(0xFFF8FAFC);
   const borderSlate = PdfColor.fromInt(0xFFCBD5E1);
 
-  String money(int paise) => formatPaise(paise).replaceAll('₹', 'Rs.');
+  String money(int paise) => formatPaisePdf(paise, prefixRs: true);
 
   // Pre-load images safely if present
   pw.MemoryImage? logoImage;
@@ -814,7 +814,7 @@ Future<Uint8List> buildThermalReceiptPdf({
   final smallFontSize = is58mm ? 6.5 : 7.5;
   final titleFontSize = is58mm ? 11.0 : 13.0;
 
-  String money(int paise) => formatPaise(paise).replaceAll('₹', 'Rs.');
+  String money(int paise) => formatPaisePdf(paise, prefixRs: true);
 
   final upiUri = generateUpiPaymentUri(
     business: business,

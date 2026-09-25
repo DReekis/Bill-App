@@ -17,8 +17,9 @@ import '../inventory/multi_product_picker_sheet.dart';
 import 'barcode_scanner_screen.dart';
 
 class InvoiceBuilderScreen extends StatefulWidget {
-  const InvoiceBuilderScreen({super.key, this.customerId});
+  const InvoiceBuilderScreen({super.key, this.customerId, this.existingInvoiceId});
   final int? customerId;
+  final int? existingInvoiceId;
   @override
   State<InvoiceBuilderScreen> createState() => _InvoiceBuilderScreenState();
 }
@@ -59,6 +60,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   bool _checkedDraft = false;
   String? invoiceNumber;
   String invoiceDate = todayIso();
+  int? initialAmountPaid;
+  String? initialPaymentMode;
+  String? existingNotes;
 
   QuoteResult? get quote => _quoteFor();
 
@@ -95,10 +99,77 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
       business = biz;
       customers = custs;
       products = prods;
-      if (invoiceNumber == null && biz != null) {
-        invoiceNumber = InvoiceNumbering.format(biz.invoicePrefix, biz.invoiceSequence + 1);
-      }
     });
+
+    if (widget.existingInvoiceId != null) {
+      final inv = await repo.invoice(businessId, widget.existingInvoiceId!);
+      if (inv != null && mounted) {
+        Customer? matchedCust;
+        if (inv.customerId != null && custs.isNotEmpty) {
+          for (final c in custs) {
+            if (c.id == inv.customerId) {
+              matchedCust = c;
+              break;
+            }
+          }
+        }
+
+        final existingLines = <_LineEdit>[];
+        for (final l in inv.lines) {
+          Product? prod;
+          if (l.productId != null && prods.isNotEmpty) {
+            for (final p in prods) {
+              if (p.id == l.productId) {
+                prod = p;
+                break;
+              }
+            }
+          }
+          prod ??= Product(
+            id: l.productId,
+            name: l.name,
+            hsn: l.hsn,
+            salePrice: l.price,
+            gstRate: l.gstRate,
+            taxIncluded: false,
+          );
+
+          existingLines.add(_LineEdit(
+            product: prod,
+            qty: l.quantity,
+            price: l.price,
+            discountPercent: l.discountPercent,
+            gstRate: l.gstRate,
+            taxIncluded: false,
+            batch: l.batchNumber,
+            serial: l.serialNumber,
+          ));
+        }
+
+        setState(() {
+          invoiceNumber = inv.number;
+          invoiceDate = inv.date;
+          dueDate = inv.dueDate;
+          customerId = inv.customerId;
+          customerName = inv.customerName;
+          customerState = _clean(matchedCust?.state);
+          invoiceDiscountType = inv.discountType ?? (inv.discountRate > 0 ? 'percent' : 'flat');
+          invoiceDiscountValue = inv.discountRate > 0 ? inv.discountRate : (inv.discount / 100.0);
+          initialAmountPaid = inv.amountPaid;
+          initialPaymentMode = inv.paymentMode;
+          existingNotes = inv.notes;
+          lines = existingLines;
+        });
+        return;
+      }
+    }
+
+    if (invoiceNumber == null && biz != null) {
+      setState(() {
+        invoiceNumber = InvoiceNumbering.format(biz.invoicePrefix, biz.invoiceSequence + 1);
+      });
+    }
+
     if (widget.customerId != null) {
       for (final c in custs) {
         if (c.id == widget.customerId) {
@@ -148,7 +219,11 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                     setDialogState(() => validationError = 'Cannot be empty');
                     return;
                   }
-                  final available = await Repository.instance.isInvoiceNumberAvailable(businessId, val.trim());
+                  final available = await Repository.instance.isInvoiceNumberAvailable(
+                    businessId,
+                    val.trim(),
+                    excludeInvoiceId: widget.existingInvoiceId,
+                  );
                   setDialogState(() {
                     validationError = available ? null : 'Invoice number already exists!';
                   });
@@ -183,6 +258,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   static String _draftKey(int bizId) => 'draft_invoice_$bizId';
 
   Future<void> _saveDraft() async {
+    if (widget.existingInvoiceId != null) return;
     final businessId = context.read<Session>().businessId;
     if (businessId == null) return;
     final prefs = await SharedPreferences.getInstance();
@@ -215,7 +291,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   }
 
   Future<void> _checkDraft(int bizId) async {
-    if (widget.customerId != null || lines.isNotEmpty) return;
+    if (widget.existingInvoiceId != null || widget.customerId != null || lines.isNotEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_draftKey(bizId));
     if (raw == null || raw.isEmpty) return;
@@ -545,6 +621,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           }
         });
         _saveDraft();
+        showAppMessage(context, 'Updated ${updated.product.name}');
       }),
     );
   }
@@ -554,6 +631,196 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     _saveDraft();
   }
 
+  Future<void> _addCharge() async {
+    final nameController = TextEditingController(text: 'Delivery / Shipping');
+    final amountController = TextEditingController();
+    final hsnController = TextEditingController(text: '9965');
+    int gstRate = 18;
+    String selectedPreset = 'Delivery / Shipping';
+    String? amountError;
+
+    final presets = [
+      {'name': 'Delivery / Shipping', 'hsn': '9965', 'gst': 18},
+      {'name': 'TCS (Tax Collected at Source)', 'hsn': '9999', 'gst': 0},
+      {'name': 'Packaging & Forwarding', 'hsn': '9968', 'gst': 18},
+      {'name': 'Installation / Labour', 'hsn': '9987', 'gst': 18},
+      {'name': 'Handling Fee', 'hsn': '9997', 'gst': 18},
+      {'name': 'Custom Charge', 'hsn': '', 'gst': 0},
+    ];
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: StitchColors.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.toll_outlined, color: StitchColors.primary, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Add Charge / TCS / Service',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Quick Presets:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: presets.map((p) {
+                      final isSelected = selectedPreset == p['name'];
+                      return ChoiceChip(
+                        label: Text(p['name'] as String, style: TextStyle(fontSize: 11.5, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500)),
+                        selected: isSelected,
+                        onSelected: (val) {
+                          if (val) {
+                            setSheetState(() {
+                              selectedPreset = p['name'] as String;
+                              if (selectedPreset == 'Custom Charge') {
+                                nameController.text = '';
+                                hsnController.text = '';
+                                gstRate = 0;
+                              } else {
+                                nameController.text = p['name'] as String;
+                                hsnController.text = p['hsn'] as String;
+                                gstRate = p['gst'] as int;
+                              }
+                            });
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: nameController,
+                    decoration: inputDecoration('Charge / Description', hint: 'e.g. Delivery Charge, TCS @ 0.1%'),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: amountController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          autofocus: true,
+                          onChanged: (_) {
+                            if (amountError != null) {
+                              setSheetState(() => amountError = null);
+                            }
+                          },
+                          decoration: inputDecoration('Amount (₹)', hint: '0.00').copyWith(
+                            errorText: amountError,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          key: ValueKey('charge-gst-$gstRate'),
+                          initialValue: gstRate,
+                          decoration: inputDecoration('GST %'),
+                          items: const [
+                            DropdownMenuItem(value: 0, child: Text('0% (Exempt/TCS)')),
+                            DropdownMenuItem(value: 5, child: Text('5%')),
+                            DropdownMenuItem(value: 12, child: Text('12%')),
+                            DropdownMenuItem(value: 18, child: Text('18%')),
+                            DropdownMenuItem(value: 28, child: Text('28%')),
+                          ],
+                          onChanged: (v) => setSheetState(() => gstRate = v ?? 0),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: hsnController,
+                    decoration: inputDecoration('HSN / SAC Code (optional)', hint: 'e.g. 9965'),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () {
+                            final rawName = nameController.text.trim();
+                            final effectiveName = rawName.isNotEmpty
+                                ? rawName
+                                : (selectedPreset != 'Custom Charge' ? selectedPreset : 'Extra Charge');
+                            final cleanAmtStr = amountController.text
+                                .replaceAll('₹', '')
+                                .replaceAll(',', '')
+                                .replaceAll(' ', '')
+                                .trim();
+                            final amt = double.tryParse(cleanAmtStr);
+                            if (amt == null || amt <= 0) {
+                              setSheetState(() {
+                                amountError = 'Enter a valid amount';
+                              });
+                              return;
+                            }
+                            final pricePaise = (amt * 100).round();
+                            setState(() {
+                              lines.add(_LineEdit(
+                                product: Product(
+                                  id: null,
+                                  name: effectiveName,
+                                  hsn: hsnController.text.trim().isEmpty ? null : hsnController.text.trim(),
+                                  salePrice: pricePaise,
+                                  gstRate: gstRate,
+                                  taxIncluded: false,
+                                ),
+                                qty: 1,
+                                price: pricePaise,
+                                discountPercent: 0,
+                                gstRate: gstRate,
+                                taxIncluded: false,
+                              ));
+                            });
+                            _saveDraft();
+                            Navigator.pop(ctx);
+                            showAppMessage(context, 'Added $effectiveName (${formatPaise(pricePaise)})');
+                          },
+                          child: const Text('Add Charge'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _checkout() async {
     final q = quote;
     final biz = business;
@@ -561,9 +828,18 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     String invoiceDate = this.invoiceDate;
     String? checkoutDueDate = dueDate;
     String gstType = q.intraState ? 'intra' : 'inter';
-    String? mode = 'Cash';
-    final paidController = TextEditingController();
-    final notesController = TextEditingController(text: biz.termsSales ?? '');
+    String? mode = initialPaymentMode ?? 'Cash';
+    final initialPaid = initialAmountPaid;
+    final paidController = TextEditingController(
+      text: initialPaid != null && initialPaid > 0
+          ? (initialPaid / 100.0 == (initialPaid / 100.0).roundToDouble()
+              ? (initialPaid ~/ 100).toString()
+              : (initialPaid / 100.0).toStringAsFixed(2))
+          : '',
+    );
+    final notesController = TextEditingController(text: existingNotes ?? (biz.termsSales ?? ''));
+    final isEditing = widget.existingInvoiceId != null;
+
     final commit = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -577,7 +853,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Save invoice — ${q.total}',
+                    Text(isEditing ? 'Update invoice — ${q.total}' : 'Save invoice — ${q.total}',
                         style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
                     InkWell(
                       onTap: () async {
@@ -609,7 +885,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                 AppAmountField(
                   controller: paidController,
                   label: 'Amount paid now',
-                  suffix: '0 for credit',
+                  suffix: '0 for credit / unpaid',
                   suffixIcon: TextButton(
                     onPressed: () {
                       final totalRupees = q.total.paise / 100.0;
@@ -692,7 +968,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: AsyncButton(
-                    label: 'Save & finalize',
+                    label: isEditing ? 'Save Changes' : 'Save & finalize',
                     onPressed: () => Navigator.pop(context, true),
                   ),
                 ),
@@ -827,7 +1103,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     try {
       final number = (invoiceNumber != null && invoiceNumber!.trim().isNotEmpty)
           ? invoiceNumber!.trim()
-          : await Repository.instance.nextInvoiceNumber(businessId, biz.invoicePrefix);
+          : (widget.existingInvoiceId != null
+              ? 'INV-0001'
+              : await Repository.instance.nextInvoiceNumber(businessId, biz.invoicePrefix));
       final invoiceLines = <InvoiceLine>[];
       for (var i = 0; i < lines.length; i++) {
         final l = lines[i];
@@ -848,27 +1126,51 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
         ));
       }
       final amountPaid = _toPaise(paidController.text);
-      await Repository.instance.finalizeSale(
-        businessId: businessId,
-        number: number,
-        customerId: customerId,
-        customerName: customerName ?? 'Walk-in',
-        date: date,
-        dueDate: dueDate,
-        gstType: gstType,
-        quote: q,
-        lines: invoiceLines,
-        paymentMode: amountPaid > 0 ? (mode ?? 'Cash') : null,
-        notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
-        amountPaid: amountPaid,
-      );
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_draftKey(businessId));
+      if (widget.existingInvoiceId != null) {
+        await Repository.instance.updateSale(
+          businessId: businessId,
+          invoiceId: widget.existingInvoiceId!,
+          number: number,
+          customerId: customerId,
+          customerName: customerName ?? 'Walk-in',
+          date: date,
+          dueDate: dueDate,
+          gstType: gstType,
+          quote: q,
+          lines: invoiceLines,
+          paymentMode: amountPaid > 0 ? (mode ?? 'Cash') : null,
+          notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+          amountPaid: amountPaid,
+        );
 
-      if (mounted) {
-        showAppMessage(context, '$number saved');
-        Navigator.of(context).pop();
+        if (mounted) {
+          showAppMessage(context, 'Invoice $number updated');
+          Navigator.of(context).pop(true);
+        }
+      } else {
+        await Repository.instance.finalizeSale(
+          businessId: businessId,
+          number: number,
+          customerId: customerId,
+          customerName: customerName ?? 'Walk-in',
+          date: date,
+          dueDate: dueDate,
+          gstType: gstType,
+          quote: q,
+          lines: invoiceLines,
+          paymentMode: amountPaid > 0 ? (mode ?? 'Cash') : null,
+          notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+          amountPaid: amountPaid,
+        );
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_draftKey(businessId));
+
+        if (mounted) {
+          showAppMessage(context, '$number saved');
+          Navigator.of(context).pop(true);
+        }
       }
     } catch (e) {
       if (mounted) showAppMessage(context, 'Could not save invoice: $e', error: true);
@@ -898,7 +1200,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     final q = quote;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New sale'),
+        title: Text(widget.existingInvoiceId != null
+            ? (invoiceNumber != null ? 'Edit Invoice $invoiceNumber' : 'Edit Invoice')
+            : 'New sale'),
         actions: [
           IconButton(
             tooltip: 'Scan barcode',
@@ -1025,19 +1329,28 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
         ),
         const SizedBox(height: 12),
         Row(children: [
-          const Expanded(child: Text('Items', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
+          const Expanded(child: Text('Items & Charges', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
           IconButton(
             tooltip: 'Scan barcode',
             icon: const Icon(Icons.qr_code_scanner_rounded, size: 20, color: StitchColors.primary),
             onPressed: _scanBarcode,
           ),
-          TextButton.icon(onPressed: _addItem, icon: const Icon(Icons.add_rounded, size: 18), label: const Text('Add item')),
+          TextButton.icon(
+            onPressed: _addCharge,
+            icon: const Icon(Icons.toll_outlined, size: 16),
+            label: const Text('Add charge'),
+          ),
+          TextButton.icon(
+            onPressed: _addItem,
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add item'),
+          ),
         ]),
         if (lines.isEmpty)
           AppEmptyState(
             icon: Icons.shopping_cart_outlined,
             title: 'No items yet',
-            subtitle: 'Choose a product from inventory or scan barcode',
+            subtitle: 'Choose a product from inventory, scan barcode, or add charges/TCS',
             action: Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -1051,6 +1364,16 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                     visualDensity: VisualDensity.compact,
                     foregroundColor: const Color(0xFF335C8D),
                     side: BorderSide(color: const Color(0xFF335C8D).withValues(alpha: 0.4)),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _addCharge,
+                  icon: const Icon(Icons.toll_outlined, size: 16),
+                  label: const Text('Add Charge / TCS'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: StitchColors.primary,
+                    side: BorderSide(color: StitchColors.primary.withValues(alpha: 0.5)),
                   ),
                 ),
                 OutlinedButton.icon(
@@ -1117,8 +1440,12 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             Expanded(
               child: AsyncButton(
                 loading: saving,
-                icon: lines.isEmpty ? Icons.add_rounded : Icons.receipt_long_rounded,
-                label: lines.isEmpty ? 'Add items' : 'Save & checkout',
+                icon: lines.isEmpty
+                    ? Icons.add_rounded
+                    : (widget.existingInvoiceId != null ? Icons.save_rounded : Icons.receipt_long_rounded),
+                label: lines.isEmpty
+                    ? 'Add items'
+                    : (widget.existingInvoiceId != null ? 'Update invoice' : 'Save & checkout'),
                 backgroundColor: lines.isEmpty ? const Color(0xFF4A6DA7) : StitchColors.primary,
                 onPressed: lines.isEmpty ? _addItem : _checkout,
               ),
@@ -1258,6 +1585,7 @@ class _LineTile extends StatelessWidget {
       discountPercent: line.discountPercent,
       gstRate: line.gstRate,
     ));
+    final isCustomCharge = line.product.id == null;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -1266,9 +1594,29 @@ class _LineTile extends StatelessWidget {
         child: Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(line.product.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(line.product.name,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  if (isCustomCharge) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: StitchColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text('CHARGE / TCS',
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: StitchColors.primary)),
+                    ),
+                  ],
+                ],
+              ),
               const SizedBox(height: 3),
-              Text('${_qty(line.qty)} × ${formatPaise(line.price)}  ${line.discountPercent > 0 ? '· ${_qty(line.discountPercent)}% off  ' : ''}${line.gstRate > 0 ? '· GST ${line.gstRate}%' : ''}',
+              Text('${_qty(line.qty)} × ${formatPaise(line.price)}  ${line.discountPercent > 0 ? '· ${_qty(line.discountPercent)}% off  ' : ''}${line.gstRate > 0 ? '· GST ${line.gstRate}%' : '· GST 0%'}',
                   style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
             ]),
           ),
@@ -1293,17 +1641,21 @@ class _LineEditorSheet extends StatefulWidget {
 }
 
 class _LineEditorSheetState extends State<_LineEditorSheet> {
+  late final TextEditingController nameController;
   late final TextEditingController qtyController;
   late final TextEditingController priceController;
   late final TextEditingController discountController;
   late final TextEditingController batchController;
   late final TextEditingController serialController;
   late int gstRate;
+  String? qtyError;
+  String? priceError;
 
   @override
   void initState() {
     super.initState();
     final line = widget.line;
+    nameController = TextEditingController(text: line.product.name);
     qtyController = TextEditingController(text: _qty(line.qty));
     priceController = TextEditingController(text: line.price == 0 ? '' : (line.price / 100).toStringAsFixed(2));
     discountController = TextEditingController(text: line.discountPercent == 0 ? '' : _qty(line.discountPercent));
@@ -1314,6 +1666,7 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
 
   @override
   void dispose() {
+    nameController.dispose();
     qtyController.dispose();
     priceController.dispose();
     discountController.dispose();
@@ -1323,14 +1676,35 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
   }
 
   void _apply() {
-    final qty = double.tryParse(qtyController.text.trim());
+    final cleanQty = qtyController.text.replaceAll(',', '').trim();
+    final qty = double.tryParse(cleanQty);
     final price = _toPaise(priceController.text);
-    if (qty == null || qty <= 0 || price <= 0) return;
+    var hasError = false;
+    if (qty == null || qty <= 0) {
+      setState(() => qtyError = 'Enter valid qty');
+      hasError = true;
+    }
+    if (price <= 0) {
+      setState(() => priceError = 'Enter valid price/amount');
+      hasError = true;
+    }
+    if (hasError) return;
+
+    final updatedProduct = widget.line.product.id == null
+        ? Product(
+            id: null,
+            name: nameController.text.trim().isEmpty ? widget.line.product.name : nameController.text.trim(),
+            hsn: widget.line.product.hsn,
+            salePrice: price,
+            gstRate: gstRate,
+            taxIncluded: widget.line.taxIncluded,
+          )
+        : widget.line.product;
     final update = _LineEdit(
-      product: widget.line.product,
-      qty: qty,
+      product: updatedProduct,
+      qty: qty!,
       price: price,
-      discountPercent: double.tryParse(discountController.text.trim()) ?? 0,
+      discountPercent: double.tryParse(discountController.text.replaceAll('%', '').trim()) ?? 0,
       gstRate: gstRate,
       taxIncluded: widget.line.taxIncluded,
       batch: batchController.text.trim().isEmpty ? null : batchController.text.trim(),
@@ -1341,7 +1715,8 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
   }
 
   static int _toPaise(String s) {
-    final v = double.tryParse(s.trim());
+    final clean = s.replaceAll('₹', '').replaceAll(',', '').replaceAll(' ', '').trim();
+    final v = double.tryParse(clean);
     return v == null ? 0 : (v * 100).round();
   }
 
@@ -1356,8 +1731,13 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(line.product.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 14),
+            if (line.product.id == null) ...[
+              TextField(controller: nameController, decoration: inputDecoration('Charge / Description')),
+              const SizedBox(height: 12),
+            ] else ...[
+              Text(line.product.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 14),
+            ],
             if (line.product.hasBatch) ...[
               AppTextField(
                 controller: batchController,
@@ -1373,9 +1753,27 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
               const SizedBox(height: 12),
             ],
             Row(children: [
-              Expanded(child: TextField(controller: qtyController, keyboardType: TextInputType.number, decoration: inputDecoration('Quantity'))),
+              Expanded(
+                child: TextField(
+                  controller: qtyController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) {
+                    if (qtyError != null) setState(() => qtyError = null);
+                  },
+                  decoration: inputDecoration('Quantity').copyWith(errorText: qtyError),
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: TextField(controller: priceController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: inputDecoration('Unit price'))),
+              Expanded(
+                child: TextField(
+                  controller: priceController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) {
+                    if (priceError != null) setState(() => priceError = null);
+                  },
+                  decoration: inputDecoration(line.product.id == null ? 'Amount (₹)' : 'Unit price').copyWith(errorText: priceError),
+                ),
+              ),
             ]),
             const SizedBox(height: 12),
             Row(children: [
@@ -1383,6 +1781,7 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
               const SizedBox(width: 12),
               Expanded(
                 child: DropdownButtonFormField<int>(
+                  key: ValueKey('edit-line-gst-$gstRate'),
                   initialValue: gstRate,
                   decoration: inputDecoration('GST %'),
                   items: const [

@@ -169,8 +169,8 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Text('Cost Value: Rs ${formatPaise(totalCostValue)}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
-                    pw.Text('Retail Value: Rs ${formatPaise(totalSaleValue)}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                    pw.Text('Cost Value: ${formatPaisePdf(totalCostValue, prefixRs: true)}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
+                    pw.Text('Retail Value: ${formatPaisePdf(totalSaleValue, prefixRs: true)}', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                   ],
                 ),
               ],
@@ -184,9 +184,9 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
                       p.name,
                       p.category ?? '-',
                       '${p.stock} ${p.unit}',
-                      formatPaise(p.purchasePrice),
-                      formatPaise(p.salePrice),
-                      formatPaise(p.stock * p.purchasePrice),
+                      formatPaiseClean(p.purchasePrice),
+                      formatPaiseClean(p.salePrice),
+                      formatPaiseClean(p.stock * p.purchasePrice),
                       p.stock <= 0 ? 'Out of Stock' : (p.stock <= p.lowStockThreshold ? 'Low Stock' : 'In Stock'),
                     ])
                 .toList(),

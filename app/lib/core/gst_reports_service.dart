@@ -51,7 +51,7 @@ class GstReportsService {
   static double toRupees(int paise) => ((paise / 100.0) * 100).round() / 100.0;
 
   /// Formats currency in Rupees string (e.g. "Rs. 1,000.00").
-  static String money(int paise) => formatPaise(paise).replaceAll('₹', 'Rs.');
+  static String money(int paise) => formatPaisePdf(paise, prefixRs: true);
 
   /// Formats ISO date 'YYYY-MM-DD' into GST Portal official standard 'DD-MM-YYYY'.
   static String formatGstDate(String isoDate) {

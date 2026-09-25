@@ -161,9 +161,17 @@ class _TransactionListTabState extends State<TransactionListTab> {
                   children: [
                     _detailItem('Party / Vendor', tx.partyName ?? 'Direct Vendor'),
                     const Divider(height: 20),
-                    _detailItem('Amount', formatPaise(tx.amount),
+                    _detailItem(tx.type == TransactionType.sale ? 'Bill Total' : 'Amount', formatPaise(tx.amount),
                         valueColor: tx.isInflow ? StitchColors.success : StitchColors.error,
                         isBold: true),
+                    if (tx.paidAmount != null && tx.paidAmount! > 0 && tx.paidAmount! < tx.amount) ...[
+                      const Divider(height: 20),
+                      _detailItem('Received Amount', formatPaise(tx.paidAmount!),
+                          valueColor: StitchColors.success, isBold: true),
+                      const Divider(height: 20),
+                      _detailItem('Balance Due', formatPaise(tx.outstandingAmount ?? (tx.amount - tx.paidAmount!)),
+                          valueColor: const Color(0xFFD97706), isBold: true),
+                    ],
                     const Divider(height: 20),
                     _detailItem('Payment Mode', tx.paymentMode ?? 'Cash'),
                     const Divider(height: 20),
@@ -176,13 +184,42 @@ class _TransactionListTabState extends State<TransactionListTab> {
                 ),
               ),
               const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Close'),
+              if (tx.type == TransactionType.sale && tx.refId != null) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => InvoiceBuilderScreen(existingInvoiceId: tx.refId!),
+                            ),
+                          ).then((_) => _load());
+                        },
+                        icon: const Icon(Icons.edit_note_rounded, size: 18),
+                        label: const Text('Edit Invoice'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Close'),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+              ] else ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Close'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -212,10 +249,22 @@ class _TransactionListTabState extends State<TransactionListTab> {
     var inflow = 0;
     var outflow = 0;
     for (final t in filtered) {
-      if (t.isInflow) {
-        inflow += t.amount;
+      if (_activeFilter == 'All') {
+        if (t.type == TransactionType.sale) {
+          inflow += t.amount;
+        } else if (t.type == TransactionType.paymentIn && t.refId == null) {
+          inflow += t.amount;
+        } else if (t.type == TransactionType.purchase || t.type == TransactionType.expense) {
+          outflow += t.amount;
+        } else if (t.type == TransactionType.paymentOut && t.refId == null) {
+          outflow += t.amount;
+        }
       } else {
-        outflow += t.amount;
+        if (t.isInflow) {
+          inflow += t.amount;
+        } else {
+          outflow += t.amount;
+        }
       }
     }
 
@@ -466,16 +515,58 @@ class _TransactionListTabState extends State<TransactionListTab> {
                                           '$prefix${formatPaise(item.amount)}',
                                           style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: amountColor),
                                         ),
+                                        if (item.type == TransactionType.sale &&
+                                            item.paidAmount != null &&
+                                            item.paidAmount! > 0 &&
+                                            item.paidAmount! < item.amount) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Recv: ${formatPaise(item.paidAmount!)}',
+                                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11, color: StitchColors.success),
+                                          ),
+                                          Text(
+                                            'Due: ${formatPaise(item.outstandingAmount ?? (item.amount - item.paidAmount!))}',
+                                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11, color: Color(0xFFD97706)),
+                                          ),
+                                        ] else if (item.type == TransactionType.sale &&
+                                            (item.status == 'Unpaid' || (item.paidAmount != null && item.paidAmount == 0))) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Due: ${formatPaise(item.amount)}',
+                                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11, color: StitchColors.error),
+                                          ),
+                                        ],
                                         const SizedBox(height: 2),
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: Colors.grey.shade100,
+                                            color: item.status == 'Partially paid'
+                                                ? const Color(0xFFFEF3C7)
+                                                : (item.status == 'Paid' || item.status == 'Completed')
+                                                    ? const Color(0xFFE8F5E9)
+                                                    : item.status == 'Unpaid'
+                                                        ? const Color(0xFFFEE2E2)
+                                                        : Colors.grey.shade100,
                                             borderRadius: BorderRadius.circular(4),
+                                            border: item.status == 'Partially paid'
+                                                ? Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3))
+                                                : item.status == 'Unpaid'
+                                                    ? Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.2))
+                                                    : null,
                                           ),
                                           child: Text(
                                             item.status,
-                                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              color: item.status == 'Partially paid'
+                                                  ? const Color(0xFFB45309)
+                                                  : (item.status == 'Paid' || item.status == 'Completed')
+                                                      ? const Color(0xFF2E7D32)
+                                                      : item.status == 'Unpaid'
+                                                          ? const Color(0xFFDC2626)
+                                                          : Colors.grey.shade700,
+                                            ),
                                           ),
                                         ),
                                       ],

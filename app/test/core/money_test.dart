@@ -34,4 +34,22 @@ void main() {
       expect(formatPaise(1205), '₹12.05');
     });
   });
+
+  group('formatPaiseClean & formatPaisePdf', () {
+    test('formatPaiseClean drops currency symbol and formats cleanly', () {
+      expect(formatPaiseClean(0), '0');
+      expect(formatPaiseClean(609900), '6,099');
+      expect(formatPaiseClean(123456), '1,234.56');
+      expect(formatPaiseClean(-50000), '-500');
+    });
+
+    test('formatPaisePdf uses ASCII-safe Rs. prefix without unicode glyphs', () {
+      expect(formatPaisePdf(790000, prefixRs: true), 'Rs. 7,900');
+      expect(formatPaisePdf(-50000, prefixRs: true), '-Rs. 500');
+      expect(formatPaisePdf(1205, prefixRs: false), '12.05');
+      // Must not contain the unicode rupee glyph \u20B9
+      expect(formatPaisePdf(790000, prefixRs: true).contains('₹'), isFalse);
+      expect(formatPaiseClean(790000).contains('₹'), isFalse);
+    });
+  });
 }

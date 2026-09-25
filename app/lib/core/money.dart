@@ -52,6 +52,33 @@ String formatPaise(int paise) {
   return '${negative ? '-' : ''}₹$body';
 }
 
+/// Formats paise into plain numeric text with Indian comma grouping (e.g. "6,099" or "6,099.50"),
+/// WITHOUT any currency symbol.
+/// Safe for use in PDF tables, charts, or where "(Rs)" is already in the column header.
+String formatPaiseClean(int paise) {
+  final negative = paise < 0;
+  final abs = paise.abs();
+  final whole = abs ~/ 100;
+  final fraction = abs % 100;
+  final wholeStr = _groupThousands(whole.toString());
+  final body =
+      fraction == 0 ? wholeStr : '$wholeStr.${fraction.toString().padLeft(2, '0')}';
+  return '${negative ? '-' : ''}$body';
+}
+
+/// Formats paise for PDF output with ASCII-safe "Rs." prefix (e.g. "Rs. 7,900" or "-Rs. 500").
+/// Never emits the Unicode ₹ glyph which causes missing character tofu boxes (☒) in PDF viewers.
+String formatPaisePdf(int paise, {bool prefixRs = false}) {
+  final clean = formatPaiseClean(paise);
+  if (prefixRs) {
+    if (clean.startsWith('-')) {
+      return '-Rs. ${clean.substring(1)}';
+    }
+    return 'Rs. $clean';
+  }
+  return clean;
+}
+
 String _groupThousands(String digits) {
   if (digits.length <= 3) return digits;
   final last = digits.substring(digits.length - 3);

@@ -586,7 +586,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             MaterialPageRoute(
               builder: (_) => const TransactionListScreen(),
             ),
-          );
+          ).then((_) => _load());
         },
         onQuick: _quick,
         onRefresh: _load,
@@ -1216,16 +1216,58 @@ class _DashboardTransactionRow extends StatelessWidget {
                   '$prefix${formatPaise(transaction.amount)}',
                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: amountColor),
                 ),
+                if (transaction.type == TransactionType.sale &&
+                    transaction.paidAmount != null &&
+                    transaction.paidAmount! > 0 &&
+                    transaction.paidAmount! < transaction.amount) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Recv: ${formatPaise(transaction.paidAmount!)}',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 10.5, color: StitchColors.success),
+                  ),
+                  Text(
+                    'Due: ${formatPaise(transaction.outstandingAmount ?? (transaction.amount - transaction.paidAmount!))}',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 10.5, color: Color(0xFFD97706)),
+                  ),
+                ] else if (transaction.type == TransactionType.sale &&
+                    (transaction.status == 'Unpaid' || (transaction.paidAmount != null && transaction.paidAmount == 0))) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Due: ${formatPaise(transaction.amount)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 10.5, color: StitchColors.error),
+                  ),
+                ],
                 const SizedBox(height: 2),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
+                    color: transaction.status == 'Partially paid'
+                        ? const Color(0xFFFEF3C7)
+                        : (transaction.status == 'Paid' || transaction.status == 'Completed')
+                            ? const Color(0xFFE8F5E9)
+                            : transaction.status == 'Unpaid'
+                                ? const Color(0xFFFEE2E2)
+                                : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(4),
+                    border: transaction.status == 'Partially paid'
+                        ? Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3))
+                        : transaction.status == 'Unpaid'
+                            ? Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.2))
+                            : null,
                   ),
                   child: Text(
                     transaction.status,
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: transaction.status == 'Partially paid'
+                          ? const Color(0xFFB45309)
+                          : (transaction.status == 'Paid' || transaction.status == 'Completed')
+                              ? const Color(0xFF2E7D32)
+                              : transaction.status == 'Unpaid'
+                                  ? const Color(0xFFDC2626)
+                                  : Colors.grey.shade700,
+                    ),
                   ),
                 ),
               ],

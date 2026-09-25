@@ -190,7 +190,7 @@ class _SalesSummaryReportScreenState extends State<SalesSummaryReportScreen> {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Text('Total Sales: Rs ${formatPaise(data!.totalGrossSales)}',
+                    pw.Text('Total Sales: ${formatPaisePdf(data!.totalGrossSales, prefixRs: true)}',
                         style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
                     pw.Text('${data!.invoiceCount} Invoices Generated', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                   ],
@@ -206,10 +206,10 @@ class _SalesSummaryReportScreenState extends State<SalesSummaryReportScreen> {
                       inv.number,
                       inv.date,
                       inv.customerName ?? 'Walk-in',
-                      formatPaise(inv.taxable),
-                      formatPaise(inv.cgst + inv.sgst + inv.igst),
-                      formatPaise(inv.total),
-                      formatPaise(inv.amountPaid),
+                      formatPaiseClean(inv.taxable),
+                      formatPaiseClean(inv.cgst + inv.sgst + inv.igst),
+                      formatPaiseClean(inv.total),
+                      formatPaiseClean(inv.amountPaid),
                       inv.status,
                     ])
                 .toList(),

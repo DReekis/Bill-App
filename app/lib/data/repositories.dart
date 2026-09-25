@@ -131,12 +131,18 @@ class Repository {
     return InvoiceNumbering.format(prefix, current + 1);
   }
 
-  Future<bool> isInvoiceNumberAvailable(int businessId, String number) async {
+  Future<bool> isInvoiceNumberAvailable(int businessId, String number, {int? excludeInvoiceId}) async {
     final db = await _database;
+    final where = <String>['business_id = ?', 'LOWER(TRIM(number)) = ?'];
+    final args = <Object?>[businessId, number.trim().toLowerCase()];
+    if (excludeInvoiceId != null) {
+      where.add('id != ?');
+      args.add(excludeInvoiceId);
+    }
     final rows = await db.query('invoices',
         columns: ['id'],
-        where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
-        whereArgs: [businessId, number.trim().toLowerCase()],
+        where: where.join(' AND '),
+        whereArgs: args,
         limit: 1);
     return rows.isEmpty;
   }
@@ -607,6 +613,7 @@ class Repository {
           'mode': paymentMode ?? 'Cash',
           'date': date,
           'type': 'in',
+          'reference': 'initial_sale',
         });
         await txn.insert('ledger', {
           'business_id': businessId,
@@ -635,6 +642,303 @@ class Repository {
         action: 'create', entity: 'invoice', entityId: invoiceId, after: {'number': number, 'total': quote.total.paise});
     await _enqueueSync(businessId, entity: 'invoice', entityId: invoiceId, op: 'create', payload: number);
     return invoiceId;
+  }
+
+  Future<void> updateSale({
+    required int businessId,
+    required int invoiceId,
+    required String number,
+    required int? customerId,
+    required String customerName,
+    required String date,
+    String? dueDate,
+    required String gstType,
+    required QuoteResult quote,
+    required List<InvoiceLine> lines,
+    String? paymentMode,
+    String? notes,
+    required int amountPaid,
+  }) async {
+    final db = await _database;
+    await db.transaction<void>((txn) async {
+      // 1. Verify existence of invoice
+      final existingRows = await txn.query('invoices',
+          where: 'business_id = ? AND id = ?',
+          whereArgs: [businessId, invoiceId],
+          limit: 1);
+      if (existingRows.isEmpty) {
+        throw StateError('Invoice $invoiceId not found');
+      }
+
+      // Check number availability if changed
+      final oldNumber = existingRows.first['number'] as String;
+      if (number.trim().toLowerCase() != oldNumber.trim().toLowerCase()) {
+        final clashRows = await txn.query('invoices',
+            columns: ['id'],
+            where: 'business_id = ? AND LOWER(TRIM(number)) = ? AND id != ?',
+            whereArgs: [businessId, number.trim().toLowerCase(), invoiceId],
+            limit: 1);
+        if (clashRows.isNotEmpty) {
+          throw StateError('Invoice number $number is already taken');
+        }
+      }
+
+      // 2. Revert previous inventory deductions from stock moves
+      final oldMoves = await txn.query('stock_moves',
+          where: 'ref_type = ? AND ref_id = ?', whereArgs: ['invoice', invoiceId]);
+      for (final m in oldMoves) {
+        final prodId = m['product_id'] as int?;
+        final changeQty = (m['change_qty'] as num?)?.toDouble() ?? 0.0;
+        if (prodId != null && changeQty < 0) {
+          final qtyToRestore = -changeQty;
+          final pRows = await txn.query('products',
+              where: 'id = ?', whereArgs: [prodId], limit: 1);
+          if (pRows.isNotEmpty) {
+            final curStock = (pRows.first['stock'] as num?)?.toDouble() ?? 0.0;
+            await txn.update('products', {'stock': curStock + qtyToRestore},
+                where: 'id = ?', whereArgs: [prodId]);
+          }
+        }
+      }
+
+      // Revert old serials marked Sold under the old invoice number
+      await txn.update('serial_numbers', {'status': 'Available', 'sale_ref': null},
+          where: 'sale_ref = ?', whereArgs: [oldNumber]);
+
+      // Delete old stock moves for this invoice
+      await txn.delete('stock_moves',
+          where: 'ref_type = ? AND ref_id = ?', whereArgs: ['invoice', invoiceId]);
+
+      // 3. Revert old ledger entries for this invoice
+      await txn.delete('ledger',
+          where: 'ref_type = ? AND ref_id = ?', whereArgs: ['invoice', invoiceId]);
+
+      // 4. Remove previous linked payment records and payment ledger entries
+      final linkedPayments = await txn.query('payments',
+          where: 'invoice_id = ? AND type = ?', whereArgs: [invoiceId, 'in']);
+      for (final p in linkedPayments) {
+        final pId = p['id'] as int;
+        await txn.delete('ledger',
+            where: 'ref_type = ? AND ref_id = ?', whereArgs: ['payment', pId]);
+        await txn.delete('payments', where: 'id = ?', whereArgs: [pId]);
+      }
+
+      // 5. Delete old invoice items
+      await txn.delete('invoice_items',
+          where: 'invoice_id = ?', whereArgs: [invoiceId]);
+
+      // 6. Insert updated invoice items
+      for (final line in lines) {
+        await txn.insert('invoice_items', {
+          'invoice_id': invoiceId,
+          'product_id': line.productId,
+          'name': line.name,
+          'hsn': line.hsn,
+          'gst_rate': line.gstRate,
+          'quantity': line.quantity,
+          'price': line.price,
+          'discount': line.discount,
+          'discount_percent': line.discountPercent,
+          'taxable': line.taxable,
+          'tax': line.tax,
+        });
+      }
+
+      // 7. Apply new stock deductions, serials, batches and COGS
+      final bizRows = await txn.query('businesses',
+          columns: ['allow_negative_stock'],
+          where: 'id = ?',
+          whereArgs: [businessId],
+          limit: 1);
+      final allowNegative = (bizRows.isEmpty
+              ? 0
+              : (bizRows.first['allow_negative_stock'] as int? ?? 0)) ==
+          1;
+
+      for (var i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        if (line.productId == null) continue;
+
+        // Serial validation
+        if (line.serialNumber != null) {
+          final sRows = await txn.query('serial_numbers',
+              where: 'serial_number = ? AND status = ?',
+              whereArgs: [line.serialNumber, 'Available'],
+              limit: 1);
+          if (sRows.isEmpty) {
+            throw StateError('Serial Number ${line.serialNumber} not available');
+          }
+          await txn.update('serial_numbers', {'status': 'Sold', 'sale_ref': number},
+              where: 'serial_number = ?', whereArgs: [line.serialNumber]);
+        }
+
+        // Batch validation
+        if (line.batchNumber != null) {
+          final bRows = await txn.query('batches',
+              where: 'batch_number = ? AND product_id = ?',
+              whereArgs: [line.batchNumber, line.productId],
+              limit: 1);
+          if (bRows.isNotEmpty) {
+            final expiry = bRows.first['expiry_date'] as String?;
+            if (expiry != null && DateTime.parse(expiry).isBefore(DateTime.now())) {
+              throw StateError('Batch ${line.batchNumber} has expired');
+            }
+          }
+        }
+
+        final product = await txn.query('products',
+            where: 'id = ?', whereArgs: [line.productId], limit: 1);
+        if (product.isEmpty) continue;
+
+        double qtyToDeduct = line.quantity;
+        final convRows = await txn.query('unit_conversions',
+            where: 'product_id = ? AND from_unit = ?',
+            whereArgs: [line.productId, line.unit ?? ''],
+            limit: 1);
+        if (convRows.isNotEmpty) {
+          final multiplier = (convRows.first['multiplier'] as num).toDouble();
+          qtyToDeduct = line.quantity * multiplier;
+        }
+
+        final current = (product.first['stock'] as num?)?.toDouble() ?? 0;
+        final next = current - qtyToDeduct;
+        if (!allowNegative && next < 0) {
+          throw StateError(
+              'Not enough stock for ${line.name} — only ${_qty(current)} in stock');
+        }
+        await txn.update('products', {'stock': next},
+            where: 'id = ?', whereArgs: [line.productId]);
+        await txn.insert('stock_moves', {
+          'business_id': businessId,
+          'product_id': line.productId,
+          'change_qty': -qtyToDeduct,
+          'qty_after': next,
+          'move_type': 'sale',
+          'ref_type': 'invoice',
+          'ref_id': invoiceId,
+          'date': date,
+        });
+
+        final cost = (product.first['cost_average'] as int? ?? 0);
+        final cogs = Money(cost).multiply(line.quantity).paise;
+        await txn.insert('ledger', {
+          'business_id': businessId,
+          'date': date,
+          'account': 'cogs',
+          'debit': cogs,
+          'credit': 0,
+          'ref_type': 'invoice',
+          'ref_id': invoiceId,
+          'note': 'COGS ${line.name} x${_qty(line.quantity)}',
+        });
+      }
+
+      // 8. Insert updated ledger entries for invoice
+      await txn.insert('ledger', {
+        'business_id': businessId,
+        'date': date,
+        'account': 'income:sales',
+        'debit': 0,
+        'credit': quote.taxable.paise,
+        'ref_type': 'invoice',
+        'ref_id': invoiceId,
+        'note': 'Sales $number',
+      });
+      final taxAmount = quote.cgst.paise + quote.sgst.paise + quote.igst.paise;
+      if (taxAmount > 0) {
+        await txn.insert('ledger', {
+          'business_id': businessId,
+          'date': date,
+          'account': 'gst:output',
+          'debit': 0,
+          'credit': taxAmount,
+          'ref_type': 'invoice',
+          'ref_id': invoiceId,
+          'note': 'GST output $number',
+        });
+      }
+      final total = quote.total.paise;
+      await txn.insert('ledger', {
+        'business_id': businessId,
+        'date': date,
+        'account': 'customer:${customerId ?? 0}',
+        'debit': total,
+        'credit': 0,
+        'ref_type': 'invoice',
+        'ref_id': invoiceId,
+        'note': '$customerName — $number',
+      });
+
+      // 9. Payment ledger and payments record
+      if (amountPaid > 0) {
+        final paymentId = await txn.insert('payments', {
+          'business_id': businessId,
+          'party_type': 'customer',
+          'party_id': customerId,
+          'party_name': customerName,
+          'invoice_id': invoiceId,
+          'invoice_number': number,
+          'amount': amountPaid,
+          'mode': paymentMode ?? 'Cash',
+          'date': date,
+          'type': 'in',
+          'reference': 'initial_sale',
+        });
+        await txn.insert('ledger', {
+          'business_id': businessId,
+          'date': date,
+          'account': paymentMode == 'Cash' ? 'cash' : 'bank',
+          'debit': amountPaid,
+          'credit': 0,
+          'ref_type': 'payment',
+          'ref_id': paymentId,
+          'note': 'Payment in $number',
+        });
+        await txn.insert('ledger', {
+          'business_id': businessId,
+          'date': date,
+          'account': 'customer:${customerId ?? 0}',
+          'debit': 0,
+          'credit': amountPaid,
+          'ref_type': 'payment',
+          'ref_id': paymentId,
+          'note': 'Receipt $number',
+        });
+      }
+
+      // 10. Update invoices table record
+      final status = resolveInvoiceStatus(total: total, amountPaid: amountPaid);
+      await txn.update('invoices', {
+        'number': number,
+        'customer_id': customerId,
+        'customer_name': customerName,
+        'date': date,
+        'due_date': dueDate,
+        'gst_type': gstType,
+        'subtotal': quote.subtotal.paise,
+        'discount': quote.itemDiscount.paise + quote.invoiceDiscount.paise,
+        'discount_type': quote.lines.any((l) => l.discount.paise > 0) ? 'item' : null,
+        'taxable': quote.taxable.paise,
+        'cgst': quote.cgst.paise,
+        'sgst': quote.sgst.paise,
+        'igst': quote.igst.paise,
+        'cess': quote.cess.paise,
+        'round_off': quote.roundOff.paise,
+        'total': total,
+        'amount_paid': amountPaid,
+        'payment_mode': paymentMode,
+        'status': status,
+        'notes': notes,
+      }, where: 'id = ?', whereArgs: [invoiceId]);
+    });
+
+    await _audit(businessId,
+        action: 'update',
+        entity: 'invoice',
+        entityId: invoiceId,
+        after: {'number': number, 'total': quote.total.paise});
+    await _enqueueSync(businessId,
+        entity: 'invoice', entityId: invoiceId, op: 'update', payload: number);
   }
 
   Future<int> createPurchase({
@@ -727,6 +1031,7 @@ class Repository {
           'mode': paymentMode ?? 'Cash',
           'date': date,
           'type': 'out',
+          'reference': 'initial_purchase',
           'notes': 'Payment for $number',
         });
         await txn.insert('ledger', {
@@ -834,6 +1139,7 @@ class Repository {
         'mode': mode ?? 'Cash',
         'date': date,
         'type': isIn ? 'in' : 'out',
+        'reference': 'receipt',
       });
 
       final cashAccount = mode == 'Cash' ? 'cash' : 'bank';
@@ -3348,13 +3654,18 @@ class Repository {
         where: 'business_id = ?', whereArgs: [businessId],
         orderBy: 'date DESC, id DESC', limit: limit);
     for (final r in invs) {
+      final total = (r['total'] as num?)?.toInt() ?? 0;
+      final paid = (r['amount_paid'] as num?)?.toInt() ?? 0;
+      final due = (total - paid) > 0 ? (total - paid) : 0;
       list.add(TransactionRecord(
         id: r['id'] as int,
         type: TransactionType.sale,
         number: r['number'] as String,
         partyName: r['customer_name'] as String?,
         date: r['date'] as String,
-        amount: (r['total'] as num?)?.toInt() ?? 0,
+        amount: total,
+        paidAmount: paid,
+        outstandingAmount: due,
         status: r['status'] as String? ?? 'Finalized',
         paymentMode: r['payment_mode'] as String?,
         notes: r['notes'] as String?,
@@ -3368,6 +3679,7 @@ class Repository {
     for (final r in exps) {
       final cat = r['category'] as String? ?? 'Expense';
       final isPurchase = cat == 'Purchase';
+      final amt = (r['amount'] as num?)?.toInt() ?? 0;
       list.add(TransactionRecord(
         id: r['id'] as int,
         type: isPurchase ? TransactionType.purchase : TransactionType.expense,
@@ -3376,7 +3688,9 @@ class Repository {
             ? r['vendor'] as String
             : (r['category'] as String?),
         date: r['date'] as String,
-        amount: (r['amount'] as num?)?.toInt() ?? 0,
+        amount: amt,
+        paidAmount: amt,
+        outstandingAmount: 0,
         status: 'Paid',
         paymentMode: r['mode'] as String?,
         notes: r['description'] as String?,
@@ -3385,21 +3699,31 @@ class Repository {
     }
 
     final pays = await db.query('payments',
-        where: "business_id = ? AND invoice_id IS NULL AND (invoice_number NOT LIKE 'PUR-%' OR invoice_number IS NULL) AND (type != 'expense' OR type IS NULL)",
+        where: "business_id = ? AND (reference IS NULL OR reference != 'initial_sale') AND (reference IS NULL OR reference != 'initial_purchase') AND (invoice_number NOT LIKE 'PUR-%' OR invoice_number IS NULL) AND (type != 'expense' OR type IS NULL)",
         whereArgs: [businessId],
         orderBy: 'date DESC, id DESC', limit: limit);
     for (final r in pays) {
       final isIn = r['type'] == 'in' || r['party_type'] == 'customer';
+      final amt = (r['amount'] as num?)?.toInt() ?? 0;
+      final invNum = r['invoice_number'] as String?;
+      final displayNum = (invNum != null && invNum.isNotEmpty)
+          ? 'PAY-${r['id']} ($invNum)'
+          : (r['invoice_number'] as String? ?? 'PAY-${r['id']}');
+      final note = (r['notes'] as String?)?.isNotEmpty == true
+          ? r['notes'] as String
+          : (invNum != null && invNum.isNotEmpty ? 'Payment for $invNum' : null);
       list.add(TransactionRecord(
         id: r['id'] as int,
         type: isIn ? TransactionType.paymentIn : TransactionType.paymentOut,
-        number: r['invoice_number'] as String? ?? 'PAY-${r['id']}',
+        number: displayNum,
         partyName: r['party_name'] as String?,
         date: (r['date'] as String?) ?? todayIso(),
-        amount: (r['amount'] as num?)?.toInt() ?? 0,
+        amount: amt,
+        paidAmount: amt,
+        outstandingAmount: 0,
         status: 'Completed',
         paymentMode: r['mode'] as String?,
-        notes: r['notes'] as String?,
+        notes: note,
         refId: r['invoice_id'] as int?,
       ));
     }

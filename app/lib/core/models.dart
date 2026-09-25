@@ -1752,6 +1752,8 @@ class TransactionRecord {
     this.paymentMode,
     this.notes,
     this.refId,
+    this.paidAmount,
+    this.outstandingAmount,
   });
 
   final int id;
@@ -1760,6 +1762,8 @@ class TransactionRecord {
   final String? partyName;
   final String date;
   final int amount; // in paise
+  final int? paidAmount; // in paise
+  final int? outstandingAmount; // in paise
   final String status;
   final String? paymentMode;
   final String? notes;

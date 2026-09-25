@@ -13,6 +13,7 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
 import '../payments/payment_form.dart';
+import 'invoice_builder_screen.dart';
 import 'sales_return_form.dart';
 
 class InvoiceDetailScreen extends StatefulWidget {
@@ -326,6 +327,20 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         .then((_) => _load());
   }
 
+  Future<void> _editInvoice() async {
+    final inv = invoice;
+    if (inv == null || inv.id == null) return;
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InvoiceBuilderScreen(existingInvoiceId: inv.id),
+      ),
+    );
+    if (updated == true || mounted) {
+      _load();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final inv = invoice;
@@ -335,6 +350,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       appBar: AppBar(
         title: Text(inv?.number ?? 'Invoice'),
         actions: [
+          if (inv != null && inv.id != null)
+            IconButton(
+              tooltip: 'Edit Invoice',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: _editInvoice,
+            ),
           if (inv != null && inv.total > 0)
             IconButton(
               tooltip: 'UPI Payment QR',
@@ -438,6 +459,20 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 ),
                 const SizedBox(height: 12),
               ],
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: StitchColors.primary.withValues(alpha: 0.12),
+                    foregroundColor: StitchColors.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                  ),
+                  onPressed: _editInvoice,
+                  icon: const Icon(Icons.edit_note_rounded, size: 20),
+                  label: const Text('Edit Invoice', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                ),
+              ),
+              const SizedBox(height: 12),
               Row(children: [
                 Expanded(
                   child: OutlinedButton.icon(
