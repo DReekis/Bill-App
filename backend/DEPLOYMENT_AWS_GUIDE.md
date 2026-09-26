@@ -121,6 +121,10 @@ flowchart TD
    JWT_SECRET=billket_jwt_secret_production_ready_secure_2026
    DATABASE_URL=postgresql://billket_user:billket_secure_password_2026@postgres:5432/billket_db?schema=public
 
+   # Executive Admin Dashboard Credentials (SECURE THESE - REQUIRED)
+    ADMIN_EMAIL=admin@pricepilot.in
+    ADMIN_PASSWORD=SetYourStrongPasswordHere_2026!
+
    # Google OAuth Credentials (paste from your secure notes)
    GOOGLE_CLIENT_SECRET=your_google_client_secret_here
    GOOGLE_CLIENT_ID=your_web_server_client_id.apps.googleusercontent.com

@@ -23,10 +23,29 @@ test('Admin REST API Suite', async (t) => {
     const body = JSON.parse(res.body);
     assert.ok(body.token);
     assert.equal(body.user.role, 'owner');
-    adminToken = body.token;
   });
 
-  await t.test('POST /api/v1/admin/login authenticates admin user', async () => {
+  await t.test('POST /api/v1/admin/login rejects regular owner without admin role', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/login',
+      payload: {
+        email: adminEmail,
+        password: 'password123',
+      },
+    });
+
+    assert.equal(res.statusCode, 403);
+    const body = JSON.parse(res.body);
+    assert.ok(body.error.includes('Requires administrator privileges'));
+  });
+
+  await t.test('Elevate user to superadmin role and authenticate', async () => {
+    await prisma.user.update({
+      where: { email: adminEmail },
+      data: { role: 'superadmin' },
+    });
+
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/admin/login',
@@ -40,6 +59,8 @@ test('Admin REST API Suite', async (t) => {
     const body = JSON.parse(res.body);
     assert.ok(body.token);
     assert.equal(body.user.email, adminEmail);
+    assert.equal(body.user.role, 'superadmin');
+    adminToken = body.token;
   });
 
   await t.test('POST /api/v1/businesses creates a business for testing', async () => {
@@ -177,6 +198,55 @@ test('Admin REST API Suite', async (t) => {
     const logs = JSON.parse(res.body);
     assert.ok(Array.isArray(logs));
     assert.ok(logs.some((l: any) => l.action === 'UPDATE_SUBSCRIPTION'));
+  });
+
+  await t.test('POST /api/v1/admin/change-password validates and updates password securely', async () => {
+    // 1. Wrong current password
+    const failRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/change-password',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: {
+        currentPassword: 'wrong-password',
+        newPassword: 'BrandNewSecurePassword123!',
+      },
+    });
+    assert.equal(failRes.statusCode, 401);
+
+    // 2. Short password rejected
+    const shortRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/change-password',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: {
+        currentPassword: 'password123',
+        newPassword: 'short',
+      },
+    });
+    assert.equal(shortRes.statusCode, 400);
+
+    // 3. Valid password change
+    const successRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/change-password',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: {
+        currentPassword: 'password123',
+        newPassword: 'BrandNewSecurePassword123!',
+      },
+    });
+    assert.equal(successRes.statusCode, 200);
+
+    // 4. Authenticate with new password
+    const newLoginRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/login',
+      payload: {
+        email: adminEmail,
+        password: 'BrandNewSecurePassword123!',
+      },
+    });
+    assert.equal(newLoginRes.statusCode, 200);
   });
 
   await t.test('GET /admin and static files are served cleanly', async () => {

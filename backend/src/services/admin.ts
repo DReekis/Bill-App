@@ -1,7 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { prisma } from './db.js';
 import { processSyncItem } from './sync.js';
+import { hashPassword } from '../lib/crypto.js';
+import { config } from '../config.js';
 
 export async function getAdminOverview() {
   const [
@@ -476,4 +479,81 @@ export async function getAuditLogs(limit = 100, businessId?: string) {
   });
 
   return logs;
+}
+
+export async function bootstrapAdminUser() {
+  const adminEmail = (config.admin.email || 'admin@pricepilot.in').trim().toLowerCase();
+  const configuredPassword = config.admin.password?.trim();
+
+  // Find existing admin or superadmin
+  const existingAdmin = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { role: 'superadmin' },
+        { role: 'admin' },
+        { email: adminEmail },
+      ],
+    },
+  });
+
+  if (configuredPassword) {
+    const passwordHash = await hashPassword(configuredPassword);
+    if (existingAdmin && existingAdmin.email.toLowerCase() === adminEmail) {
+      await prisma.user.update({
+        where: { id: existingAdmin.id },
+        data: {
+          role: 'superadmin',
+          passwordHash,
+        },
+      });
+      console.log(`[Admin Security] Synchronized superadmin credentials for ${adminEmail} from ADMIN_PASSWORD.`);
+    } else {
+      await prisma.user.upsert({
+        where: { email: adminEmail },
+        update: {
+          role: 'superadmin',
+          passwordHash,
+        },
+        create: {
+          name: 'Executive SuperAdmin',
+          email: adminEmail,
+          passwordHash,
+          role: 'superadmin',
+        },
+      });
+      console.log(`[Admin Security] Provisioned secure superadmin account for ${adminEmail}.`);
+    }
+  } else if (!existingAdmin) {
+    if (config.nodeEnv === 'production') {
+      const generatedPass = crypto.randomBytes(8).toString('hex') + '!A1';
+      const passwordHash = await hashPassword(generatedPass);
+      await prisma.user.create({
+        data: {
+          name: 'Executive SuperAdmin',
+          email: adminEmail,
+          passwordHash,
+          role: 'superadmin',
+        },
+      });
+      console.warn(`****************************************************************`);
+      console.warn(`[SECURITY ALERT] No ADMIN_PASSWORD set in production!`);
+      console.warn(`One-time auto-generated SuperAdmin Credentials:`);
+      console.warn(`Email:    ${adminEmail}`);
+      console.warn(`Password: ${generatedPass}`);
+      console.warn(`Please set ADMIN_PASSWORD in your .env or change it in the dashboard!`);
+      console.warn(`****************************************************************`);
+    } else {
+      const devPass = 'Admin#2026!Secure';
+      const passwordHash = await hashPassword(devPass);
+      await prisma.user.create({
+        data: {
+          name: 'Executive SuperAdmin',
+          email: adminEmail,
+          passwordHash,
+          role: 'superadmin',
+        },
+      });
+      console.log(`[Admin Security] Provisioned dev superadmin (${adminEmail} / ${devPass}).`);
+    }
+  }
 }

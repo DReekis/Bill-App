@@ -108,7 +108,6 @@ function updateLatencyIndicator(latencyMs) {
 function initAuth() {
   const overlay = document.getElementById('auth-modal-overlay');
   const form = document.getElementById('form-admin-login');
-  const btnQuick = document.getElementById('btn-fill-dev-creds');
   const errorMsg = document.getElementById('login-error-msg');
   const btnLogout = document.getElementById('btn-logout');
 
@@ -151,29 +150,6 @@ function initAuth() {
     }
   });
 
-  btnQuick?.addEventListener('click', async () => {
-    // Fill credentials or register a local dev superadmin if none exists
-    const emailInput = document.getElementById('login-email');
-    const passInput = document.getElementById('login-password');
-    emailInput.value = 'admin@pricepilot.in';
-    passInput.value = 'admin123';
-
-    // Auto-create local admin if needed
-    try {
-      await fetch('/api/v1/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'Executive SuperAdmin',
-          email: 'admin@pricepilot.in',
-          password: 'admin123',
-        }),
-      });
-    } catch {}
-
-    form.requestSubmit();
-  });
-
   btnLogout?.addEventListener('click', () => {
     state.token = null;
     state.user = null;
@@ -201,6 +177,74 @@ function initAuth() {
       if (state.activeView === 'health') loadCurrentView();
     } catch (err) {
       showToast(err.message, 'error');
+    }
+  });
+
+  // Change Password Modal Handlers
+  const pwdModal = document.getElementById('modal-change-password');
+  const btnOpenPwd = document.getElementById('btn-open-change-pwd');
+  const btnClosePwd = document.getElementById('btn-close-pwd-modal');
+  const btnCancelPwd = document.getElementById('btn-cancel-pwd');
+  const formChangePwd = document.getElementById('form-change-password');
+  const pwdErrorMsg = document.getElementById('pwd-error-msg');
+
+  function togglePwdModal(open) {
+    if (pwdModal) pwdModal.style.display = open ? 'flex' : 'none';
+    if (!open && formChangePwd) {
+      formChangePwd.reset();
+      if (pwdErrorMsg) pwdErrorMsg.style.display = 'none';
+    }
+  }
+
+  btnOpenPwd?.addEventListener('click', () => {
+    dropdown?.classList.remove('active');
+    togglePwdModal(true);
+  });
+
+  btnClosePwd?.addEventListener('click', () => togglePwdModal(false));
+  btnCancelPwd?.addEventListener('click', () => togglePwdModal(false));
+
+  formChangePwd?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const currentPassword = document.getElementById('current-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-new-password').value;
+
+    if (newPassword !== confirmPassword) {
+      if (pwdErrorMsg) {
+        pwdErrorMsg.textContent = 'New passwords do not match';
+        pwdErrorMsg.style.display = 'block';
+      }
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      if (pwdErrorMsg) {
+        pwdErrorMsg.textContent = 'New password must be at least 8 characters long';
+        pwdErrorMsg.style.display = 'block';
+      }
+      return;
+    }
+
+    const submitBtn = document.getElementById('btn-submit-pwd');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Updating...';
+
+    try {
+      await api('/api/v1/admin/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      showToast('Admin password updated successfully!');
+      togglePwdModal(false);
+    } catch (err) {
+      if (pwdErrorMsg) {
+        pwdErrorMsg.textContent = err.message || 'Failed to update password';
+        pwdErrorMsg.style.display = 'block';
+      }
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Save New Password';
     }
   });
 }

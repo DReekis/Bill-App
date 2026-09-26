@@ -33,6 +33,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://billket_user:billket_secure_password_2026@postgres:5432/billket_db?schema=public
       JWT_SECRET: ${JWT_SECRET:-billket_jwt_secret_production_ready_secure_2026}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@pricepilot.in}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_ANDROID_CLIENT_ID: ${GOOGLE_ANDROID_CLIENT_ID}

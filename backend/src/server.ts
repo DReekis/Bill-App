@@ -6,6 +6,7 @@ import path from 'path';
 import { z } from 'zod';
 import { config } from './config.js';
 import { verifyAccessToken } from './lib/jwt.js';
+import { hashPassword, verifyPassword } from './lib/crypto.js';
 import { registerUser, loginUser, googleAuth, phoneAuth } from './services/auth.js';
 import { calculateInvoiceTotals } from './services/ledger.js';
 import { enqueueSync, pullSyncChanges } from './services/sync.js';
@@ -23,7 +24,9 @@ import {
   getSyncQueueInspector,
   retrySyncQueueItem,
   getAuditLogs,
+  bootstrapAdminUser,
 } from './services/admin.js';
+import { adminLoginLimiter } from './lib/rate_limiter.js';
 import {
   uploadTenantBackup,
   listTenantBackups,
@@ -1415,8 +1418,29 @@ app.delete('/api/v1/backup/:id', async (request, reply) => {
 // Phase 6: Web Admin Panel REST API Suite
 // ==========================================
 
+function requireAdminRole(request: any, reply: any): boolean {
+  const user = request.user;
+  if (!user || (user.role !== 'admin' && user.role !== 'superadmin')) {
+    reply.code(403).send({ error: 'Access denied: Requires administrator privileges' });
+    return false;
+  }
+  return true;
+}
+
 // Admin Authentication Login
 app.post('/api/v1/admin/login', async (request, reply) => {
+  const clientIp =
+    (request.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+    request.ip ||
+    'unknown';
+
+  const blockCheck = adminLoginLimiter.isBlocked(clientIp);
+  if (blockCheck.blocked) {
+    return reply.code(429).send({
+      error: `Too many failed login attempts. Temporarily locked out for ${blockCheck.remainingSeconds ?? 900} seconds.`,
+    });
+  }
+
   const parsed = authLoginSchema.safeParse(request.body);
   if (!parsed.success) {
     return reply.code(400).send({ error: 'Invalid login payload' });
@@ -1424,21 +1448,73 @@ app.post('/api/v1/admin/login', async (request, reply) => {
 
   try {
     const result = await loginUser(parsed.data);
-    if (result.user.role !== 'owner' && result.user.role !== 'admin') {
+    if (result.user.role !== 'admin' && result.user.role !== 'superadmin') {
+      adminLoginLimiter.recordFailure(clientIp);
       return reply.code(403).send({ error: 'Access denied: Requires administrator privileges' });
     }
+    adminLoginLimiter.recordSuccess(clientIp);
     return reply.send(result);
   } catch (error) {
-    return reply.code(401).send({ error: 'Invalid email or password' });
+    const res = adminLoginLimiter.recordFailure(clientIp);
+    if (res.blocked) {
+      return reply.code(429).send({
+        error: `Too many failed login attempts. Account temporarily locked for ${res.remainingSeconds} seconds.`,
+      });
+    }
+    return reply.code(401).send({
+      error: `Invalid email or password (${res.remainingAttempts} attempts remaining)`,
+    });
   }
+});
+
+// Admin Secure Password Change
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters long'),
+});
+
+app.post('/api/v1/admin/change-password', async (request, reply) => {
+  if (!requireAdminRole(request, reply)) return;
+  const user = (request as any).user;
+
+  const parsed = changePasswordSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'Invalid payload', details: parsed.error.issues });
+  }
+
+  const dbUser = await prisma.user.findUnique({ where: { id: user.sub } });
+  if (!dbUser) {
+    return reply.code(404).send({ error: 'User not found' });
+  }
+
+  const valid = await verifyPassword(parsed.data.currentPassword, dbUser.passwordHash);
+  if (!valid) {
+    return reply.code(401).send({ error: 'Current password does not match' });
+  }
+
+  const newHash = await hashPassword(parsed.data.newPassword);
+  await prisma.user.update({
+    where: { id: user.sub },
+    data: { passwordHash: newHash },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorId: user.sub,
+      action: 'ADMIN_CHANGE_PASSWORD',
+      entity: 'User',
+      entityId: user.sub,
+      after: JSON.stringify({ message: 'Admin password changed securely' }),
+    },
+  });
+
+  return reply.send({ success: true, message: 'Password changed successfully' });
 });
 
 // Admin Self Profile
 app.get('/api/v1/admin/me', async (request, reply) => {
+  if (!requireAdminRole(request, reply)) return;
   const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
   const dbUser = await prisma.user.findUnique({
     where: { id: user.sub },
     select: { id: true, name: true, email: true, role: true, createdAt: true },
@@ -1448,30 +1524,21 @@ app.get('/api/v1/admin/me', async (request, reply) => {
 
 // Admin Overview Metrics
 app.get('/api/v1/admin/overview', async (request, reply) => {
-  const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
+  if (!requireAdminRole(request, reply)) return;
   const overview = await getAdminOverview();
   return reply.send(overview);
 });
 
 // Businesses Oversight
 app.get('/api/v1/admin/businesses', async (request, reply) => {
-  const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
+  if (!requireAdminRole(request, reply)) return;
   const search = (request.query as any)?.search as string | undefined;
   const list = await listAdminBusinesses(search);
   return reply.send(list);
 });
 
 app.get('/api/v1/admin/businesses/:id', async (request, reply) => {
-  const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
+  if (!requireAdminRole(request, reply)) return;
   const { id } = request.params as { id: string };
   const detail = await getAdminBusinessDetail(id);
   if (!detail) {
@@ -1482,10 +1549,8 @@ app.get('/api/v1/admin/businesses/:id', async (request, reply) => {
 
 // Subscription & License Gate
 app.patch('/api/v1/admin/businesses/:id/subscription', async (request, reply) => {
+  if (!requireAdminRole(request, reply)) return;
   const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
   const { id } = request.params as { id: string };
   const subSchema = z.object({
     tier: z.enum(['free', 'trial', 'pro', 'enterprise']).optional(),
@@ -1508,22 +1573,17 @@ app.patch('/api/v1/admin/businesses/:id/subscription', async (request, reply) =>
 
 // Users Management
 app.get('/api/v1/admin/users', async (request, reply) => {
-  const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
+  if (!requireAdminRole(request, reply)) return;
   const users = await listAdminUsers();
   return reply.send(users);
 });
 
 app.patch('/api/v1/admin/users/:id/role', async (request, reply) => {
+  if (!requireAdminRole(request, reply)) return;
   const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
   const { id } = request.params as { id: string };
   const roleSchema = z.object({
-    role: z.enum(['owner', 'admin', 'manager', 'salesman', 'cashier', 'accountant', 'ca']),
+    role: z.enum(['owner', 'admin', 'manager', 'salesman', 'cashier', 'accountant', 'ca', 'superadmin']),
   });
   const parsed = roleSchema.safeParse(request.body);
   if (!parsed.success) {
@@ -1540,20 +1600,15 @@ app.patch('/api/v1/admin/users/:id/role', async (request, reply) => {
 
 // System Health & Telemetry
 app.get('/api/v1/admin/health', async (request, reply) => {
-  const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
+  if (!requireAdminRole(request, reply)) return;
   const health = await getSystemHealthTelemetry();
   return reply.send(health);
 });
 
 // Cloud Backups
 app.post('/api/v1/admin/backups', async (request, reply) => {
+  if (!requireAdminRole(request, reply)) return;
   const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
   try {
     const backup = await createDatabaseBackup(user.sub);
     return reply.code(201).send(backup);
@@ -1563,20 +1618,14 @@ app.post('/api/v1/admin/backups', async (request, reply) => {
 });
 
 app.get('/api/v1/admin/backups', async (request, reply) => {
-  const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
+  if (!requireAdminRole(request, reply)) return;
   const backups = await listDatabaseBackups();
   return reply.send(backups);
 });
 
 // Download Backup File
 app.get('/api/v1/admin/backups/:filename', async (request, reply) => {
-  const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
+  if (!requireAdminRole(request, reply)) return;
   const { filename } = request.params as { filename: string };
   // Security check: filename must match backup-*.db without directory traversal
   if (!/^backup-[\w.-]+\.db$/.test(filename)) {
@@ -1594,10 +1643,7 @@ app.get('/api/v1/admin/backups/:filename', async (request, reply) => {
 
 // Sync Queue Inspector & Retry
 app.get('/api/v1/admin/sync/queue', async (request, reply) => {
-  const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
+  if (!requireAdminRole(request, reply)) return;
   const status = (request.query as any)?.status as string | undefined;
   const limit = Math.min(Number((request.query as any)?.limit ?? 100), 500);
   const items = await getSyncQueueInspector(status, limit);
@@ -1605,10 +1651,7 @@ app.get('/api/v1/admin/sync/queue', async (request, reply) => {
 });
 
 app.post('/api/v1/admin/sync/retry/:id', async (request, reply) => {
-  const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
+  if (!requireAdminRole(request, reply)) return;
   const { id } = request.params as { id: string };
   try {
     const item = await retrySyncQueueItem(id);
@@ -1620,10 +1663,7 @@ app.post('/api/v1/admin/sync/retry/:id', async (request, reply) => {
 
 // Audit Logs
 app.get('/api/v1/admin/audit-logs', async (request, reply) => {
-  const user = (request as any).user;
-  if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-    return reply.code(403).send({ error: 'Requires admin or owner role' });
-  }
+  if (!requireAdminRole(request, reply)) return;
   const businessId = (request.query as any)?.businessId as string | undefined;
   const limit = Math.min(Number((request.query as any)?.limit ?? 100), 500);
   const logs = await getAuditLogs(limit, businessId);
@@ -1632,6 +1672,7 @@ app.get('/api/v1/admin/audit-logs', async (request, reply) => {
 
 const start = async () => {
   try {
+    await bootstrapAdminUser();
     await app.listen({ port: config.port, host: '0.0.0.0' });
     app.log.info(`Server listening at http://localhost:${config.port}`);
   } catch (error) {
@@ -1643,3 +1684,4 @@ const start = async () => {
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   start();
 }
+
