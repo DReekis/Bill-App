@@ -244,10 +244,18 @@ async function handleUpsert(entity, entityId, businessId, data) {
             const existing = await prisma.invoice.findFirst({
                 where: { businessId, number },
             });
+            let verifiedCustomerId = null;
+            const rawCustId = data.customer_id ? String(data.customer_id) : (data.customerId ? String(data.customerId) : null);
+            if (rawCustId) {
+                const cust = await prisma.customer.findUnique({ where: { id: rawCustId } });
+                if (cust) {
+                    verifiedCustomerId = cust.id;
+                }
+            }
             const invoiceData = {
                 businessId,
                 number,
-                customerId: data.customer_id ? String(data.customer_id) : (data.customerId ?? null),
+                customerId: verifiedCustomerId,
                 customerName: data.customer_name ?? data.customerName ?? 'Walk-in Customer',
                 date: data.date ? new Date(data.date) : new Date(),
                 dueDate: data.due_date ? new Date(data.due_date) : (data.dueDate ? new Date(data.dueDate) : null),
@@ -377,6 +385,14 @@ async function handleUpsert(entity, entityId, businessId, data) {
         }
         case 'cheque':
         case 'cheques': {
+            let verifiedBankAccountId = null;
+            const rawBankId = data.bank_account_id ? String(data.bank_account_id) : (data.bankAccountId ? String(data.bankAccountId) : null);
+            if (rawBankId) {
+                const bank = await prisma.bankAccount.findUnique({ where: { id: rawBankId } });
+                if (bank) {
+                    verifiedBankAccountId = bank.id;
+                }
+            }
             await prisma.cheque.upsert({
                 where: { id: entityId },
                 create: {
@@ -384,7 +400,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
                     businessId,
                     chequeNumber: data.cheque_number ?? data.chequeNumber ?? 'CHQ',
                     bankName: data.bank_name ?? data.bankName ?? null,
-                    bankAccountId: data.bank_account_id ? String(data.bank_account_id) : (data.bankAccountId ?? null),
+                    bankAccountId: verifiedBankAccountId,
                     partyType: data.party_type ?? data.partyType ?? null,
                     partyId: data.party_id ? String(data.party_id) : (data.partyId ?? null),
                     partyName: data.party_name ?? data.partyName ?? null,

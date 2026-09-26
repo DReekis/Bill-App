@@ -30,7 +30,7 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
   final prefix = TextEditingController(text: 'INV');
   String? industry;
   bool taxRegistered = true;
-  bool loadSample = true;
+  bool loadSample = false;
 
   bool fetchingGst = false;
   String? gstStatusMessage;
@@ -131,13 +131,14 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
       if (session.token != null && session.token!.isNotEmpty) {
         final client = ApiClient()..setToken(session.token!);
         try {
-          await BusinessService(client).createBusiness(
+          final cloudBiz = await BusinessService(client).createBusiness(
             name: business.name,
             ownerName: business.ownerName,
             gstin: business.gstin,
             city: business.city,
             state: business.state,
-          ).timeout(const Duration(seconds: 2));
+          ).timeout(const Duration(seconds: 4));
+          await session.setCloudBusinessId(cloudBiz.id);
         } catch (_) {
           if (kDebugMode) {
             debugPrint('Backend business creation unavailable; local flow continues.');

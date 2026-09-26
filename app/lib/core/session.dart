@@ -71,6 +71,7 @@ class Session extends ChangeNotifier {
   String? cloudName;
   String? cloudAvatarUrl;
   String? cloudProvider;
+  String? cloudBusinessId;
 
   bool get isCloudLinked => token != null && token!.isNotEmpty && (cloudEmail != null && cloudEmail!.isNotEmpty);
   /// API key for gstincheck.co.in — free signup at https://gstincheck.co.in
@@ -159,6 +160,7 @@ class Session extends ChangeNotifier {
   static const _kCloudName = 'session.cloudName';
   static const _kCloudAvatarUrl = 'session.cloudAvatarUrl';
   static const _kCloudProvider = 'session.cloudProvider';
+  static const _kCloudBusinessId = 'session.cloudBusinessId';
 
   bool get hasPin => (_prefs?.getString(_kPinHash) ?? '').isNotEmpty;
   bool get locked => _locked && hasPin;
@@ -182,6 +184,7 @@ class Session extends ChangeNotifier {
     cloudName = _prefs!.getString(_kCloudName);
     cloudAvatarUrl = _prefs!.getString(_kCloudAvatarUrl);
     cloudProvider = _prefs!.getString(_kCloudProvider);
+    cloudBusinessId = _prefs!.getString(_kCloudBusinessId);
 
     if (flagSecureEnabled) {
       SecurityService.instance.setFlagSecure(true);
@@ -197,6 +200,9 @@ class Session extends ChangeNotifier {
     cloudName = result.user.displayName;
     cloudAvatarUrl = result.user.photoUrl;
     cloudProvider = result.user.provider.name;
+    if (result.businessId != null && result.businessId!.isNotEmpty) {
+      cloudBusinessId = result.businessId;
+    }
 
     notifyListeners();
 
@@ -210,6 +216,18 @@ class Session extends ChangeNotifier {
         await _prefs!.setString(_kCloudAvatarUrl, result.user.photoUrl!);
       }
       await _prefs!.setString(_kCloudProvider, result.user.provider.name);
+      if (result.businessId != null && result.businessId!.isNotEmpty) {
+        await _prefs!.setString(_kCloudBusinessId, result.businessId!);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> setCloudBusinessId(String id) async {
+    cloudBusinessId = id;
+    notifyListeners();
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
+      await _prefs!.setString(_kCloudBusinessId, id);
     } catch (_) {}
   }
 
@@ -220,6 +238,7 @@ class Session extends ChangeNotifier {
     cloudName = null;
     cloudAvatarUrl = null;
     cloudProvider = null;
+    cloudBusinessId = null;
 
     notifyListeners();
 
@@ -231,6 +250,7 @@ class Session extends ChangeNotifier {
       await _prefs!.remove(_kCloudName);
       await _prefs!.remove(_kCloudAvatarUrl);
       await _prefs!.remove(_kCloudProvider);
+      await _prefs!.remove(_kCloudBusinessId);
     } catch (_) {}
   }
 

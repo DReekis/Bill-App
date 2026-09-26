@@ -12,9 +12,10 @@ class SyncService {
     return await _client.ping();
   }
 
-  Future<void> push(SyncRecord record) async {
+  Future<void> push(SyncRecord record, {String? cloudBusinessId}) async {
+    final businessId = cloudBusinessId ?? record.businessId?.toString() ?? '1';
     final response = await _client.post('/api/v1/sync/push', {
-      'businessId': record.businessId.toString(),
+      'businessId': businessId,
       'entity': record.entity,
       'entityId': record.entityId.toString(),
       'op': record.op.isEmpty ? 'upsert' : record.op,
@@ -33,17 +34,17 @@ class SyncService {
     }
   }
 
-  Future<void> pushBatch(List<SyncRecord> records) async {
+  Future<void> pushBatch(List<SyncRecord> records, {String? cloudBusinessId}) async {
     if (records.isEmpty) return;
     if (records.length == 1) {
-      await push(records.first);
+      await push(records.first, cloudBusinessId: cloudBusinessId);
       return;
     }
 
     final payload = {
       'items': records
           .map((r) => {
-                'businessId': r.businessId.toString(),
+                'businessId': cloudBusinessId ?? r.businessId?.toString() ?? '1',
                 'entity': r.entity,
                 'entityId': r.entityId.toString(),
                 'op': r.op.isEmpty ? 'upsert' : r.op,
@@ -66,7 +67,7 @@ class SyncService {
   }
 
 
-  Future<Map<String, dynamic>> pull(int businessId, {String? since, int limit = 100}) async {
+  Future<Map<String, dynamic>> pull(dynamic businessId, {String? since, int limit = 100}) async {
     final query = since != null && since.isNotEmpty ? '?since=$since&limit=$limit' : '?limit=$limit';
     final response = await _client.get(
       '/api/v1/sync/pull$query',

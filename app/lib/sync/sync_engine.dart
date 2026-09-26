@@ -83,7 +83,10 @@ class SyncEngine extends ChangeNotifier {
       if (session.token != null) {
         apiClient.setToken(session.token);
       }
-      if (session.businessId != null) {
+      final cloudBizId = session.cloudBusinessId;
+      if (cloudBizId != null && cloudBizId.isNotEmpty) {
+        apiClient.setBusinessId(cloudBizId);
+      } else if (session.businessId != null) {
         apiClient.setBusinessId(session.businessId.toString());
       }
 
@@ -125,7 +128,7 @@ class SyncEngine extends ChangeNotifier {
         }
 
         try {
-          await _service.pushBatch(enrichedChunk);
+          await _service.pushBatch(enrichedChunk, cloudBusinessId: cloudBizId);
           for (final rec in enrichedChunk) {
             await Repository.instance.markSyncSuccess(rec.id!);
             pushedCount++;
@@ -134,7 +137,7 @@ class SyncEngine extends ChangeNotifier {
           // Fallback to sequential to isolate the failing record
           for (final rec in enrichedChunk) {
             try {
-              await _service.push(rec);
+              await _service.push(rec, cloudBusinessId: cloudBizId);
               await Repository.instance.markSyncSuccess(rec.id!);
               pushedCount++;
             } catch (singleError) {
@@ -148,12 +151,12 @@ class SyncEngine extends ChangeNotifier {
       }
 
       // 3. Pull Phase: Fetch cloud changes created or updated since last sync
-      final bizId = session.businessId;
-      if (bizId != null) {
+      final pullBizId = (cloudBizId != null && cloudBizId.isNotEmpty) ? cloudBizId : session.businessId?.toString();
+      if (pullBizId != null) {
         final prefs = await SharedPreferences.getInstance();
         final lastSyncIso = prefs.getString(_kLastSyncTimeKey);
 
-        final pullResult = await _service.pull(bizId, since: lastSyncIso);
+        final pullResult = await _service.pull(pullBizId, since: lastSyncIso);
         final changes = pullResult['changes'] as List<Map<String, dynamic>>;
 
         for (final change in changes) {

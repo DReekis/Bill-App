@@ -46,7 +46,10 @@ class GoogleAuthConfig {
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        return androidClientId;
+        // On Android, Google Play Services auto-discovers the client ID using
+        // package name + SHA-1 certificate. Passing an Android client ID as
+        // clientId to initialize() causes error 16 (Account reauth failed).
+        return null;
       case TargetPlatform.iOS:
         return iosClientId;
       case TargetPlatform.windows:

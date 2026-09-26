@@ -1135,6 +1135,54 @@ app.get('/api/v1/ledger', async (request) => {
         orderBy: { date: 'asc' },
     });
 });
+async function resolveBusinessIdForSync(request, rawBusinessId) {
+    const user = request.user;
+    // 1. If rawBusinessId is provided and is a valid non-numeric CUID that exists in DB
+    if (rawBusinessId && !/^\d+$/.test(rawBusinessId) && rawBusinessId !== 'null' && rawBusinessId !== 'undefined') {
+        const exists = await prisma.business.findUnique({ where: { id: rawBusinessId } });
+        if (exists)
+            return exists.id;
+    }
+    // 2. If token payload has businessId and it exists
+    if (user?.businessId) {
+        const exists = await prisma.business.findUnique({ where: { id: user.businessId } });
+        if (exists)
+            return exists.id;
+    }
+    // 3. If authenticated user exists, look up their businesses
+    if (user?.sub) {
+        const dbUser = await prisma.user.findUnique({
+            where: { id: user.sub },
+            include: { businesses: true },
+        });
+        if (dbUser?.businesses && dbUser.businesses.length > 0) {
+            return dbUser.businesses[0].id;
+        }
+        // If user has no business, auto-create one for their tenant space
+        if (dbUser) {
+            const created = await prisma.business.create({
+                data: {
+                    name: `${dbUser.name}'s Business`,
+                    ownerName: dbUser.name,
+                    email: dbUser.email,
+                    ownerId: dbUser.id,
+                },
+            });
+            return created.id;
+        }
+    }
+    // 4. Fallback: if rawBusinessId matches any business in DB
+    if (rawBusinessId) {
+        const byId = await prisma.business.findUnique({ where: { id: rawBusinessId } });
+        if (byId)
+            return byId.id;
+    }
+    // 5. Fallback: first business in DB or throw
+    const first = await prisma.business.findFirst();
+    if (first)
+        return first.id;
+    throw new Error('No business found or could be resolved');
+}
 // Sync Push (Batch or Single)
 app.post('/api/v1/sync/push', async (request, reply) => {
     const queueItemSchema = z.object({
@@ -1157,7 +1205,8 @@ app.post('/api/v1/sync/push', async (request, reply) => {
         }
         const records = [];
         for (const item of parsed.data) {
-            const rec = await enqueueSync(item);
+            const resolvedBizId = await resolveBusinessIdForSync(request, item.businessId);
+            const rec = await enqueueSync({ ...item, businessId: resolvedBizId });
             records.push(rec);
         }
         return reply.code(202).send({ accepted: true, count: records.length, records });
@@ -1167,7 +1216,8 @@ app.post('/api/v1/sync/push', async (request, reply) => {
     if (batchParsed.success) {
         const records = [];
         for (const item of batchParsed.data.items) {
-            const rec = await enqueueSync(item);
+            const resolvedBizId = await resolveBusinessIdForSync(request, item.businessId);
+            const rec = await enqueueSync({ ...item, businessId: resolvedBizId });
             records.push(rec);
         }
         return reply.code(202).send({ accepted: true, count: records.length, records });
@@ -1177,8 +1227,9 @@ app.post('/api/v1/sync/push', async (request, reply) => {
     if (!parsed.success) {
         return reply.code(400).send({ error: 'Invalid sync payload', details: parsed.error.issues });
     }
+    const resolvedBizId = await resolveBusinessIdForSync(request, parsed.data.businessId);
     const record = await enqueueSync({
-        businessId: parsed.data.businessId,
+        businessId: resolvedBizId,
         entity: parsed.data.entity,
         entityId: parsed.data.entityId,
         op: parsed.data.op,
@@ -1189,9 +1240,13 @@ app.post('/api/v1/sync/push', async (request, reply) => {
 });
 // Sync Pull (Delta cursor)
 app.get('/api/v1/sync/pull', async (request, reply) => {
-    const businessId = String(request.headers['x-business-id'] ?? request.query?.businessId ?? '');
-    if (!businessId) {
-        return reply.code(400).send({ error: 'Missing x-business-id header' });
+    const rawBusinessId = String(request.headers['x-business-id'] ?? request.query?.businessId ?? '');
+    let businessId;
+    try {
+        businessId = await resolveBusinessIdForSync(request, rawBusinessId);
+    }
+    catch (err) {
+        return reply.code(400).send({ error: 'Missing or unresolvable business ID' });
     }
     const since = request.query?.since;
     const limit = Math.min(Number(request.query?.limit ?? 100), 500);
@@ -1203,11 +1258,15 @@ app.get('/api/v1/sync/pull', async (request, reply) => {
 // ==========================================
 // Upload encrypted backup snapshot
 app.post('/api/v1/backup/upload', async (request, reply) => {
-    const businessId = String(request.headers['x-business-id'] ??
+    const rawBusinessId = String(request.headers['x-business-id'] ??
         request.body?.businessId ??
         request.user?.businessId ??
         '');
-    if (!businessId) {
+    let businessId;
+    try {
+        businessId = await resolveBusinessIdForSync(request, rawBusinessId);
+    }
+    catch {
         return reply.code(400).send({ error: 'Missing businessId in request headers or body' });
     }
     const uploadSchema = z.object({
@@ -1235,11 +1294,15 @@ app.post('/api/v1/backup/upload', async (request, reply) => {
 });
 // List tenant backups
 app.get('/api/v1/backup/list', async (request, reply) => {
-    const businessId = String(request.headers['x-business-id'] ??
+    const rawBusinessId = String(request.headers['x-business-id'] ??
         request.query?.businessId ??
         request.user?.businessId ??
         '');
-    if (!businessId) {
+    let businessId;
+    try {
+        businessId = await resolveBusinessIdForSync(request, rawBusinessId);
+    }
+    catch {
         return reply.code(400).send({ error: 'Missing businessId' });
     }
     const backups = await listTenantBackups(businessId);
