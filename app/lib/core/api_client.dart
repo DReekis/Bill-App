@@ -7,7 +7,7 @@ import 'auth_service.dart';
 class ApiClient {
   static const String defaultBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:4000',
+    defaultValue: 'http://43.204.237.49',
   );
 
   ApiClient({String? baseUrl}) : _baseUrl = _cachedBaseUrl ?? baseUrl ?? defaultBaseUrl {
