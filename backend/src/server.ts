@@ -6,7 +6,7 @@ import path from 'path';
 import { z } from 'zod';
 import { config } from './config.js';
 import { verifyAccessToken } from './lib/jwt.js';
-import { registerUser, loginUser } from './services/auth.js';
+import { registerUser, loginUser, googleAuth, phoneAuth } from './services/auth.js';
 import { calculateInvoiceTotals } from './services/ledger.js';
 import { enqueueSync, pullSyncChanges } from './services/sync.js';
 import { prisma } from './services/db.js';
@@ -24,6 +24,12 @@ import {
   retrySyncQueueItem,
   getAuditLogs,
 } from './services/admin.js';
+import {
+  uploadTenantBackup,
+  listTenantBackups,
+  getTenantBackup,
+  deleteTenantBackup,
+} from './services/backup.js';
 
 export const app = Fastify({ logger: config.nodeEnv !== 'production' });
 
@@ -330,6 +336,67 @@ app.post('/api/v1/auth/login', async (request, reply) => {
       return reply.code(401).send({ error: 'Invalid credentials' });
     }
     return reply.code(500).send({ error: 'Login failed' });
+  }
+});
+
+app.post('/api/v1/auth/google', async (request, reply) => {
+  const body = request.body as {
+    email?: string;
+    name?: string;
+    avatarUrl?: string;
+    idToken?: string;
+    businessName?: string;
+  };
+
+  // Either an idToken or (email and name in dev/test) is required
+  if (!body?.idToken && (!body?.email || !body?.name)) {
+    return reply.code(400).send({ error: 'Valid Google idToken or credentials required' });
+  }
+
+  try {
+    const result = await googleAuth({
+      email: body?.email,
+      name: body?.name,
+      avatarUrl: body?.avatarUrl,
+      idToken: body?.idToken,
+      googleId: body?.idToken?.slice(0, 32),
+      businessName: body?.businessName,
+    });
+    return reply.code(200).send(result);
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === 'INVALID_GOOGLE_TOKEN' ||
+        error.message === 'UNAUTHORIZED_CLIENT_AUDIENCE' ||
+        error.message === 'INVALID_TOKEN_ISSUER' ||
+        error.message === 'UNVERIFIED_GOOGLE_EMAIL' ||
+        error.message === 'MISSING_GOOGLE_ID_TOKEN'
+      ) {
+        return reply.code(401).send({ error: error.message });
+      }
+    }
+    return reply.code(500).send({ error: 'Google authentication failed' });
+  }
+});
+
+app.post('/api/v1/auth/phone/verify', async (request, reply) => {
+  const body = request.body as { phone?: string; otp?: string; name?: string };
+  if (!body?.phone || !body?.otp) {
+    return reply.code(400).send({ error: 'Phone and OTP are required' });
+  }
+
+  try {
+    const result = await phoneAuth({
+      phone: body.phone,
+      otp: body.otp,
+      name: body.name,
+    });
+    return reply.code(200).send(result);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'INVALID_OTP') {
+      return reply.code(401).send({ error: 'Invalid or expired OTP' });
+    }
+    return reply.code(500).send({ error: 'Phone verification failed' });
   }
 });
 
@@ -1183,8 +1250,39 @@ app.post('/api/v1/sync/push', async (request, reply) => {
     idempotencyKey: z.string().optional().nullable(),
   });
 
-  const parsed = queueItemSchema.safeParse(request.body);
+  const batchSchema = z.object({
+    items: z.array(queueItemSchema).min(1),
+  });
 
+  const rawBody = request.body;
+
+  // 1. Direct array payload: [ {...}, {...} ]
+  if (Array.isArray(rawBody)) {
+    const parsed = z.array(queueItemSchema).safeParse(rawBody);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'Invalid batch sync payload', details: parsed.error.issues });
+    }
+    const records = [];
+    for (const item of parsed.data) {
+      const rec = await enqueueSync(item);
+      records.push(rec);
+    }
+    return reply.code(202).send({ accepted: true, count: records.length, records });
+  }
+
+  // 2. Object batch payload: { items: [ {...}, {...} ] }
+  const batchParsed = batchSchema.safeParse(rawBody);
+  if (batchParsed.success) {
+    const records = [];
+    for (const item of batchParsed.data.items) {
+      const rec = await enqueueSync(item);
+      records.push(rec);
+    }
+    return reply.code(202).send({ accepted: true, count: records.length, records });
+  }
+
+  // 3. Single record payload fallback
+  const parsed = queueItemSchema.safeParse(rawBody);
   if (!parsed.success) {
     return reply.code(400).send({ error: 'Invalid sync payload', details: parsed.error.issues });
   }
@@ -1198,8 +1296,9 @@ app.post('/api/v1/sync/push', async (request, reply) => {
     idempotencyKey: parsed.data.idempotencyKey ?? null,
   });
 
-  return reply.code(202).send({ accepted: true, record });
+  return reply.code(202).send({ accepted: true, record, records: [record] });
 });
+
 
 // Sync Pull (Delta cursor)
 app.get('/api/v1/sync/pull', async (request, reply) => {
@@ -1212,6 +1311,103 @@ app.get('/api/v1/sync/pull', async (request, reply) => {
   const limit = Math.min(Number((request.query as any)?.limit ?? 100), 500);
 
   const result = await pullSyncChanges(businessId, since, limit);
+  return reply.send(result);
+});
+
+// ==========================================
+// Phase 3: Tenant Cloud Backup & Restore Engine
+// ==========================================
+
+// Upload encrypted backup snapshot
+app.post('/api/v1/backup/upload', async (request, reply) => {
+  const businessId = String(
+    request.headers['x-business-id'] ??
+    (request.body as any)?.businessId ??
+    (request as any).user?.businessId ??
+    ''
+  );
+  if (!businessId) {
+    return reply.code(400).send({ error: 'Missing businessId in request headers or body' });
+  }
+
+  const uploadSchema = z.object({
+    base64Data: z.string().min(10, 'Backup data cannot be empty'),
+    filename: z.string().optional(),
+    checksum: z.string().optional(),
+    deviceName: z.string().optional(),
+    notes: z.string().optional(),
+  });
+
+  const parsed = uploadSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'Invalid backup upload payload', details: parsed.error.issues });
+  }
+
+  const userId = (request as any).user?.sub;
+  const backup = await uploadTenantBackup({
+    businessId,
+    userId,
+    base64Data: parsed.data.base64Data,
+    filename: parsed.data.filename,
+    checksum: parsed.data.checksum,
+    deviceName: parsed.data.deviceName,
+    notes: parsed.data.notes,
+  });
+
+  return reply.code(201).send({ ok: true, backup });
+});
+
+// List tenant backups
+app.get('/api/v1/backup/list', async (request, reply) => {
+  const businessId = String(
+    request.headers['x-business-id'] ??
+    (request.query as any)?.businessId ??
+    (request as any).user?.businessId ??
+    ''
+  );
+  if (!businessId) {
+    return reply.code(400).send({ error: 'Missing businessId' });
+  }
+
+  const backups = await listTenantBackups(businessId);
+  return reply.send({ ok: true, backups });
+});
+
+// Download a specific backup snapshot
+app.get('/api/v1/backup/download/:id', async (request, reply) => {
+  const businessId = String(
+    request.headers['x-business-id'] ??
+    (request.query as any)?.businessId ??
+    (request as any).user?.businessId ??
+    ''
+  );
+  if (!businessId) {
+    return reply.code(400).send({ error: 'Missing businessId' });
+  }
+
+  const backupId = (request.params as any).id;
+  try {
+    const backup = await getTenantBackup(businessId, backupId);
+    return reply.send({ ok: true, backup });
+  } catch (err: any) {
+    return reply.code(404).send({ error: err.message || 'Backup not found' });
+  }
+});
+
+// Delete a backup snapshot
+app.delete('/api/v1/backup/:id', async (request, reply) => {
+  const businessId = String(
+    request.headers['x-business-id'] ??
+    (request.query as any)?.businessId ??
+    (request as any).user?.businessId ??
+    ''
+  );
+  if (!businessId) {
+    return reply.code(400).send({ error: 'Missing businessId' });
+  }
+
+  const backupId = (request.params as any).id;
+  const result = await deleteTenantBackup(businessId, backupId);
   return reply.send(result);
 });
 

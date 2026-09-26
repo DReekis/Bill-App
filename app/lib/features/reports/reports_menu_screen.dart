@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/session.dart';
 import '../../theme/stitch_theme.dart';
 import '../banking/cash_bank_hub_screen.dart';
 import '../dashboard/payables_screen.dart';
@@ -15,6 +17,7 @@ import 'reports_screen.dart';
 import 'sales_summary_report_screen.dart';
 import 'stock_summary_report_screen.dart';
 import 'tally_export_screen.dart';
+import 'audit_trail_screen.dart';
 
 class ReportsMenuScreen extends StatelessWidget {
   const ReportsMenuScreen({super.key, this.isTab = false});
@@ -22,28 +25,53 @@ class ReportsMenuScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<Session>();
+    final isCustomRole = session.role != UserRole.owner;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: const Text('Reports', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 19)),
         automaticallyImplyLeading: !isTab,
+        actions: [
+          if (isCustomRole)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    session.role.label,
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
         children: [
-          // Business Analytics & Insights Hero Banner
-          _buildAnalyticsHeroBanner(context),
-          const SizedBox(height: 20),
+          // Business Analytics & Insights Hero Banner (Owner/Admin/Accountant only)
+          if (session.canViewPL) ...[
+            _buildAnalyticsHeroBanner(context),
+            const SizedBox(height: 20),
+          ],
 
           // Section 1: POPULAR
           _buildSectionHeader('Popular'),
           const SizedBox(height: 8),
           _buildReportCardContainer([
-            _ReportListItem(
-              icon: Icons.receipt_long_outlined,
-              title: 'Bill wise profit',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillWiseProfitScreen())),
-            ),
+            if (session.canViewPL)
+              _ReportListItem(
+                icon: Icons.receipt_long_outlined,
+                title: 'Bill wise profit',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillWiseProfitScreen())),
+              ),
             _ReportListItem(
               icon: Icons.currency_rupee_rounded,
               title: 'Sales Summary',
@@ -54,11 +82,12 @@ class ReportsMenuScreen extends StatelessWidget {
               title: 'Daybook',
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DayBookScreen())),
             ),
-            _ReportListItem(
-              icon: Icons.trending_up_rounded,
-              title: 'Profit and Loss',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PLReportScreen())),
-            ),
+            if (session.canViewPL)
+              _ReportListItem(
+                icon: Icons.trending_up_rounded,
+                title: 'Profit and Loss',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PLReportScreen())),
+              ),
             _ReportListItem(
               icon: Icons.badge_outlined,
               title: 'Party Statement (Ledger)',
@@ -70,16 +99,18 @@ class ReportsMenuScreen extends StatelessWidget {
               subtitle: 'A summary of price & stock of all items',
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockSummaryReportScreen())),
             ),
-            _ReportListItem(
-              icon: Icons.balance_rounded,
-              title: 'Balance Sheet',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BalanceSheetScreen())),
-            ),
-            _ReportListItem(
-              icon: Icons.account_balance_outlined,
-              title: 'Cash and Bank (All Payments)',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashBankHubScreen())),
-            ),
+            if (session.canViewPL)
+              _ReportListItem(
+                icon: Icons.balance_rounded,
+                title: 'Balance Sheet',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BalanceSheetScreen())),
+              ),
+            if (session.canViewBankBalances)
+              _ReportListItem(
+                icon: Icons.account_balance_outlined,
+                title: 'Cash and Bank (All Payments)',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashBankHubScreen())),
+              ),
           ]),
           const SizedBox(height: 24),
 
@@ -108,19 +139,28 @@ class ReportsMenuScreen extends StatelessWidget {
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionHistoryScreen())),
             ),
           ]),
-          const SizedBox(height: 24),
 
           // Section 3: ACCOUNTING & SOFTWARE INTEGRATION
-          _buildSectionHeader('Accounting & Software Integration'),
-          const SizedBox(height: 8),
-          _buildReportCardContainer([
-            _ReportListItem(
-              icon: Icons.integration_instructions_outlined,
-              title: 'Export to Tally Prime (Direct XML)',
-              subtitle: 'One-click XML import for TallyPrime & Tally.ERP 9 (Sales, Purchases, Ledgers)',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TallyExportScreen())),
-            ),
-          ]),
+          if (session.canExportTally || session.role == UserRole.owner || session.role == UserRole.admin) ...[
+            const SizedBox(height: 24),
+            _buildSectionHeader('Accounting & Software Integration'),
+            const SizedBox(height: 8),
+            _buildReportCardContainer([
+              if (session.canExportTally)
+                _ReportListItem(
+                  icon: Icons.integration_instructions_outlined,
+                  title: 'Export to Tally Prime (Direct XML)',
+                  subtitle: 'One-click XML import for TallyPrime & Tally.ERP 9 (Sales, Purchases, Ledgers)',
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TallyExportScreen())),
+                ),
+              _ReportListItem(
+                icon: Icons.verified_user_outlined,
+                title: 'MCA Audit Trail & Edit Logs',
+                subtitle: 'Continuous tamper-evident activity log, invoice edits & cancellations diffs',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AuditTrailScreen())),
+              ),
+            ]),
+          ],
         ],
       ),
     );
@@ -228,6 +268,7 @@ class ReportsMenuScreen extends StatelessWidget {
   }
 
   void _showPartyReportsModal(BuildContext context) {
+    final canViewCosts = context.read<Session>().canViewCosts;
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -257,15 +298,16 @@ class ReportsMenuScreen extends StatelessWidget {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const ReceivablesScreen()));
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.call_made_rounded, color: Color(0xFFC62828)),
-              title: const Text('All Payables (Supplier Balances)', style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: const Text('Suppliers with balance to pay'),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const PayablesScreen()));
-              },
-            ),
+            if (canViewCosts)
+              ListTile(
+                leading: const Icon(Icons.call_made_rounded, color: Color(0xFFC62828)),
+                title: const Text('All Payables (Supplier Balances)', style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Suppliers with balance to pay'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PayablesScreen()));
+                },
+              ),
           ],
         ),
       ),

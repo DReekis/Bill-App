@@ -282,6 +282,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
         notes: data.notes ?? null,
       };
 
+      const invId = existing ? existing.id : entityId;
       if (existing) {
         await prisma.invoice.update({
           where: { id: existing.id },
@@ -294,6 +295,28 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
             ...invoiceData,
           },
         });
+      }
+
+      if (Array.isArray(data.items) && data.items.length > 0) {
+        try {
+          await prisma.invoiceItem.deleteMany({ where: { invoiceId: invId } });
+          for (const it of data.items) {
+            await prisma.invoiceItem.create({
+              data: {
+                invoiceId: invId,
+                name: it.name ?? 'Item',
+                hsn: it.hsn ?? null,
+                gstRate: Number(it.gstRate ?? it.gst_rate ?? 0),
+                quantity: Number(it.quantity ?? 1),
+                price: Number(it.price ?? 0),
+                discount: Number(it.discount ?? 0),
+                taxable: Number(it.taxable ?? 0),
+                tax: Number(it.tax ?? 0),
+                unit: it.unit ?? null,
+              },
+            });
+          }
+        } catch (_) {}
       }
       break;
     }
@@ -400,6 +423,39 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
       break;
     }
 
+    case 'stock_move':
+    case 'stock_moves': {
+      const productId = String(data.product_id ?? data.productId ?? entityId);
+      const changeQty = Number(data.change_qty ?? data.changeQty ?? 0);
+      const qtyAfter = Number(data.qty_after ?? data.qtyAfter ?? 0);
+      const moveType = String(data.move_type ?? data.moveType ?? 'adjustment');
+      const refType = data.ref_type ?? data.refType ?? null;
+      const refId = data.ref_id ? String(data.ref_id) : (data.refId ? String(data.refId) : null);
+      const date = data.date ? new Date(data.date) : new Date();
+
+      const productExists = await prisma.product.findUnique({ where: { id: productId } });
+      if (productExists) {
+        await prisma.stockMove.create({
+          data: {
+            id: entityId,
+            businessId,
+            productId,
+            changeQty,
+            qtyAfter,
+            moveType,
+            refType,
+            refId,
+            date,
+          },
+        });
+        await prisma.product.update({
+          where: { id: productId },
+          data: { stock: { increment: changeQty } },
+        });
+      }
+      break;
+    }
+
     default:
       console.log(`Sync handler for entity '${entity}' not specifically mapped; stored in sync queue.`);
   }
@@ -415,7 +471,7 @@ export async function pullSyncChanges(businessId: string, since?: string, limit 
     timestamp: string;
   }> = [];
 
-  const [customers, products, invoices, payments, expenses, bankAccounts, cheques] = await Promise.all([
+  const [customers, products, invoices, payments, expenses, bankAccounts, cheques, stockMoves] = await Promise.all([
     prisma.customer.findMany({
       where: { businessId, createdAt: { gt: sinceDate } },
       take: limit,
@@ -448,6 +504,11 @@ export async function pullSyncChanges(businessId: string, since?: string, limit 
       orderBy: { createdAt: 'asc' },
     }),
     prisma.cheque.findMany({
+      where: { businessId, createdAt: { gt: sinceDate } },
+      take: limit,
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.stockMove.findMany({
       where: { businessId, createdAt: { gt: sinceDate } },
       take: limit,
       orderBy: { createdAt: 'asc' },
@@ -521,6 +582,16 @@ export async function pullSyncChanges(businessId: string, since?: string, limit 
       op: 'upsert',
       payload: JSON.stringify(chq),
       timestamp: chq.createdAt.toISOString(),
+    });
+  }
+
+  for (const sm of stockMoves) {
+    changes.push({
+      entity: 'stock_move',
+      entityId: sm.id,
+      op: 'upsert',
+      payload: JSON.stringify(sm),
+      timestamp: sm.createdAt.toISOString(),
     });
   }
 

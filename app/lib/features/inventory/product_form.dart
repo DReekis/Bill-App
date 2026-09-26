@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/models.dart';
+import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
@@ -126,7 +128,9 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
         barcode: _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
         unit: unit ?? 'pc',
         gstRate: gstRate,
-        purchasePrice: _toPaise(_purchasePrice.text),
+        purchasePrice: context.read<Session>().canViewCosts
+            ? _toPaise(_purchasePrice.text)
+            : (widget.product?.purchasePrice ?? 0),
         salePrice: _toPaise(_salePrice.text),
         wholesalePrice: _toPaise(_wholesale.text),
         retailPrice: _toPaise(_retail.text),
@@ -137,7 +141,8 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
         hasSerial: hasSerial,
         description: _description.text.trim(),
         stock: finalStock,
-        costAverage: widget.product?.costAverage ?? _toPaise(_purchasePrice.text),
+        costAverage: widget.product?.costAverage ??
+            (context.read<Session>().canViewCosts ? _toPaise(_purchasePrice.text) : 0),
         lowStockThreshold: lowStock,
       );
       await Repository.instance.upsertProduct(product, businessIdOverride: widget.businessId);
@@ -226,8 +231,10 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
             ),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: AppAmountField(controller: _purchasePrice, label: 'Purchase price')),
-              const SizedBox(width: 12),
+              if (context.watch<Session>().canViewCosts) ...[
+                Expanded(child: AppAmountField(controller: _purchasePrice, label: 'Purchase price')),
+                const SizedBox(width: 12),
+              ],
               Expanded(child: AppAmountField(controller: _salePrice, label: 'Sale price')),
             ]),
             const SizedBox(height: 12),

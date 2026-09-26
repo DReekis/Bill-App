@@ -6,6 +6,7 @@ import '../../core/money.dart';
 import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../sync/sync_engine.dart';
+import '../../sync/sync_badge.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../customers/customer_form.dart';
@@ -64,14 +65,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final businessId = session.businessId;
     if (businessId == null) return;
     final repo = Repository.instance;
-    final perf = await repo.dashboardPerformance(businessId, snapshotTimeframe);
-    final recents = await repo.recentTransactions(businessId, limit: 5);
-    final biz = await repo.getBusiness(businessId);
-    final lowCount = await repo.lowStockCount(businessId);
-    final outCount = await repo.outOfStockCount(businessId);
-    final overdueSummary = await repo.overdueInvoicesSummary(businessId);
-    final recSummary = await repo.receivablesSummary(businessId);
-    final paySummary = await repo.payablesSummary(businessId);
+    final results = await Future.wait([
+      repo.dashboardPerformance(businessId, snapshotTimeframe),
+      repo.recentTransactions(businessId, limit: 5),
+      repo.getBusiness(businessId),
+      repo.lowStockCount(businessId),
+      repo.outOfStockCount(businessId),
+      repo.overdueInvoicesSummary(businessId),
+      repo.receivablesSummary(businessId),
+      repo.payablesSummary(businessId),
+    ]);
+
+    final perf = results[0] as DashboardPerformance;
+    final recents = results[1] as List<TransactionRecord>;
+    final biz = results[2] as Business?;
+    final lowCount = results[3] as int;
+    final outCount = results[4] as int;
+    final overdueSummary = results[5] as (int, int);
+    final recSummary = results[6] as ReceivablesSummary;
+    final paySummary = results[7] as PayablesSummary;
 
     await SyncEngine.instance.refreshPending();
     if (!mounted) return;
@@ -475,7 +487,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _quick(String action) {
     final session = context.read<Session>();
     if (action == 'Reports' && !session.can('view_reports')) {
-      showAppMessage(context, 'Access Denied', error: true);
+      showAppMessage(context, 'Access Denied: Reports are restricted.', error: true);
+      return;
+    }
+    if ((action == 'Purchase' || action == 'Purchase Order' || action == 'Supplier' || action == 'Expense') && !session.canViewCosts) {
+      showAppMessage(context, 'Access Restricted: You do not have permission to manage purchases or expenses.', error: true);
+      return;
+    }
+    if (action == 'Cash & Bank' && !session.canViewBankBalances) {
+      showAppMessage(context, 'Access Restricted: You do not have permission to view cash and bank balances.', error: true);
+      return;
+    }
+    if (action == 'Product' && !session.canManageInventory) {
+      showAppMessage(context, 'Access Restricted: You do not have permission to edit catalog.', error: true);
+      return;
+    }
+    if ((action == 'New Sale' || action == 'Estimate' || action == 'Sales Order') && !session.canCreateSales) {
+      showAppMessage(context, 'Access Restricted: You do not have permission to create sales.', error: true);
       return;
     }
     final businessId = session.businessId!;
@@ -780,111 +808,118 @@ class _ReferenceDashboard extends StatelessWidget {
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
         children: [
-          Row(children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    RichText(
-                      text: const TextSpan(
-                        style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w900,
-                            color: StitchColors.textPrimary),
-                        children: [
-                          TextSpan(text: 'Bill'),
-                          TextSpan(
-                              text: 'ket',
-                              style: TextStyle(color: StitchColors.primary))
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    InkWell(
-                      onTap: onSwitchBusiness,
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: StitchColors.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: StitchColors.primary.withValues(alpha: 0.2)),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        RichText(
+                          text: const TextSpan(
+                            style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w900,
+                                color: StitchColors.textPrimary),
+                            children: [
+                              TextSpan(text: 'Bill'),
+                              TextSpan(
+                                  text: 'ket',
+                                  style: TextStyle(color: StitchColors.primary))
+                            ],
+                          ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 120),
-                              child: Text(
-                                business?.name ?? 'My Business',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: StitchColors.primary,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                        if (context.watch<Session>().role != UserRole.owner) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE2E8F0),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                            const SizedBox(width: 2),
-                            const Icon(Icons.keyboard_arrow_down_rounded, size: 15, color: StitchColors.primary),
-                          ],
-                        ),
-                      ),
+                            child: Text(
+                              context.watch<Session>().role.label,
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    const Text('Smart Billing. Better Business.',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: StitchColors.textSecondary),
                     ),
                   ],
                 ),
-                const Text('Smart Billing. Better Business.',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: StitchColors.textSecondary)),
-              ],
-            ),
-            const Spacer(),
-            IconButton(
+              ),
+              const SizedBox(width: 8),
+              const SyncBadge(),
+              const SizedBox(width: 4),
+              IconButton(
                 onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen())),
                 tooltip: 'Search',
-                icon: const Icon(Icons.search_rounded, size: 26, color: StitchColors.textPrimary)),
-            Stack(children: [
-              IconButton(
-                  onPressed: onOpenNotifications,
-                  tooltip: 'Alerts & Notifications',
-                  icon: const Icon(Icons.notifications_none_rounded, size: 26, color: StitchColors.textPrimary)),
-              if (alertCount > 0)
-                Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      width: 16,
-                      height: 16,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                padding: const EdgeInsets.all(4),
+                icon: const Icon(Icons.search_rounded, size: 23, color: StitchColors.textPrimary),
+              ),
+              const SizedBox(width: 2),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    onPressed: onOpenNotifications,
+                    tooltip: 'Alerts & Notifications',
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    padding: const EdgeInsets.all(4),
+                    icon: const Icon(Icons.notifications_none_rounded, size: 23, color: StitchColors.textPrimary),
+                  ),
+                  if (alertCount > 0)
+                    Positioned(
+                      right: 2,
+                      top: 2,
+                      child: Container(
+                        width: 15,
+                        height: 15,
+                        alignment: Alignment.center,
+                        decoration: const BoxDecoration(
                           color: StitchColors.error, shape: BoxShape.circle),
-                      child: Text('$alertCount',
+                        child: Text('$alertCount',
                           style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800)),
-                    )),
-            ]),
-            const SizedBox(width: 4),
-            InkWell(
-              onTap: onSwitchBusiness,
-              borderRadius: BorderRadius.circular(18),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: const Color(0xFF3F51B5),
-                child: Text(
-                  (business?.name.isNotEmpty == true ? business!.name[0] : 'R').toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
+                            color: Colors.white,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800)),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: 'Switch business: ${business?.name ?? 'My Business'}',
+                child: InkWell(
+                  onTap: onSwitchBusiness,
+                  borderRadius: BorderRadius.circular(18),
+                  child: CircleAvatar(
+                    radius: 17,
+                    backgroundColor: const Color(0xFF3F51B5),
+                    child: Text(
+                      (business?.name.isNotEmpty == true ? business!.name[0] : 'R').toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13.5,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ]),
+            ],
+          ),
           const SizedBox(height: 32),
 
           Row(
@@ -1009,9 +1044,9 @@ class _ReferenceDashboard extends StatelessWidget {
             Expanded(
                 child: _OverviewCard(
                     label: l10n.text('net_profit'),
-                    value: formatPaise(profitToday),
-                    change: '${profitTrend.formatted} $comparisonLabel',
-                    data: profitHistory,
+                    value: context.watch<Session>().canViewPL ? formatPaise(profitToday) : '••••',
+                    change: context.watch<Session>().canViewPL ? '${profitTrend.formatted} $comparisonLabel' : 'Restricted',
+                    data: context.watch<Session>().canViewPL ? profitHistory : const [],
                     isNegative: profitTrend.isNegative || profitToday < 0,
                     color: profitToday < 0 || profitTrend.isNegative ? const Color(0xFFE53935) : const Color(0xFF00C853))),
           ]),
@@ -1368,8 +1403,8 @@ class _Snapshot extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _SnapshotValue(l10n.text('sales'), amount(totals?['salesToday']), salesTrend.formatted, isNegative: salesTrend.isNegative),
-                _SnapshotValue(l10n.text('purchases'), amount(totals?['purchasesToday']), purchasesTrend.formatted, isNegative: purchasesTrend.isNegative),
-                _SnapshotValue(l10n.text('expenses'), amount(totals?['expensesToday']), expensesTrend.formatted, isNegative: expensesTrend.isNegative),
+                _SnapshotValue(l10n.text('purchases'), context.watch<Session>().canViewCosts ? amount(totals?['purchasesToday']) : '••••', context.watch<Session>().canViewCosts ? purchasesTrend.formatted : '—', isNegative: purchasesTrend.isNegative),
+                _SnapshotValue(l10n.text('expenses'), context.watch<Session>().canViewCosts ? amount(totals?['expensesToday']) : '••••', context.watch<Session>().canViewCosts ? expensesTrend.formatted : '—', isNegative: expensesTrend.isNegative),
               ],
             ),
           ],
@@ -1476,6 +1511,7 @@ class _CashFlowSummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final canViewCosts = context.watch<Session>().canViewCosts;
     return Row(
       children: [
         Expanded(
@@ -1495,21 +1531,23 @@ class _CashFlowSummaryRow extends StatelessWidget {
             onTap: onTapReceivables,
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _CashFlowCard(
-            title: l10n.text('to_pay'),
-            amount: formatPaise(payables?.totalPayable ?? 0),
-            subtitle: (payables?.partyCount ?? 0) > 0
-                ? '${payables!.partyCount} ${l10n.isHindi ? 'सप्लायर' : 'suppliers'}'
-                : (l10n.isHindi ? 'कोई देनदारी नहीं' : 'All clear'),
-            icon: Icons.call_made_rounded,
-            primaryColor: const Color(0xFFC62828),
-            bgColor: const Color(0xFFFDF4F4),
-            borderColor: const Color(0xFFFFCDD2),
-            onTap: onTapPayables,
+        if (canViewCosts) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            child: _CashFlowCard(
+              title: l10n.text('to_pay'),
+              amount: formatPaise(payables?.totalPayable ?? 0),
+              subtitle: (payables?.partyCount ?? 0) > 0
+                  ? '${payables!.partyCount} ${l10n.isHindi ? 'सप्लायर' : 'suppliers'}'
+                  : (l10n.isHindi ? 'कोई देनदारी नहीं' : 'All clear'),
+              icon: Icons.call_made_rounded,
+              primaryColor: const Color(0xFFC62828),
+              bgColor: const Color(0xFFFDF4F4),
+              borderColor: const Color(0xFFFFCDD2),
+              onTap: onTapPayables,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

@@ -33,6 +33,39 @@ class SyncService {
     }
   }
 
+  Future<void> pushBatch(List<SyncRecord> records) async {
+    if (records.isEmpty) return;
+    if (records.length == 1) {
+      await push(records.first);
+      return;
+    }
+
+    final payload = {
+      'items': records
+          .map((r) => {
+                'businessId': r.businessId.toString(),
+                'entity': r.entity,
+                'entityId': r.entityId.toString(),
+                'op': r.op.isEmpty ? 'upsert' : r.op,
+                'payload': r.payload,
+                'idempotencyKey': r.idempotencyKey,
+              })
+          .toList(),
+    };
+
+    final response = await _client.post('/api/v1/sync/push', payload);
+    if (response.statusCode >= 400) {
+      try {
+        final body = jsonDecode(response.body);
+        throw Exception(body['error'] ?? 'Batch sync push failed with status ${response.statusCode}');
+      } catch (e) {
+        if (e is Exception) rethrow;
+        throw Exception('Batch sync push failed with status ${response.statusCode}');
+      }
+    }
+  }
+
+
   Future<Map<String, dynamic>> pull(int businessId, {String? since, int limit = 100}) async {
     final query = since != null && since.isNotEmpty ? '?since=$since&limit=$limit' : '?limit=$limit';
     final response = await _client.get(

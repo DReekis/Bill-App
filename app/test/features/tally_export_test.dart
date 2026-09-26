@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:billket/core/billing_engine.dart';
 import 'package:billket/core/models.dart';
-import 'package:billket/core/session.dart';
 import 'package:billket/data/app_database.dart';
 import 'package:billket/data/repositories.dart';
 import 'package:billket/features/reports/tally_export_service.dart';
@@ -53,7 +52,6 @@ void main() {
         taxRegistered: true,
       ));
       repo.session.businessId = bizId;
-      Session().businessId = bizId;
 
       // Create Customer & Supplier
       final custId = await repo.upsertCustomer(Customer(

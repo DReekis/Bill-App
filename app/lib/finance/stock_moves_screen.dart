@@ -83,7 +83,7 @@ class _StockMovesScreenState extends State<StockMovesScreen> {
       appBar: AppBar(
         title: Text(p?.name ?? 'Product'),
         actions: [
-          if (p != null)
+          if (p != null && context.watch<Session>().canManageInventory)
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               tooltip: 'Edit product',
@@ -102,11 +102,12 @@ class _StockMovesScreenState extends State<StockMovesScreen> {
                 );
               },
             ),
-          TextButton.icon(
-            onPressed: _adjust,
-            icon: const Icon(Icons.tune_rounded, size: 18),
-            label: const Text('Adjust'),
-          ),
+          if (context.watch<Session>().canManageInventory)
+            TextButton.icon(
+              onPressed: _adjust,
+              icon: const Icon(Icons.tune_rounded, size: 18),
+              label: const Text('Adjust'),
+            ),
         ],
       ),
       body: p == null
@@ -130,7 +131,7 @@ class _StockMovesScreenState extends State<StockMovesScreen> {
                   Row(children: [
                     Expanded(child: _stat('In stock', _qty(p.stock), p.outOfStock ? StitchColors.error : p.low ? StitchColors.warning : StitchColors.success)),
                     Expanded(child: _stat('Sale price', formatPaise(p.salePrice), StitchColors.textPrimary)),
-                    Expanded(child: _stat('Purchase price', formatPaise(p.purchasePrice), StitchColors.textPrimary)),
+                    Expanded(child: _stat('Purchase price', context.watch<Session>().canViewCosts ? formatPaise(p.purchasePrice) : '••••', StitchColors.textPrimary)),
                   ]),
                   const SizedBox(height: 8),
                   Row(children: [
@@ -138,18 +139,20 @@ class _StockMovesScreenState extends State<StockMovesScreen> {
                     Expanded(child: _stat('GST', '${p.gstRate}%', StitchColors.textSecondary)),
                     Expanded(child: _stat('Unit', p.unit, StitchColors.textSecondary)),
                   ]),
-                  const Divider(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.tonalIcon(
-                          onPressed: _adjust,
-                          icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                          label: const Text('Add / Adjust Stock'),
+                  if (context.watch<Session>().canManageInventory) ...[
+                    const Divider(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.tonalIcon(
+                            onPressed: _adjust,
+                            icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                            label: const Text('Add / Adjust Stock'),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ]),
               ),
               const SizedBox(height: 16),

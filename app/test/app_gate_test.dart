@@ -25,7 +25,8 @@ void main() {
     await session.load();
     await pumpGate(tester, session);
     await tester.pumpAndSettle();
-    expect(find.text('Welcome to Stitch Bill'), findsOneWidget);
+    expect(find.text('Connect to Billket Cloud'), findsOneWidget);
+    expect(find.text('Sign in with Google'), findsOneWidget);
   });
 
   testWidgets('locked session with PIN shows the lock screen', (tester) async {

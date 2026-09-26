@@ -4,15 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/api_client.dart';
+import '../core/models.dart';
 import '../core/sync_service.dart';
 import '../data/repositories.dart';
 
 /// Bidirectional cloud sync manager with health ping, exponential backoff,
 /// offline queue dispatch, and local SQLite delta reconciliation.
 class SyncEngine extends ChangeNotifier {
-  SyncEngine._() {
-    startAutoSync();
-  }
+  SyncEngine._();
   static final SyncEngine instance = SyncEngine._();
 
   static const String _kLastSyncTimeKey = 'sync.last_server_time';
@@ -26,6 +25,9 @@ class SyncEngine extends ChangeNotifier {
   DateTime? lastSyncedAt;
   int pendingCount = 0;
   String? lastError;
+  String? lastSyncResultSummary;
+  int lastPushedCount = 0;
+  int lastPulledCount = 0;
   Timer? _autoSyncTimer;
 
   Future<bool> checkConnectivity() async {
@@ -39,8 +41,11 @@ class SyncEngine extends ChangeNotifier {
 
   Future<void> refreshPending() async {
     try {
-      pendingCount = await Repository.instance.pendingSyncCount();
-      notifyListeners();
+      final newCount = await Repository.instance.pendingSyncCount();
+      if (pendingCount != newCount) {
+        pendingCount = newCount;
+        notifyListeners();
+      }
     } catch (_) {}
   }
 
@@ -62,6 +67,9 @@ class SyncEngine extends ChangeNotifier {
     lastError = null;
     notifyListeners();
 
+    var pushedCount = 0;
+    var pulledCount = 0;
+
     try {
       // 1. Verify Reachability
       final online = await checkConnectivity();
@@ -79,27 +87,62 @@ class SyncEngine extends ChangeNotifier {
         apiClient.setBusinessId(session.businessId.toString());
       }
 
-      // 2. Push Phase: Send pending SQLite sync_queue records to cloud
+      // 2. Push Phase: Send pending SQLite sync_queue records in batches of up to 50
       final queue = await Repository.instance.syncQueue();
+      final readyRecords = <SyncRecord>[];
       for (final record in queue) {
         // Exponential backoff check for failed items
         if (!force && record.attempts > 0) {
-          final backoffSecs = min(60, pow(2, record.attempts).toInt());
-          // Wait for backoff window before retry
+          final backoffSecs = min(300, pow(2, record.attempts).toInt());
           final createdTime = DateTime.tryParse(record.createdAt);
           if (createdTime != null &&
               DateTime.now().difference(createdTime).inSeconds < backoffSecs) {
             continue;
           }
         }
+        readyRecords.add(record);
+      }
+
+      for (var i = 0; i < readyRecords.length; i += 50) {
+        final end = min(i + 50, readyRecords.length);
+        final chunk = readyRecords.sublist(i, end);
+
+        // Enrich payload if missing or plain text
+        final enrichedChunk = <SyncRecord>[];
+        for (final rec in chunk) {
+          if (rec.payload == null ||
+              rec.payload!.isEmpty ||
+              (!rec.payload!.startsWith('{') && !rec.payload!.startsWith('['))) {
+            final resolved = await Repository.instance.resolveSyncPayload(rec.entity, rec.entityId);
+            if (resolved != null) {
+              enrichedChunk.add(rec.copyWith(payload: resolved));
+            } else {
+              enrichedChunk.add(rec);
+            }
+          } else {
+            enrichedChunk.add(rec);
+          }
+        }
 
         try {
-          await _service.push(record);
-          await Repository.instance.markSyncSuccess(record.id!);
-        } catch (e) {
-          lastError = e.toString();
-          await Repository.instance.markSyncFailed(record.id!, e.toString());
-          // Break to preserve FIFO transactional consistency
+          await _service.pushBatch(enrichedChunk);
+          for (final rec in enrichedChunk) {
+            await Repository.instance.markSyncSuccess(rec.id!);
+            pushedCount++;
+          }
+        } catch (batchError) {
+          // Fallback to sequential to isolate the failing record
+          for (final rec in enrichedChunk) {
+            try {
+              await _service.push(rec);
+              await Repository.instance.markSyncSuccess(rec.id!);
+              pushedCount++;
+            } catch (singleError) {
+              lastError = singleError.toString();
+              await Repository.instance.markSyncFailed(rec.id!, singleError.toString());
+              break;
+            }
+          }
           break;
         }
       }
@@ -115,12 +158,25 @@ class SyncEngine extends ChangeNotifier {
 
         for (final change in changes) {
           await Repository.instance.reconcileRemoteChange(change);
+          pulledCount++;
         }
 
         final serverTime = pullResult['serverTime'] as String?;
         if (serverTime != null) {
           await prefs.setString(_kLastSyncTimeKey, serverTime);
         }
+      }
+
+      lastPushedCount = pushedCount;
+      lastPulledCount = pulledCount;
+      if (pushedCount == 0 && pulledCount == 0) {
+        lastSyncResultSummary = 'Up to date';
+      } else if (pushedCount > 0 && pulledCount > 0) {
+        lastSyncResultSummary = '$pushedCount pushed, $pulledCount pulled';
+      } else if (pushedCount > 0) {
+        lastSyncResultSummary = '$pushedCount pushed';
+      } else {
+        lastSyncResultSummary = '$pulledCount pulled';
       }
 
       lastSyncedAt = DateTime.now();

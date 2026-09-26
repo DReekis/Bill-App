@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/session.dart';
+import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import 'tally_export_service.dart';
@@ -78,7 +80,8 @@ class _TallyExportScreenState extends State<TallyExportScreen> {
   }
 
   Future<void> _generateExport({bool autoShare = false}) async {
-    final bizId = Session().businessId;
+    final bizId = Repository.instance.session.businessId ??
+        (context.mounted ? context.read<Session>().businessId : null);
     if (bizId == null) {
       showAppMessage(context, 'No active business selected');
       return;

@@ -51,15 +51,40 @@ class BillApp extends StatelessWidget {
   }
 }
 
-class AppGate extends StatelessWidget {
+class AppGate extends StatefulWidget {
   const AppGate({super.key});
 
-  Future<void> _hydrateServerData(Session session) async {
-    if (session.token == null || session.token!.isEmpty) return;
+  @override
+  State<AppGate> createState() => _AppGateState();
+}
 
-    final client = ApiClient()..setToken(session.token!);
+class _AppGateState extends State<AppGate> {
+  String? _hydratedToken;
+  bool _isHydrating = false;
+
+  Future<void> _hydrateServerData(Session session) async {
+    final token = session.token;
+    if (token == null || token.isEmpty || _isHydrating || _hydratedToken == token) {
+      return;
+    }
+    // If local database already has an active business, local data is sovereign;
+    // do not block startup or wait for remote network calls.
+    if (session.businessId != null) {
+      _hydratedToken = token;
+      return;
+    }
+    _hydratedToken = token;
+    _isHydrating = true;
+
+    final client = ApiClient()..setToken(token);
 
     try {
+      final isOnline = await client.ping();
+      if (!isOnline) {
+        _isHydrating = false;
+        return;
+      }
+
       final businesses = await BusinessService(client).fetchBusinesses();
       if (businesses.isNotEmpty) {
         final existing = await Repository.instance.allBusinesses();
@@ -85,10 +110,14 @@ class AppGate extends StatelessWidget {
         }
       }
     } catch (_) {
+      _isHydrating = false;
       return;
     }
 
-    if (session.businessId == null) return;
+    if (session.businessId == null) {
+      _isHydrating = false;
+      return;
+    }
 
     try {
       final products = await InventoryService(client).fetchProducts();
@@ -108,6 +137,8 @@ class AppGate extends StatelessWidget {
       }
     } catch (_) {
       // Keep local data flow if the backend is unavailable.
+    } finally {
+      _isHydrating = false;
     }
   }
 
@@ -115,11 +146,16 @@ class AppGate extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (session.token != null && session.token!.isNotEmpty) {
-        _hydrateServerData(session);
-      }
-    });
+    final token = session.token;
+    if (token == null || token.isEmpty) {
+      _hydratedToken = null;
+    } else if (token != _hydratedToken && !_isHydrating) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _hydrateServerData(session);
+        }
+      });
+    }
 
     if (session.locked) return const PinLockScreen();
     if (session.businessId == null) return const AuthFlow();

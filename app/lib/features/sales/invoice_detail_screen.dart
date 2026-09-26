@@ -330,6 +330,17 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Future<void> _editInvoice() async {
     final inv = invoice;
     if (inv == null || inv.id == null) return;
+    final session = context.read<Session>();
+    if (!session.canEditInvoice(inv.date)) {
+      showAppMessage(
+        context,
+        session.role == UserRole.cashier
+            ? 'Bill Locked: Past 15 minutes window. Requires Owner or Admin approval.'
+            : 'Access Denied: Your role (${session.role.label}) cannot edit invoices.',
+        error: true,
+      );
+      return;
+    }
     final updated = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
@@ -341,22 +352,108 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     }
   }
 
+  Future<void> _cancelInvoice() async {
+    final inv = invoice;
+    final biz = business;
+    if (inv == null || biz == null || inv.id == null) return;
+    final session = context.read<Session>();
+    if (session.role != UserRole.owner && session.role != UserRole.admin) {
+      showAppMessage(context, 'Only Owner or Admin can cancel invoices.', error: true);
+      return;
+    }
+
+    final reasonCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: StitchColors.error, size: 24),
+            const SizedBox(width: 8),
+            Text('Cancel Invoice ${inv.number}?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Under Ministry of Corporate Affairs (MCA) compliance rules:\n\n'
+              '• Invoice will be permanently marked Cancelled\n'
+              '• Deducted inventory stock will be restored\n'
+              '• Ledger debits and credits will be voided\n'
+              '• An immutable entry will be logged into MCA Audit Trail\n\n'
+              'This action cannot be undone.',
+              style: TextStyle(fontSize: 12.5, height: 1.35, color: StitchColors.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: reasonCtrl,
+              decoration: InputDecoration(
+                labelText: 'Cancellation Reason (Optional)',
+                hintText: 'e.g. Duplicate bill, client cancelled order',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep Invoice'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: StitchColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm Cancellation'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      setState(() => busy = true);
+      try {
+        await Repository.instance.cancelInvoice(
+          biz.id!,
+          inv.id!,
+          reason: reasonCtrl.text.trim(),
+        );
+        if (mounted) {
+          showAppMessage(context, 'Invoice ${inv.number} cancelled & MCA audit trail updated.');
+          _load();
+        }
+      } catch (e) {
+        if (mounted) showAppMessage(context, 'Cancellation failed: $e', error: true);
+      } finally {
+        if (mounted) setState(() => busy = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final inv = invoice;
     final biz = business;
-    final outstanding = inv?.outstanding.paise ?? 0;
+    final isCancelled = inv?.status.toLowerCase() == 'cancelled';
+    final outstanding = isCancelled ? 0 : (inv?.outstanding.paise ?? 0);
+    final session = context.watch<Session>();
+    final canEdit = inv != null && !isCancelled && session.canEditInvoice(inv.date);
+    final canCancel = inv != null && !isCancelled && (session.role == UserRole.owner || session.role == UserRole.admin);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(inv?.number ?? 'Invoice'),
         actions: [
-          if (inv != null && inv.id != null)
+          if (inv != null && inv.id != null && canEdit)
             IconButton(
               tooltip: 'Edit Invoice',
               icon: const Icon(Icons.edit_outlined),
               onPressed: _editInvoice,
             ),
-          if (inv != null && inv.total > 0)
+          if (inv != null && inv.total > 0 && !isCancelled)
             IconButton(
               tooltip: 'UPI Payment QR',
               onPressed: _showUpiModal,
@@ -369,11 +466,70 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.share_rounded),
           ),
+          if (canCancel)
+            PopupMenuButton<String>(
+              onSelected: (val) {
+                if (val == 'cancel') _cancelInvoice();
+              },
+              itemBuilder: (ctx) => [
+                const PopupMenuItem(
+                  value: 'cancel',
+                  child: Row(
+                    children: [
+                      Icon(Icons.cancel_outlined, color: StitchColors.error, size: 20),
+                      SizedBox(width: 10),
+                      Text('Cancel Invoice (MCA)', style: TextStyle(color: StitchColors.error, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
       body: inv == null || biz == null
           ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 90), children: [
+              if (isCancelled) ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFFECACA)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.cancel_rounded, color: StitchColors.error, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Invoice Cancelled & Voided',
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: StitchColors.error),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Under MCA compliance, this invoice has been permanently voided. Deducted inventory stock and ledger debit/credit balances have been reverted. Permanent record preserved in MCA Audit Trail.',
+                              style: TextStyle(fontSize: 12, color: Colors.red.shade900, height: 1.35),
+                            ),
+                            if (inv.notes != null && inv.notes!.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                inv.notes!,
+                                style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.red.shade800),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               AppCard(
                 padding: const EdgeInsets.all(16),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -438,7 +594,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               ] else
                 const AppEmptyState(icon: Icons.receipt_outlined, title: 'No line items'),
               const SizedBox(height: 16),
-              if (inv.total > 0) ...[
+              if (inv.total > 0 && !isCancelled) ...[
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -459,20 +615,22 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 ),
                 const SizedBox(height: 12),
               ],
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.tonalIcon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: StitchColors.primary.withValues(alpha: 0.12),
-                    foregroundColor: StitchColors.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 13),
+              if (canEdit) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: StitchColors.primary.withValues(alpha: 0.12),
+                      foregroundColor: StitchColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                    ),
+                    onPressed: _editInvoice,
+                    icon: const Icon(Icons.edit_note_rounded, size: 20),
+                    label: const Text('Edit Invoice', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                   ),
-                  onPressed: _editInvoice,
-                  icon: const Icon(Icons.edit_note_rounded, size: 20),
-                  label: const Text('Edit Invoice', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 ),
-              ),
-              const SizedBox(height: 12),
+                const SizedBox(height: 12),
+              ],
               Row(children: [
                 Expanded(
                   child: OutlinedButton.icon(
@@ -490,21 +648,23 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                   ),
                 ),
               ]),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(foregroundColor: StitchColors.error),
-                  onPressed: () {
-                    final inv = invoice;
-                    if (inv == null) return;
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => SalesReturnForm(invoice: inv))).then((_) => _load());
-                  },
-                  icon: const Icon(Icons.assignment_return_outlined, size: 18),
-                  label: const Text('Record Sales Return'),
+              if (!isCancelled) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(foregroundColor: StitchColors.error),
+                    onPressed: () {
+                      final inv = invoice;
+                      if (inv == null) return;
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => SalesReturnForm(invoice: inv))).then((_) => _load());
+                    },
+                    icon: const Icon(Icons.assignment_return_outlined, size: 18),
+                    label: const Text('Record Sales Return'),
+                  ),
                 ),
-              ),
-              if (outstanding > 0) ...[
+              ],
+              if (outstanding > 0 && !isCancelled) ...[
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
@@ -513,6 +673,22 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     onPressed: _receivePayment,
                     icon: const Icon(Icons.currency_rupee_rounded, size: 18),
                     label: Text('Receive ${formatPaise(outstanding)}'),
+                  ),
+                ),
+              ],
+              if (canCancel) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: StitchColors.error,
+                      side: const BorderSide(color: Color(0xFFFECACA)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: _cancelInvoice,
+                    icon: const Icon(Icons.cancel_outlined, size: 18),
+                    label: const Text('Cancel Invoice (MCA Void)', style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],

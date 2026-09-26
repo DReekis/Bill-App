@@ -8,6 +8,7 @@ import '../../core/session.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import 'business_setup_screen.dart';
+import 'login_screen.dart';
 
 class AuthFlow extends StatefulWidget {
   const AuthFlow({super.key});
@@ -16,21 +17,32 @@ class AuthFlow extends StatefulWidget {
 }
 
 class _AuthFlowState extends State<AuthFlow> {
-  String? _phone;
+  bool _proceedToSetup = false;
+  String _phone = '';
 
   @override
   Widget build(BuildContext context) {
-    final phone = _phone;
-    if (phone == null) {
-      return LoginOtpScreen(
-        onVerified: (value) async {
-          final session = SessionProvider.of(context);
-          await session.savePhone(value);
-          if (mounted) setState(() => _phone = value);
-        },
-      );
+    if (_proceedToSetup) {
+      return BusinessSetupScreen(phone: _phone);
     }
-    return BusinessSetupScreen(phone: phone);
+
+    return LoginScreen(
+      isModal: false,
+      onOffline: () {
+        if (mounted) setState(() => _proceedToSetup = true);
+      },
+      onSuccess: () {
+        final session = context.read<Session>();
+        if (session.businessId == null) {
+          if (mounted) {
+            setState(() {
+              _phone = session.mobile ?? '';
+              _proceedToSetup = true;
+            });
+          }
+        }
+      },
+    );
   }
 }
 
@@ -80,7 +92,7 @@ class _LoginOtpScreenState extends State<LoginOtpScreen> {
     final email = '$phone@pricepilot.local';
     final password = 'pp${phone.substring(phone.length - 4)}';
     final client = ApiClient();
-    final service = AuthService(client);
+    final service = CloudAuthService();
 
     try {
       // Fast check if backend is reachable (max 1.2s)
@@ -95,6 +107,7 @@ class _LoginOtpScreenState extends State<LoginOtpScreen> {
                 name: 'Business Owner',
                 email: email,
                 password: password,
+                apiClient: client,
               )
               .timeout(const Duration(seconds: 2));
           client.setToken(auth.token);
@@ -108,6 +121,7 @@ class _LoginOtpScreenState extends State<LoginOtpScreen> {
                 .login(
                   email: email,
                   password: password,
+                  apiClient: client,
                 )
                 .timeout(const Duration(seconds: 2));
             client.setToken(auth.token);
@@ -131,6 +145,7 @@ class _LoginOtpScreenState extends State<LoginOtpScreen> {
       }
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

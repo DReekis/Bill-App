@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/session.dart';
 import '../../sync/sync_engine.dart';
-import '../../theme/stitch_theme.dart';
+import '../../sync/sync_badge.dart';
 import '../../utils/widgets.dart';
 import '../customers/customer_form.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -134,7 +134,6 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final sync = context.watch<SyncEngine>();
     final session = context.watch<Session>();
     final l10n = context.l10n;
     final titles = [
@@ -151,10 +150,7 @@ class _AppShellState extends State<AppShell> {
               title: Row(children: [
                 Text(titles[_index]),
                 const SizedBox(width: 12),
-                _SyncBadge(
-                    pending: sync.pendingCount,
-                    busy: sync.syncing,
-                    onTap: _syncNow),
+                SyncBadge(onTap: _syncNow),
               ]),
               actions: [
                 if (_index == 3)
@@ -198,7 +194,6 @@ class _AppShellState extends State<AppShell> {
               key: ValueKey('dashboard-$_dataVersion-${session.localeCode}'),
               onSwitchTab: (i) => setState(() {
                 _index = i;
-                _dataVersion++;
               }),
               onDataChanged: _reloadTabs,
             ),
@@ -213,7 +208,6 @@ class _AppShellState extends State<AppShell> {
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() {
           _index = i;
-          _dataVersion++;
         }),
         destinations: List.generate(
             titles.length,
@@ -221,50 +215,6 @@ class _AppShellState extends State<AppShell> {
                   icon: Icon(_icons[i]),
                   label: titles[i],
                 )),
-      ),
-    );
-  }
-}
-
-class _SyncBadge extends StatelessWidget {
-  const _SyncBadge(
-      {required this.pending, required this.busy, required this.onTap});
-  final int pending;
-  final bool busy;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) {
-    final color = busy
-        ? StitchColors.primary
-        : pending > 0
-            ? StitchColors.warning
-            : StitchColors.success;
-    final icon = busy
-        ? Icons.sync_rounded
-        : pending > 0
-            ? Icons.cloud_upload_outlined
-            : Icons.cloud_done_outlined;
-    final label = busy
-        ? 'Syncing'
-        : pending > 0
-            ? '$pending to sync'
-            : 'Synced';
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 5),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w700, color: color)),
-        ]),
       ),
     );
   }

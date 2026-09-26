@@ -640,7 +640,41 @@ class Repository {
     });
     await _audit(businessId,
         action: 'create', entity: 'invoice', entityId: invoiceId, after: {'number': number, 'total': quote.total.paise});
-    await _enqueueSync(businessId, entity: 'invoice', entityId: invoiceId, op: 'create', payload: number);
+    final invoicePayload = {
+      'id': invoiceId,
+      'businessId': businessId.toString(),
+      'number': number,
+      'customerId': customerId?.toString(),
+      'customerName': customerName,
+      'date': date,
+      'dueDate': dueDate,
+      'gstType': gstType,
+      'subtotal': quote.subtotal.paise,
+      'discount': quote.itemDiscount.paise + quote.invoiceDiscount.paise,
+      'taxable': quote.taxable.paise,
+      'cgst': quote.cgst.paise,
+      'sgst': quote.sgst.paise,
+      'igst': quote.igst.paise,
+      'roundOff': quote.roundOff.paise,
+      'total': quote.total.paise,
+      'amountPaid': amountPaid,
+      'paymentMode': paymentMode,
+      'status': resolveInvoiceStatus(total: quote.total.paise, amountPaid: amountPaid),
+      'notes': notes,
+      'items': lines.map((l) => {
+        'productId': l.productId?.toString(),
+        'name': l.name,
+        'hsn': l.hsn,
+        'quantity': l.quantity,
+        'price': l.price,
+        'discount': l.discount,
+        'gstRate': l.gstRate,
+        'taxable': l.taxable,
+        'tax': l.tax,
+      }).toList(),
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
+    await _enqueueSync(businessId, entity: 'invoice', entityId: invoiceId, op: 'create', payload: jsonEncode(invoicePayload));
     return invoiceId;
   }
 
@@ -660,6 +694,7 @@ class Repository {
     required int amountPaid,
   }) async {
     final db = await _database;
+    Map<String, Object?>? beforeAudit;
     await db.transaction<void>((txn) async {
       // 1. Verify existence of invoice
       final existingRows = await txn.query('invoices',
@@ -669,6 +704,20 @@ class Repository {
       if (existingRows.isEmpty) {
         throw StateError('Invoice $invoiceId not found');
       }
+      final oldInv = existingRows.first;
+      final oldItems = await txn.query('invoice_items',
+          where: 'invoice_id = ?', whereArgs: [invoiceId]);
+      beforeAudit = {
+        'id': invoiceId,
+        'number': oldInv['number'],
+        'customer_name': oldInv['customer_name'],
+        'customer_id': oldInv['customer_id'],
+        'total': oldInv['total'],
+        'subtotal': oldInv['subtotal'],
+        'taxable': oldInv['taxable'],
+        'status': oldInv['status'],
+        'items_count': oldItems.length,
+      };
 
       // Check number availability if changed
       final oldNumber = existingRows.first['number'] as String;
@@ -932,13 +981,199 @@ class Repository {
       }, where: 'id = ?', whereArgs: [invoiceId]);
     });
 
-    await _audit(businessId,
-        action: 'update',
-        entity: 'invoice',
-        entityId: invoiceId,
-        after: {'number': number, 'total': quote.total.paise});
+    await _audit(
+      businessId,
+      action: 'update',
+      entity: 'invoice',
+      entityId: invoiceId,
+      before: beforeAudit,
+      after: {
+        'id': invoiceId,
+        'number': number,
+        'customer_name': customerName,
+        'customer_id': customerId,
+        'total': quote.total.paise,
+        'subtotal': quote.subtotal.paise,
+        'taxable': quote.taxable.paise,
+        'status': resolveInvoiceStatus(total: quote.total.paise, amountPaid: amountPaid),
+        'items_count': lines.length,
+      },
+    );
+    final invoicePayload = {
+      'id': invoiceId,
+      'businessId': businessId.toString(),
+      'number': number,
+      'customerId': customerId?.toString(),
+      'customerName': customerName,
+      'date': date,
+      'dueDate': dueDate,
+      'gstType': gstType,
+      'subtotal': quote.subtotal.paise,
+      'discount': quote.itemDiscount.paise + quote.invoiceDiscount.paise,
+      'taxable': quote.taxable.paise,
+      'cgst': quote.cgst.paise,
+      'sgst': quote.sgst.paise,
+      'igst': quote.igst.paise,
+      'roundOff': quote.roundOff.paise,
+      'total': quote.total.paise,
+      'amountPaid': amountPaid,
+      'paymentMode': paymentMode,
+      'status': resolveInvoiceStatus(total: quote.total.paise, amountPaid: amountPaid),
+      'notes': notes,
+      'items': lines.map((l) => {
+        'productId': l.productId?.toString(),
+        'name': l.name,
+        'hsn': l.hsn,
+        'quantity': l.quantity,
+        'price': l.price,
+        'discount': l.discount,
+        'gstRate': l.gstRate,
+        'taxable': l.taxable,
+        'tax': l.tax,
+      }).toList(),
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
     await _enqueueSync(businessId,
-        entity: 'invoice', entityId: invoiceId, op: 'update', payload: number);
+        entity: 'invoice', entityId: invoiceId, op: 'update', payload: jsonEncode(invoicePayload));
+  }
+
+  /// MCA Audit Trail & Statutory Compliance: Cancels an invoice.
+  /// Reverts stock moves, restores inventory quantities, restores sold serial numbers,
+  /// voids ledger entries and initial payments, updates invoice status to 'Cancelled',
+  /// and writes an immutable entry into `audit_log` with before and after state.
+  Future<void> cancelInvoice(
+    int businessId,
+    int invoiceId, {
+    String? reason,
+  }) async {
+    final db = await _database;
+    String invoiceNumber = '';
+    Map<String, Object?>? beforeAudit;
+
+    await db.transaction<void>((txn) async {
+      // 1. Verify existence of invoice
+      final invRows = await txn.query('invoices',
+          where: 'business_id = ? AND id = ?',
+          whereArgs: [businessId, invoiceId],
+          limit: 1);
+      if (invRows.isEmpty) {
+        throw StateError('Invoice $invoiceId not found');
+      }
+      final inv = invRows.first;
+      if ((inv['status'] as String?)?.toLowerCase() == 'cancelled') {
+        throw StateError('Invoice $invoiceId is already cancelled');
+      }
+      invoiceNumber = inv['number'] as String? ?? 'INV-$invoiceId';
+
+      // Capture before state for MCA audit trail
+      final items = await txn.query('invoice_items',
+          where: 'invoice_id = ?', whereArgs: [invoiceId]);
+      beforeAudit = {
+        'id': invoiceId,
+        'number': invoiceNumber,
+        'customer_name': inv['customer_name'],
+        'customer_id': inv['customer_id'],
+        'total': inv['total'],
+        'taxable': inv['taxable'],
+        'status': inv['status'],
+        'date': inv['date'],
+        'items_count': items.length,
+      };
+
+      // 2. Revert inventory deductions from stock moves
+      final oldMoves = await txn.query('stock_moves',
+          where: 'ref_type = ? AND ref_id = ?', whereArgs: ['invoice', invoiceId]);
+      for (final m in oldMoves) {
+        final prodId = m['product_id'] as int?;
+        final changeQty = (m['change_qty'] as num?)?.toDouble() ?? 0.0;
+        if (prodId != null && changeQty < 0) {
+          final qtyToRestore = -changeQty;
+          final pRows = await txn.query('products',
+              where: 'id = ?', whereArgs: [prodId], limit: 1);
+          if (pRows.isNotEmpty) {
+            final curStock = (pRows.first['stock'] as num?)?.toDouble() ?? 0.0;
+            final newStock = curStock + qtyToRestore;
+            await txn.update('products', {'stock': newStock},
+                where: 'id = ?', whereArgs: [prodId]);
+            await txn.insert('stock_moves', {
+              'business_id': businessId,
+              'product_id': prodId,
+              'change_qty': qtyToRestore,
+              'qty_after': newStock,
+              'move_type': 'cancel',
+              'ref_type': 'invoice_cancel',
+              'ref_id': invoiceId,
+              'date': isoDate(DateTime.now()),
+            });
+          }
+        }
+      }
+
+      // 3. Revert serial numbers marked sold
+      await txn.update('serial_numbers', {'status': 'Available', 'sale_ref': null},
+          where: 'sale_ref = ?', whereArgs: [invoiceNumber]);
+
+      // 4. Void/delete ledger entries for this invoice
+      await txn.delete('ledger',
+          where: 'business_id = ? AND ref_type = ? AND ref_id = ?',
+          whereArgs: [businessId, 'invoice', invoiceId]);
+
+      // 5. Void/delete linked payment records and payment ledger entries
+      final linkedPayments = await txn.query('payments',
+          where: 'invoice_id = ? AND type = ?', whereArgs: [invoiceId, 'in']);
+      for (final p in linkedPayments) {
+        final pId = p['id'] as int;
+        await txn.delete('ledger',
+            where: 'business_id = ? AND ref_type = ? AND ref_id = ?',
+            whereArgs: [businessId, 'payment', pId]);
+        await txn.delete('payments', where: 'id = ?', whereArgs: [pId]);
+      }
+
+      // 6. Update invoice status to 'Cancelled'
+      final originalNotes = inv['notes'] as String? ?? '';
+      final cancelNote = reason != null && reason.trim().isNotEmpty
+          ? '[CANCELLED: ${reason.trim()}]'
+          : '[CANCELLED]';
+      final updatedNotes = originalNotes.isEmpty ? cancelNote : '$originalNotes\n$cancelNote';
+
+      await txn.update('invoices', {
+        'status': 'Cancelled',
+        'notes': updatedNotes,
+        'amount_paid': 0,
+      }, where: 'id = ?', whereArgs: [invoiceId]);
+    });
+
+    // 7. Write immutable MCA Audit Trail entry
+    await _audit(
+      businessId,
+      action: 'cancel',
+      entity: 'invoice',
+      entityId: invoiceId,
+      before: beforeAudit,
+      after: {
+        'id': invoiceId,
+        'number': invoiceNumber,
+        'status': 'Cancelled',
+        'reason': reason ?? 'Voided by user',
+        'cancelled_at': timestampNow(),
+      },
+    );
+
+    // 8. Enqueue sync
+    await _enqueueSync(
+      businessId,
+      entity: 'invoice',
+      entityId: invoiceId,
+      op: 'update',
+      payload: jsonEncode({
+        'id': invoiceId,
+        'businessId': businessId.toString(),
+        'number': invoiceNumber,
+        'status': 'Cancelled',
+        'notes': reason ?? '',
+        'updatedAt': DateTime.now().toIso8601String(),
+      }),
+    );
   }
 
   Future<int> createPurchase({
@@ -1113,7 +1348,18 @@ class Repository {
       'note': description,
     });
     await _audit(businessId, action: 'create', entity: 'expense', entityId: id);
-    await _enqueueSync(businessId, entity: 'expense', entityId: id, op: 'create');
+    final expMap = {
+      'id': id,
+      'businessId': businessId.toString(),
+      'category': category,
+      'amount': amount,
+      'mode': mode,
+      'date': date,
+      'description': description,
+      'vendor': vendor,
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
+    await _enqueueSync(businessId, entity: 'expense', entityId: id, op: 'create', payload: jsonEncode(expMap));
     return id;
   }
 
@@ -1217,7 +1463,20 @@ class Repository {
       return paymentId;
     });
     await _audit(businessId, action: 'create', entity: 'payment', entityId: id);
-    await _enqueueSync(businessId, entity: 'payment', entityId: id, op: 'create');
+    final payMap = {
+      'id': id,
+      'businessId': businessId.toString(),
+      'partyType': partyType,
+      'partyId': partyId?.toString(),
+      'partyName': partyName,
+      'amount': amount,
+      'mode': mode ?? 'Cash',
+      'date': date,
+      'type': partyType == 'customer' ? 'in' : 'out',
+      'reference': 'receipt',
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
+    await _enqueueSync(businessId, entity: 'payment', entityId: id, op: 'create', payload: jsonEncode(payMap));
     return id;
   }
 
@@ -2395,11 +2654,47 @@ class Repository {
     return rows.map(StockMove.fromMap).toList();
   }
 
-  Future<List<AuditEntry>> auditLog(int businessId) async {
+  Future<List<AuditEntry>> auditLog(
+    int businessId, {
+    String? entity,
+    int? entityId,
+    String? action,
+    String? startDate,
+    String? endDate,
+    int limit = 500,
+  }) async {
     final db = await _database;
-    final rows = await db.query('audit_log',
-        where: 'business_id = ?', whereArgs: [businessId],
-        orderBy: 'id DESC', limit: 200);
+    final where = <String>['business_id = ?'];
+    final args = <Object?>[businessId];
+
+    if (entity != null && entity.trim().isNotEmpty && entity != 'all') {
+      where.add('LOWER(entity) = ?');
+      args.add(entity.trim().toLowerCase());
+    }
+    if (entityId != null) {
+      where.add('entity_id = ?');
+      args.add(entityId);
+    }
+    if (action != null && action.trim().isNotEmpty && action != 'all') {
+      where.add('LOWER(action) = ?');
+      args.add(action.trim().toLowerCase());
+    }
+    if (startDate != null && startDate.isNotEmpty) {
+      where.add('timestamp >= ?');
+      args.add(startDate);
+    }
+    if (endDate != null && endDate.isNotEmpty) {
+      where.add('timestamp <= ?');
+      args.add(endDate);
+    }
+
+    final rows = await db.query(
+      'audit_log',
+      where: where.join(' AND '),
+      whereArgs: args,
+      orderBy: 'id DESC',
+      limit: limit,
+    );
     return rows.map(AuditEntry.fromMap).toList();
   }
 
@@ -2443,6 +2738,65 @@ class Repository {
       'attempts': attempts + 1,
       'last_error': error,
     }, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<String?> resolveSyncPayload(String entity, int entityId) async {
+    final db = await _database;
+    switch (entity.toLowerCase()) {
+      case 'invoice':
+      case 'invoices':
+        final rows = await db.query('invoices', where: 'id = ?', whereArgs: [entityId], limit: 1);
+        if (rows.isEmpty) return null;
+        final inv = Map<String, dynamic>.from(rows.first);
+        final itemRows = await db.query('invoice_items', where: 'invoice_id = ?', whereArgs: [entityId]);
+        inv['items'] = itemRows.map((it) => Map<String, dynamic>.from(it)).toList();
+        return jsonEncode(inv);
+
+      case 'payment':
+      case 'payments':
+        final rows = await db.query('payments', where: 'id = ?', whereArgs: [entityId], limit: 1);
+        if (rows.isEmpty) return null;
+        return jsonEncode(rows.first);
+
+      case 'expense':
+      case 'expenses':
+        final rows = await db.query('expenses', where: 'id = ?', whereArgs: [entityId], limit: 1);
+        if (rows.isEmpty) return null;
+        return jsonEncode(rows.first);
+
+      case 'product':
+      case 'products':
+        final rows = await db.query('products', where: 'id = ?', whereArgs: [entityId], limit: 1);
+        if (rows.isEmpty) return null;
+        return jsonEncode(rows.first);
+
+      case 'customer':
+      case 'customers':
+        final rows = await db.query('customers', where: 'id = ?', whereArgs: [entityId], limit: 1);
+        if (rows.isEmpty) return null;
+        return jsonEncode(rows.first);
+
+      case 'supplier':
+      case 'suppliers':
+        final rows = await db.query('suppliers', where: 'id = ?', whereArgs: [entityId], limit: 1);
+        if (rows.isEmpty) return null;
+        return jsonEncode(rows.first);
+
+      case 'stock_move':
+      case 'stock_moves':
+        final rows = await db.query('stock_moves', where: 'id = ?', whereArgs: [entityId], limit: 1);
+        if (rows.isEmpty) return null;
+        return jsonEncode(rows.first);
+
+      case 'cheque':
+      case 'cheques':
+        final rows = await db.query('cheques', where: 'id = ?', whereArgs: [entityId], limit: 1);
+        if (rows.isEmpty) return null;
+        return jsonEncode(rows.first);
+
+      default:
+        return null;
+    }
   }
 
   Future<void> reconcileRemoteChange(Map<String, dynamic> change) async {
@@ -2507,6 +2861,7 @@ class Repository {
           whereArgs: [bizId, sku ?? '', barcode ?? '', name],
           limit: 1,
         );
+        final remoteStock = ((data['stock'] as num?)?.toDouble() ?? 0).round();
         final map = {
           'business_id': bizId,
           'name': name,
@@ -2520,17 +2875,242 @@ class Repository {
           'purchase_price': (data['purchasePrice'] ?? data['purchase_price'] ?? 0) is num
               ? ((data['purchasePrice'] ?? data['purchase_price'] ?? 0) as num).toInt()
               : 0,
-          'stock': ((data['stock'] as num?)?.toDouble() ?? 0).round(),
+          'stock': remoteStock,
           'gst_rate': (data['gstRate'] ?? data['gst_rate'] ?? 0) is num
               ? ((data['gstRate'] ?? data['gst_rate'] ?? 0) as num).toInt()
               : 0,
         };
         if (existing.isNotEmpty) {
+          final currentStock = (existing.first['stock'] as num?)?.toInt() ?? 0;
+          final delta = remoteStock - currentStock;
+          if (delta != 0) {
+            await db.insert('stock_moves', {
+              'business_id': bizId,
+              'product_id': existing.first['id'],
+              'change_qty': delta.toDouble(),
+              'qty_after': remoteStock.toDouble(),
+              'move_type': 'cloud_delta',
+              'ref_type': 'sync',
+              'date': todayIso(),
+            });
+          }
           await db.update('products', map,
               where: 'id = ?', whereArgs: [existing.first['id']]);
         } else {
-          await db.insert('products', map);
+          final prodId = await db.insert('products', map);
+          if (remoteStock != 0) {
+            await db.insert('stock_moves', {
+              'business_id': bizId,
+              'product_id': prodId,
+              'change_qty': remoteStock.toDouble(),
+              'qty_after': remoteStock.toDouble(),
+              'move_type': 'opening',
+              'ref_type': 'sync',
+              'date': todayIso(),
+            });
+          }
         }
+        break;
+
+      case 'stock_move':
+      case 'stock_moves':
+        final prodId = (data['product_id'] ?? data['productId'] as num?)?.toInt();
+        final changeQty = ((data['change_qty'] ?? data['changeQty'] ?? 0) as num).toDouble();
+        if (prodId != null) {
+          final prodRows = await db.query('products', where: 'id = ? AND business_id = ?', whereArgs: [prodId, bizId], limit: 1);
+          if (prodRows.isNotEmpty) {
+            final current = (prodRows.first['stock'] as num?)?.toDouble() ?? 0;
+            final updated = current + changeQty;
+            await db.update('products', {'stock': updated.round()}, where: 'id = ?', whereArgs: [prodId]);
+            await db.insert('stock_moves', {
+              'business_id': bizId,
+              'product_id': prodId,
+              'change_qty': changeQty,
+              'qty_after': updated,
+              'move_type': data['move_type'] ?? data['moveType'] ?? 'cloud_delta',
+              'ref_type': data['ref_type'] ?? data['refType'] ?? 'sync',
+              'ref_id': data['ref_id'] ?? data['refId'],
+              'date': data['date'] ?? todayIso(),
+            });
+          }
+        }
+        break;
+
+      case 'invoice':
+      case 'invoices':
+        final number = data['number'] as String? ?? '';
+        if (number.isEmpty) return;
+        final existingInv = await db.query(
+          'invoices',
+          where: 'business_id = ? AND number = ?',
+          whereArgs: [bizId, number],
+          limit: 1,
+        );
+
+        final total = (data['total'] as num?)?.toInt() ?? 0;
+        final amountPaid = (data['amount_paid'] ?? data['amountPaid'] as num?)?.toInt() ?? 0;
+        final status = data['status'] as String? ?? resolveInvoiceStatus(total: total, amountPaid: amountPaid);
+        final invMap = {
+          'business_id': bizId,
+          'number': number,
+          'customer_id': (data['customer_id'] ?? data['customerId'] as num?)?.toInt(),
+          'customer_name': data['customer_name'] ?? data['customerName'] ?? 'Walk-in Customer',
+          'date': data['date'] as String? ?? todayIso(),
+          'due_date': data['due_date'] ?? data['dueDate'],
+          'gst_type': data['gst_type'] ?? data['gstType'] ?? 'gst',
+          'subtotal': (data['subtotal'] as num?)?.toInt() ?? 0,
+          'discount': (data['discount'] as num?)?.toInt() ?? 0,
+          'taxable': (data['taxable'] as num?)?.toInt() ?? 0,
+          'cgst': (data['cgst'] as num?)?.toInt() ?? 0,
+          'sgst': (data['sgst'] as num?)?.toInt() ?? 0,
+          'igst': (data['igst'] as num?)?.toInt() ?? 0,
+          'cess': (data['cess'] as num?)?.toInt() ?? 0,
+          'round_off': (data['round_off'] ?? data['roundOff'] as num?)?.toInt() ?? 0,
+          'total': total,
+          'amount_paid': amountPaid,
+          'payment_mode': data['payment_mode'] ?? data['paymentMode'] ?? 'Cash',
+          'status': status,
+          'notes': data['notes'] as String?,
+        };
+
+        int targetInvId;
+        if (existingInv.isNotEmpty) {
+          targetInvId = existingInv.first['id'] as int;
+          await db.insert('audit_log', {
+            'business_id': bizId,
+            'actor': 'cloud_sync',
+            'action': 'CONFLICT_RECONCILE',
+            'entity': 'invoice',
+            'entity_id': targetInvId,
+            'before': jsonEncode(existingInv.first),
+            'after': jsonEncode(data),
+            'timestamp': timestampNow(),
+          });
+          await db.update('invoices', invMap, where: 'id = ?', whereArgs: [targetInvId]);
+        } else {
+          targetInvId = await db.insert('invoices', invMap);
+        }
+
+        final rawItems = data['items'];
+        if (rawItems is List && rawItems.isNotEmpty) {
+          await db.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [targetInvId]);
+          for (final raw in rawItems) {
+            if (raw is Map) {
+              await db.insert('invoice_items', {
+                'invoice_id': targetInvId,
+                'product_id': (raw['product_id'] ?? raw['productId'] as num?)?.toInt(),
+                'name': raw['name'] as String? ?? 'Item',
+                'hsn': raw['hsn'] as String?,
+                'gst_rate': (raw['gst_rate'] ?? raw['gstRate'] as num?)?.toInt() ?? 0,
+                'quantity': ((raw['quantity'] as num?)?.toDouble()) ?? 1.0,
+                'price': (raw['price'] as num?)?.toInt() ?? 0,
+                'discount': (raw['discount'] as num?)?.toInt() ?? 0,
+                'taxable': (raw['taxable'] as num?)?.toInt() ?? 0,
+                'tax': (raw['tax'] as num?)?.toInt() ?? 0,
+              });
+            }
+          }
+        }
+        break;
+
+      case 'payment':
+      case 'payments':
+        final amount = (data['amount'] as num?)?.toInt() ?? 0;
+        final date = data['date'] as String? ?? todayIso();
+        final mode = data['mode'] as String? ?? 'Cash';
+        final partyType = data['party_type'] ?? data['partyType'] ?? 'customer';
+        final partyId = (data['party_id'] ?? data['partyId'] as num?)?.toInt() ?? 0;
+        final partyName = data['party_name'] ?? data['partyName'] as String?;
+        final invNumber = data['invoice_number'] ?? data['invoiceNumber'] as String?;
+        final type = data['type'] as String? ?? 'in';
+        final isIn = type == 'in';
+
+        final paymentId = await db.insert('payments', {
+          'business_id': bizId,
+          'party_type': partyType,
+          'party_id': partyId,
+          'party_name': partyName,
+          'invoice_id': (data['invoice_id'] ?? data['invoiceId'] as num?)?.toInt(),
+          'invoice_number': invNumber,
+          'amount': amount,
+          'mode': mode,
+          'date': date,
+          'reference': data['reference'] ?? 'cloud_sync',
+          'type': type,
+          'notes': data['notes'] as String?,
+        });
+
+        final cashAccount = mode == 'Cash' ? 'cash' : 'bank';
+        await db.insert('ledger', {
+          'business_id': bizId,
+          'date': date,
+          'account': cashAccount,
+          'debit': isIn ? amount : 0,
+          'credit': isIn ? 0 : amount,
+          'ref_type': 'payment',
+          'ref_id': paymentId,
+          'note': 'Remote Payment Sync',
+        });
+        await db.insert('ledger', {
+          'business_id': bizId,
+          'date': date,
+          'account': '$partyType:$partyId',
+          'debit': isIn ? 0 : amount,
+          'credit': isIn ? amount : 0,
+          'ref_type': 'payment',
+          'ref_id': paymentId,
+          'note': 'Remote Payment Sync',
+        });
+
+        if (invNumber != null && invNumber.isNotEmpty && amount > 0) {
+          final invRows = await db.query(
+            'invoices',
+            where: 'business_id = ? AND number = ?',
+            whereArgs: [bizId, invNumber],
+            limit: 1,
+          );
+          if (invRows.isNotEmpty) {
+            final inv = invRows.first;
+            final invTotal = inv['total'] as int? ?? 0;
+            final currentPaid = inv['amount_paid'] as int? ?? 0;
+            final newPaid = currentPaid + amount;
+            await db.update('invoices', {
+              'amount_paid': newPaid,
+              'status': resolveInvoiceStatus(total: invTotal, amountPaid: newPaid),
+            }, where: 'id = ?', whereArgs: [inv['id']]);
+          }
+        }
+        break;
+
+      case 'expense':
+      case 'expenses':
+        final cat = data['category'] as String? ?? 'General';
+        final amt = (data['amount'] as num?)?.toInt() ?? 0;
+        final expDate = data['date'] as String? ?? todayIso();
+        final expMode = data['mode'] as String? ?? 'Cash';
+        final desc = data['description'] as String?;
+        final vend = data['vendor'] as String?;
+
+        final expId = await db.insert('expenses', {
+          'business_id': bizId,
+          'category': cat,
+          'amount': amt,
+          'mode': expMode,
+          'date': expDate,
+          'description': desc,
+          'vendor': vend,
+        });
+
+        await db.insert('ledger', {
+          'business_id': bizId,
+          'date': expDate,
+          'account': expMode == 'Cash' ? 'cash' : 'bank',
+          'debit': 0,
+          'credit': amt,
+          'ref_type': 'expense',
+          'ref_id': expId,
+          'note': desc ?? 'Expense ($cat)',
+        });
         break;
 
       case 'supplier':
@@ -2588,6 +3168,40 @@ class Repository {
                 where: 'id = ?', whereArgs: [existing.first['id']]);
           } else {
             await db.insert('bank_accounts', map);
+          }
+        }
+        break;
+
+      case 'cheque':
+      case 'cheques':
+        final chqNum = data['cheque_number'] ?? data['chequeNumber'] as String?;
+        if (chqNum != null && chqNum.isNotEmpty) {
+          final existing = await db.query(
+            'cheques',
+            where: 'business_id = ? AND cheque_number = ?',
+            whereArgs: [bizId, chqNum],
+            limit: 1,
+          );
+          final chqMap = {
+            'business_id': bizId,
+            'cheque_number': chqNum,
+            'bank_name': data['bank_name'] ?? data['bankName'],
+            'bank_account_id': (data['bank_account_id'] ?? data['bankAccountId'] as num?)?.toInt(),
+            'party_type': data['party_type'] ?? data['partyType'],
+            'party_id': (data['party_id'] ?? data['partyId'] as num?)?.toInt(),
+            'party_name': data['party_name'] ?? data['partyName'],
+            'amount': (data['amount'] as num?)?.toInt() ?? 0,
+            'date': data['date'] as String? ?? todayIso(),
+            'clearing_date': data['clearing_date'] ?? data['clearingDate'],
+            'type': data['type'] as String? ?? 'in',
+            'status': data['status'] as String? ?? 'Pending',
+            'bounce_reason': data['bounce_reason'] ?? data['bounceReason'],
+            'notes': data['notes'] as String?,
+          };
+          if (existing.isNotEmpty) {
+            await db.update('cheques', chqMap, where: 'id = ?', whereArgs: [existing.first['id']]);
+          } else {
+            await db.insert('cheques', chqMap);
           }
         }
         break;
@@ -3393,8 +4007,14 @@ class Repository {
     final b2cl = <Map<String, dynamic>>[];
     final b2cs = <Map<String, dynamic>>[];
     final exp = <Map<String, dynamic>>[];
+    final cancelled = <Map<String, dynamic>>[];
 
     for (final r in rows) {
+      final status = (r['status'] as String?)?.trim().toLowerCase() ?? '';
+      if (status == 'cancelled') {
+        cancelled.add(r);
+        continue;
+      }
       final gstin = (r['customer_gstin'] as String?)?.trim() ?? '';
       final total = (r['total'] as num?)?.toInt() ?? 0;
       final igst = (r['igst'] as num?)?.toInt() ?? 0;
@@ -3452,6 +4072,7 @@ class Repository {
       buildSection('EXP', '6A, 6B - Export Invoices', 'Exports under LUT/bond or with tax payment & SEZ supplies', exp),
       buildSection('B2CS', '7 - B2C Small Invoices', 'Intra-state & small inter-state retail supplies', b2cs),
       buildSection('CDNR', '9B - Credit / Debit Notes', 'Registered & unregistered sales returns/refunds', retRows),
+      buildSection('CANC', '13 - Cancelled Documents', 'Cancelled invoices under MCA compliance', cancelled),
     ];
   }
 
@@ -3460,7 +4081,7 @@ class Repository {
     final fromDate = from != null ? isoDate(from) : null;
     final toDate = to != null ? isoDate(to) : null;
 
-    final where = <String>['i.business_id = ?'];
+    final where = <String>['i.business_id = ?', "LOWER(COALESCE(i.status, '')) != 'cancelled'"];
     final args = <Object?>[businessId];
     if (fromDate != null) {
       where.add('i.date >= ?');
@@ -3478,7 +4099,8 @@ class Repository {
         ii.gst_rate,
         SUM(ii.quantity) as qty,
         SUM(ii.taxable) as taxable,
-        SUM(ii.tax) as tax
+        SUM(CASE WHEN i.gst_type = 'inter' OR (i.igst IS NOT NULL AND i.igst > 0) THEN ii.tax ELSE 0 END) as igst_tax,
+        SUM(CASE WHEN i.gst_type != 'inter' AND (i.igst IS NULL OR i.igst = 0) THEN ii.tax ELSE 0 END) as intra_tax
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE ${where.join(' AND ')}
@@ -3488,9 +4110,13 @@ class Repository {
 
     final rows = await db.rawQuery(query, args);
     return rows.map((r) {
-      final tax = (r['tax'] as num?)?.toInt() ?? 0;
       final gstRate = (r['gst_rate'] as num?)?.toInt() ?? 0;
       final taxable = (r['taxable'] as num?)?.toInt() ?? 0;
+      final igst = (r['igst_tax'] as num?)?.toInt() ?? 0;
+      final intra = (r['intra_tax'] as num?)?.toInt() ?? 0;
+      final cgst = intra ~/ 2;
+      final sgst = intra - cgst;
+      final totalTax = igst + cgst + sgst;
       final qty = (r['qty'] as num?)?.toDouble() ?? 0.0;
       final hsn = r['hsn'] as String? ?? '8517';
       final desc = r['description'] as String? ?? 'Goods / Services';
@@ -3502,11 +4128,11 @@ class Repository {
         totalQuantity: qty,
         taxableValue: taxable,
         gstRate: gstRate,
-        cgst: tax ~/ 2,
-        sgst: tax ~/ 2,
-        igst: 0,
-        totalTax: tax,
-        totalValue: taxable + tax,
+        cgst: cgst,
+        sgst: sgst,
+        igst: igst,
+        totalTax: totalTax,
+        totalValue: taxable + totalTax,
       );
     }).toList();
   }
@@ -3917,6 +4543,35 @@ class Repository {
       paymentModes: paymentModes,
       invoices: invoices,
     );
+  }
+
+  Future<List<StaffMember>> staffMembers(int businessId, {bool includeInactive = false}) async {
+    final db = await _database;
+    final where = 'business_id = ?${includeInactive ? '' : ' AND is_active = 1'}';
+    final rows = await db.query('staff_members', where: where, whereArgs: [businessId], orderBy: 'id ASC');
+    return rows.map(StaffMember.fromMap).toList();
+  }
+
+  Future<int> upsertStaffMember(StaffMember staff) async {
+    final db = await _database;
+    final map = staff.toMap();
+    if (staff.id == null) {
+      final id = await db.insert('staff_members', map);
+      await _audit(staff.businessId, action: 'create', entity: 'staff', entityId: id, after: map);
+      await _enqueueSync(staff.businessId, entity: 'staff', entityId: id, op: 'create', payload: jsonEncode(map));
+      return id;
+    }
+    await db.update('staff_members', map, where: 'id = ? AND business_id = ?', whereArgs: [staff.id, staff.businessId]);
+    await _audit(staff.businessId, action: 'update', entity: 'staff', entityId: staff.id, after: map);
+    await _enqueueSync(staff.businessId, entity: 'staff', entityId: staff.id!, op: 'upsert', payload: jsonEncode(map));
+    return staff.id!;
+  }
+
+  Future<void> deleteStaffMember(int businessId, int id) async {
+    final db = await _database;
+    await db.update('staff_members', {'is_active': 0}, where: 'id = ? AND business_id = ?', whereArgs: [id, businessId]);
+    await _audit(businessId, action: 'delete', entity: 'staff', entityId: id);
+    await _enqueueSync(businessId, entity: 'staff', entityId: id, op: 'delete');
   }
 }
 

@@ -31,7 +31,8 @@ enum GstReturnType {
 enum GstExportFormat {
   pdf('Official PDF Document', 'Ready for print, filing review & audit submission', 'pdf'),
   excel('GST Portal Excel (.xlsx)', 'Formatted strictly to Government GST Offline Tool template', 'xlsx'),
-  json('GST Portal JSON (.json)', 'Direct upload to Government GST Portal (gst.gov.in)', 'json');
+  json('GST Portal JSON (.json)', 'Direct upload to Government GST Portal (gst.gov.in)', 'json'),
+  csv('GST Portal CSV (.csv)', 'Official Table 4, 7, 12, 13 sheets for offline tool import', 'csv');
 
   const GstExportFormat(this.label, this.description, this.extension);
   final String label;
@@ -208,14 +209,25 @@ class GstReportsService {
     }
 
     // Documents summary
-    final allInv = [...b2bSection.items, ...b2csSection.items];
-    final minNum = allInv.isNotEmpty ? allInv.first['number']?.toString() ?? '1' : '1';
-    final maxNum = allInv.isNotEmpty ? allInv.last['number']?.toString() ?? '1' : '1';
-    final totDocs = allInv.length;
+    final b2clSection = sections.firstWhere((s) => s.code == 'B2CL', orElse: () => Gstr1Section(code: 'B2CL', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+    final expSection = sections.firstWhere((s) => s.code == 'EXP', orElse: () => Gstr1Section(code: 'EXP', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+    final cancSection = sections.firstWhere((s) => s.code == 'CANC', orElse: () => Gstr1Section(code: 'CANC', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+
+    final validInv = [...b2bSection.items, ...b2clSection.items, ...expSection.items, ...b2csSection.items];
+    final validDocsCount = validInv.length;
+    final cancDocsCount = cancSection.count;
+    final totDocs = validDocsCount + cancDocsCount;
+
+    final allDocs = [...validInv, ...cancSection.items];
+    allDocs.sort((a, b) => (a['number'] ?? '').toString().compareTo((b['number'] ?? '').toString()));
+    final minNum = allDocs.isNotEmpty ? allDocs.first['number']?.toString() ?? '1' : '1';
+    final maxNum = allDocs.isNotEmpty ? allDocs.last['number']?.toString() ?? '1' : '1';
 
     int totalGrossPaise = 0;
     for (final s in sections) {
-      totalGrossPaise += s.totalValue;
+      if (s.code != 'CANC' && s.code != 'CDNR') {
+        totalGrossPaise += s.totalValue;
+      }
     }
 
     final payload = {
@@ -243,8 +255,8 @@ class GstReportsService {
                 'from': minNum,
                 'to': maxNum,
                 'totnum': totDocs,
-                'canc': 0,
-                'net_issue': totDocs,
+                'canc': cancDocsCount,
+                'net_issue': validDocsCount,
               }
             ],
           }
@@ -253,6 +265,114 @@ class GstReportsService {
     };
 
     return const JsonEncoder.withIndent('  ').convert(payload);
+  }
+
+  /// Generates official Government GST Portal CSV for GSTR-1.
+  /// Formatted to official GST Offline Tool specifications (Table 4 B2B, Table 7 B2CS, Table 12 HSN, Table 13 Docs).
+  Future<String> generateGstr1Csv({
+    required Business business,
+    DateTime? from,
+    DateTime? to,
+    String table = 'all',
+  }) async {
+    final bizId = business.id!;
+    final sections = await Repository.instance.getGstr1Data(bizId, from: from, to: to);
+    final hsnItems = await Repository.instance.getHsnSummary(bizId, from: from, to: to);
+    final gstin = business.gstin?.trim().toUpperCase() ?? '29ABCDE1234F1Z5';
+
+    final b2bSection = sections.firstWhere((s) => s.code == 'B2B', orElse: () => Gstr1Section(code: 'B2B', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+    final b2clSection = sections.firstWhere((s) => s.code == 'B2CL', orElse: () => Gstr1Section(code: 'B2CL', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+    final expSection = sections.firstWhere((s) => s.code == 'EXP', orElse: () => Gstr1Section(code: 'EXP', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+    final b2csSection = sections.firstWhere((s) => s.code == 'B2CS', orElse: () => Gstr1Section(code: 'B2CS', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+    final cancSection = sections.firstWhere((s) => s.code == 'CANC', orElse: () => Gstr1Section(code: 'CANC', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+
+    final validDocs = [...b2bSection.items, ...b2clSection.items, ...expSection.items, ...b2csSection.items];
+    final validDocsCount = validDocs.length;
+    final cancDocsCount = cancSection.count;
+    final totDocs = validDocsCount + cancDocsCount;
+
+    final allDocs = [...validDocs, ...cancSection.items];
+    allDocs.sort((a, b) => (a['number'] ?? '').toString().compareTo((b['number'] ?? '').toString()));
+    final minNum = allDocs.isNotEmpty ? allDocs.first['number']?.toString() ?? '1' : '1';
+    final maxNum = allDocs.isNotEmpty ? allDocs.last['number']?.toString() ?? '1' : '1';
+
+    String escapeCsv(dynamic val) {
+      if (val == null) return '';
+      final str = val.toString();
+      if (str.contains(',') || str.contains('"') || str.contains('\n')) {
+        return '"${str.replaceAll('"', '""')}"';
+      }
+      return str;
+    }
+
+    final sb = StringBuffer();
+
+    // 1. Table 4: B2B Invoices
+    if (table == 'all' || table.toLowerCase() == 'b2b') {
+      if (table == 'all') sb.writeln('# === GSTR-1 TABLE 4: B2B INVOICES ===');
+      sb.writeln('GSTIN/UIN of Recipient,Receiver Name,Invoice Number,Invoice date,Invoice Value,Place Of Supply,Reverse Charge,Applicable % of Tax Rate,Invoice Type,E-Commerce GSTIN,Rate,Taxable Value,Cess Amount');
+      for (final itm in b2bSection.items) {
+        final ctin = (itm['customer_gstin'] as String?)?.trim().toUpperCase() ?? '29AAAAA0000A1Z5';
+        final receiverName = (itm['customer_name'] as String?) ?? 'Registered Client';
+        final inum = itm['number'] ?? 'INV-0001';
+        final idt = formatGstDate(itm['date'] ?? isoDate(DateTime.now()));
+        final total = (itm['total'] as num?)?.toInt() ?? 0;
+        final taxable = (itm['taxable'] as num?)?.toInt() ?? 0;
+        final cgst = (itm['cgst'] as num?)?.toInt() ?? 0;
+        final sgst = (itm['sgst'] as num?)?.toInt() ?? 0;
+        final igst = (itm['igst'] as num?)?.toInt() ?? 0;
+        final pos = resolveStateCode(gstin: ctin, stateName: itm['customer_state'] as String?, defaultCode: '29');
+        final rate = taxable > 0 ? ((cgst + sgst + igst) * 100.0 / taxable).roundToDouble() : 18.0;
+
+        sb.writeln('${escapeCsv(ctin)},${escapeCsv(receiverName)},${escapeCsv(inum)},${escapeCsv(idt)},${toRupees(total).toStringAsFixed(2)},${escapeCsv(pos)},N,,Regular,,${rate.toStringAsFixed(1)},${toRupees(taxable).toStringAsFixed(2)},0.00');
+      }
+      if (table == 'all') sb.writeln();
+    }
+
+    // 2. Table 7: B2CS (Small) Supplies
+    if (table == 'all' || table.toLowerCase() == 'b2cs') {
+      if (table == 'all') sb.writeln('# === GSTR-1 TABLE 7: B2CS (SMALL) SUPPLIES ===');
+      sb.writeln('Type,Place Of Supply,Applicable % of Tax Rate,Rate,Taxable Value,Cess Amount,E-Commerce GSTIN');
+      final b2csGroups = <String, Map<String, dynamic>>{};
+      for (final itm in b2csSection.items) {
+        final taxable = (itm['taxable'] as num?)?.toInt() ?? 0;
+        final cgst = (itm['cgst'] as num?)?.toInt() ?? 0;
+        final sgst = (itm['sgst'] as num?)?.toInt() ?? 0;
+        final igst = (itm['igst'] as num?)?.toInt() ?? 0;
+        final pos = resolveStateCode(stateName: itm['customer_state'] as String?, defaultCode: resolveStateCode(gstin: gstin));
+        final rate = taxable > 0 ? ((cgst + sgst + igst) * 100.0 / taxable).roundToDouble() : 18.0;
+        final key = '${pos}_$rate';
+
+        final grp = b2csGroups.putIfAbsent(key, () => {'pos': pos, 'rt': rate, 'txval': 0.0});
+        grp['txval'] = (grp['txval'] as double) + toRupees(taxable);
+      }
+      for (final g in b2csGroups.values) {
+        final pos = g['pos'];
+        final rt = (g['rt'] as double).toStringAsFixed(1);
+        final txval = (g['txval'] as double).toStringAsFixed(2);
+        sb.writeln('OE,${escapeCsv(pos)},,$rt,$txval,0.00,');
+      }
+      if (table == 'all') sb.writeln();
+    }
+
+    // 3. Table 12: HSN Summary
+    if (table == 'all' || table.toLowerCase() == 'hsn') {
+      if (table == 'all') sb.writeln('# === GSTR-1 TABLE 12: HSN SUMMARY ===');
+      sb.writeln('HSN,Description,UQC,Total Quantity,Total Value,Taxable Value,Integrated Tax Amount,Central Tax Amount,State/UT Tax Amount,Cess Amount');
+      for (final h in hsnItems) {
+        sb.writeln('${escapeCsv(h.hsn)},${escapeCsv(h.description)},${escapeCsv(h.uqc)},${h.totalQuantity},${toRupees(h.totalValue).toStringAsFixed(2)},${toRupees(h.taxableValue).toStringAsFixed(2)},${toRupees(h.igst).toStringAsFixed(2)},${toRupees(h.cgst).toStringAsFixed(2)},${toRupees(h.sgst).toStringAsFixed(2)},0.00');
+      }
+      if (table == 'all') sb.writeln();
+    }
+
+    // 4. Table 13: Documents Summary
+    if (table == 'all' || table.toLowerCase() == 'docs') {
+      if (table == 'all') sb.writeln('# === GSTR-1 TABLE 13: DOCUMENTS ISSUED ===');
+      sb.writeln('Nature of Document,Sr. No. From,Sr. No. To,Total Number,Cancelled,Net Issued');
+      sb.writeln('Invoices for outward supply,${escapeCsv(minNum)},${escapeCsv(maxNum)},$totDocs,$cancDocsCount,$validDocsCount');
+    }
+
+    return sb.toString();
   }
 
   /// Generates Government GST Portal Offline Tool Excel Workbook (.xlsx) for GSTR-1.
@@ -1591,6 +1711,67 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
     }
   }
 
+  Future<void> _handleCsvAction({required bool isShare}) async {
+    setState(() => activeExportingFormat = 'csv');
+    try {
+      final filename = '${widget.returnType.filePrefix}_${_cleanGstin}_$_fp.csv';
+      String csvStr;
+
+      switch (widget.returnType) {
+        case GstReturnType.gstr1:
+          csvStr = await GstReportsService.instance.generateGstr1Csv(
+            business: widget.business,
+            from: widget.fromDate,
+            to: widget.toDate,
+          );
+          break;
+        case GstReturnType.gstr2:
+        case GstReturnType.gstr3b:
+          csvStr = 'GSTR Export - ${widget.business.name}\nPeriod,$_fp\n';
+          break;
+      }
+
+      final bytes = Uint8List.fromList(utf8.encode(csvStr));
+      if (!mounted) return;
+      if (isShare) {
+        await GstReportsService.shareExportedFile(
+          bytes: bytes,
+          filename: filename,
+          mimeType: 'text/csv',
+          subject: '${widget.returnType.title} CSV - ${widget.business.name} ($_fp)',
+        );
+      } else {
+        await GstReportsService.saveExportedFile(
+          bytes: bytes,
+          filename: filename,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text('Saved to Downloads: $filename')),
+                ],
+              ),
+              backgroundColor: const Color(0xFF0284C7),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to export CSV: $e'), backgroundColor: Colors.red.shade800),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => activeExportingFormat = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final busy = activeExportingFormat != null;
@@ -1813,6 +1994,51 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
                         padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                       onPressed: busy ? null : () => _handleJsonAction(isShare: true),
+                      icon: const Icon(Icons.share_rounded, size: 16),
+                      label: const Text('Share', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // 4. CSV Option Card
+            _exportOptionCard(
+              context: context,
+              badgeColor: const Color(0xFFE0F2FE),
+              iconColor: const Color(0xFF0284C7),
+              icon: Icons.receipt_long_rounded,
+              title: 'GST Portal CSV',
+              fileTag: '.CSV',
+              isLoading: activeExportingFormat == 'csv',
+              busy: busy,
+              actionRow: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF0284C7),
+                        side: const BorderSide(color: Color(0xFFBAE6FD)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onPressed: busy ? null : () => _handleCsvAction(isShare: false),
+                      icon: const Icon(Icons.download_rounded, size: 16),
+                      label: const Text('Export', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0284C7),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onPressed: busy ? null : () => _handleCsvAction(isShare: true),
                       icon: const Icon(Icons.share_rounded, size: 16),
                       label: const Text('Share', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
                     ),

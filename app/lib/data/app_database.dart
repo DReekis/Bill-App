@@ -134,6 +134,21 @@ class AppDatabase {
     try {
       await db.execute('ALTER TABLE businesses ADD COLUMN purchase_sequence INTEGER DEFAULT 0;');
     } catch (_) {}
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS staff_members (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          business_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          phone TEXT NOT NULL,
+          email TEXT,
+          role TEXT NOT NULL,
+          pin TEXT,
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT NOT NULL
+        );
+      ''');
+    } catch (_) {}
   }
 
   /// Lets tests drive the real repository against an in-memory database.
@@ -621,6 +636,20 @@ class AppDatabase {
         last_error TEXT,
         created_at TEXT,
         synced_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE staff_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        email TEXT,
+        role TEXT NOT NULL,
+        pin TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL
       )
     ''');
   }

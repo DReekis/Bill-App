@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: billket-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: billket_user
+      POSTGRES_PASSWORD: billket_secure_password_2026
+      POSTGRES_DB: billket_db
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U billket_user -d billket_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: billket-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+      DATABASE_URL: postgresql://billket_user:billket_secure_password_2026@postgres:5432/billket_db?schema=public
+      JWT_SECRET: ${JWT_SECRET:-billket_jwt_secret_production_ready_secure_2026}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_ANDROID_CLIENT_ID: ${GOOGLE_ANDROID_CLIENT_ID}
+      GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID}
+    ports:
+      - "80:4000"
+      - "4000:4000"
+
+volumes:
+  postgres_data:
+    driver: local

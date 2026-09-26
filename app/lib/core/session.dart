@@ -1,7 +1,58 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/app_database.dart';
+import 'auth_service.dart';
 import 'security_service.dart';
+
+enum UserRole {
+  owner,
+  admin,
+  cashier,
+  salesman,
+  deliveryBoy,
+  accountant;
+
+  String get label {
+    switch (this) {
+      case UserRole.owner:
+        return 'Owner';
+      case UserRole.admin:
+        return 'Admin';
+      case UserRole.cashier:
+        return 'Cashier (Biller)';
+      case UserRole.salesman:
+        return 'Salesman';
+      case UserRole.deliveryBoy:
+        return 'Delivery Agent';
+      case UserRole.accountant:
+        return 'Accountant / CA';
+    }
+  }
+
+  static UserRole fromString(String? role) {
+    if (role == null) return UserRole.owner;
+    final r = role.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '').trim();
+    if (r.contains('owner')) return UserRole.owner;
+    if (r.contains('admin')) return UserRole.admin;
+    if (r.contains('cashier') || r.contains('biller')) return UserRole.cashier;
+    if (r.contains('salesman')) return UserRole.salesman;
+    if (r.contains('delivery')) return UserRole.deliveryBoy;
+    if (r.contains('accountant') || r == 'ca') return UserRole.accountant;
+    return UserRole.owner;
+  }
+
+  static UserRole fromCode(String? code) {
+    if (code == null) return UserRole.owner;
+    final r = code.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '').trim();
+    if (r.contains('owner')) return UserRole.owner;
+    if (r.contains('admin')) return UserRole.admin;
+    if (r.contains('cashier') || r.contains('biller')) return UserRole.cashier;
+    if (r.contains('salesman')) return UserRole.salesman;
+    if (r.contains('delivery')) return UserRole.deliveryBoy;
+    if (r.contains('accountant') || r == 'ca') return UserRole.accountant;
+    return UserRole.cashier;
+  }
+}
 
 class Session extends ChangeNotifier {
   SharedPreferences? _prefs;
@@ -9,22 +60,87 @@ class Session extends ChangeNotifier {
   String? token;
   int? businessId;
   String currentUser = 'Owner';
-  String currentRole = 'Admin';
+  String currentRole = 'Owner';
   String localeCode = 'en';
   bool flagSecureEnabled = false;
   bool biometricEnabled = false;
   bool _locked = true;
+  /// Cloud Account profile & token
+  String? cloudUserId;
+  String? cloudEmail;
+  String? cloudName;
+  String? cloudAvatarUrl;
+  String? cloudProvider;
+
+  bool get isCloudLinked => token != null && token!.isNotEmpty && (cloudEmail != null && cloudEmail!.isNotEmpty);
   /// API key for gstincheck.co.in — free signup at https://gstincheck.co.in
   String gstnApiKey = '';
 
   Locale get locale => Locale(localeCode);
 
-  bool can(String action) {
-    if (currentRole == 'Admin' || currentRole == 'Owner') return true;
-    if (currentRole == 'Salesman') {
-      return ['create_invoice', 'view_products'].contains(action);
+  UserRole get role => UserRole.fromString(currentRole);
+
+  bool get canViewCosts =>
+      role == UserRole.owner || role == UserRole.admin || role == UserRole.accountant;
+
+  bool get canViewPL =>
+      role == UserRole.owner || role == UserRole.admin || role == UserRole.accountant;
+
+  bool get canViewBankBalances =>
+      role == UserRole.owner || role == UserRole.admin || role == UserRole.accountant;
+
+  bool get canManageStaff => role == UserRole.owner || role == UserRole.admin;
+
+  bool get canExportTally =>
+      role == UserRole.owner || role == UserRole.admin || role == UserRole.accountant;
+
+  bool get canManageInventory => role == UserRole.owner || role == UserRole.admin;
+
+  bool get canCreateSales =>
+      role == UserRole.owner ||
+      role == UserRole.admin ||
+      role == UserRole.cashier ||
+      role == UserRole.salesman;
+
+  bool canEditInvoice(dynamic dateOrTime, {Duration lockWindow = const Duration(minutes: 15)}) {
+    if (role == UserRole.owner || role == UserRole.admin || role == UserRole.accountant) {
+      return true;
+    }
+    if (role == UserRole.cashier) {
+      DateTime? dt;
+      if (dateOrTime is DateTime) {
+        dt = dateOrTime;
+      } else if (dateOrTime is String) {
+        dt = DateTime.tryParse(dateOrTime);
+      }
+      if (dt == null) return false;
+      return DateTime.now().difference(dt) <= lockWindow;
     }
     return false;
+  }
+
+  bool can(String action) {
+    switch (action) {
+      case 'view_reports':
+        return canViewPL || role == UserRole.cashier || role == UserRole.salesman;
+      case 'view_costs':
+        return canViewCosts;
+      case 'view_pl':
+        return canViewPL;
+      case 'view_banking':
+        return canViewBankBalances;
+      case 'manage_staff':
+        return canManageStaff;
+      case 'export_tally':
+        return canExportTally;
+      case 'create_invoice':
+        return canCreateSales;
+      case 'view_products':
+        return true;
+      default:
+        if (role == UserRole.owner || role == UserRole.admin) return true;
+        return false;
+    }
   }
 
   static const _kMobile = 'session.mobile';
@@ -33,10 +149,16 @@ class Session extends ChangeNotifier {
   static const _kPinHash = 'session.pin';
   static const _kOnboarded = 'session.onboarded';
   static const _kCurrentUser = 'session.currentUser';
+  static const _kCurrentRole = 'session.currentRole';
   static const _kLocaleCode = 'session.localeCode';
   static const _kFlagSecure = 'session.flagSecure';
   static const _kBiometric = 'session.biometric';
   static const _kGstnApiKey = 'session.gstnApiKey';
+  static const _kCloudUserId = 'session.cloudUserId';
+  static const _kCloudEmail = 'session.cloudEmail';
+  static const _kCloudName = 'session.cloudName';
+  static const _kCloudAvatarUrl = 'session.cloudAvatarUrl';
+  static const _kCloudProvider = 'session.cloudProvider';
 
   bool get hasPin => (_prefs?.getString(_kPinHash) ?? '').isNotEmpty;
   bool get locked => _locked && hasPin;
@@ -50,15 +172,75 @@ class Session extends ChangeNotifier {
     token = _prefs!.getString(_kToken);
     businessId = _prefs!.getInt(_kBusinessId);
     currentUser = _prefs!.getString(_kCurrentUser) ?? 'Owner';
+    currentRole = _prefs!.getString(_kCurrentRole) ?? 'Owner';
     localeCode = _prefs!.getString(_kLocaleCode) ?? 'en';
     flagSecureEnabled = _prefs!.getBool(_kFlagSecure) ?? false;
     biometricEnabled = _prefs!.getBool(_kBiometric) ?? false;
     gstnApiKey = _prefs!.getString(_kGstnApiKey) ?? '';
+    cloudUserId = _prefs!.getString(_kCloudUserId);
+    cloudEmail = _prefs!.getString(_kCloudEmail);
+    cloudName = _prefs!.getString(_kCloudName);
+    cloudAvatarUrl = _prefs!.getString(_kCloudAvatarUrl);
+    cloudProvider = _prefs!.getString(_kCloudProvider);
+
     if (flagSecureEnabled) {
       SecurityService.instance.setFlagSecure(true);
     }
     _locked = true; // stays locked only when a PIN exists — see `locked`
     notifyListeners();
+  }
+
+  Future<void> linkCloudSession(AuthSessionResult result) async {
+    token = result.token;
+    cloudUserId = result.user.id;
+    cloudEmail = result.user.email;
+    cloudName = result.user.displayName;
+    cloudAvatarUrl = result.user.photoUrl;
+    cloudProvider = result.user.provider.name;
+
+    notifyListeners();
+
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
+      await _prefs!.setString(_kToken, result.token);
+      await _prefs!.setString(_kCloudUserId, result.user.id);
+      await _prefs!.setString(_kCloudEmail, result.user.email);
+      await _prefs!.setString(_kCloudName, result.user.displayName);
+      if (result.user.photoUrl != null) {
+        await _prefs!.setString(_kCloudAvatarUrl, result.user.photoUrl!);
+      }
+      await _prefs!.setString(_kCloudProvider, result.user.provider.name);
+    } catch (_) {}
+  }
+
+  Future<void> unlinkCloudSession() async {
+    token = null;
+    cloudUserId = null;
+    cloudEmail = null;
+    cloudName = null;
+    cloudAvatarUrl = null;
+    cloudProvider = null;
+
+    notifyListeners();
+
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
+      await _prefs!.remove(_kToken);
+      await _prefs!.remove(_kCloudUserId);
+      await _prefs!.remove(_kCloudEmail);
+      await _prefs!.remove(_kCloudName);
+      await _prefs!.remove(_kCloudAvatarUrl);
+      await _prefs!.remove(_kCloudProvider);
+    } catch (_) {}
+  }
+
+  Future<void> setRole(UserRole newRole) async {
+    currentRole = newRole.label;
+    notifyListeners();
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
+      await _prefs!.setString(_kCurrentRole, currentRole);
+    } catch (_) {}
   }
 
   Future<void> savePhone(String value) async {

@@ -18,9 +18,12 @@ import '../gst/gst_center_screen.dart';
 import '../reports/reports_screen.dart';
 import '../sales/invoice_list_tab.dart';
 import '../settings/invoice_settings_screen.dart';
-import '../shell/audit_log_screen.dart';
+import '../reports/audit_trail_screen.dart';
 import '../shell/business_edit_screen.dart';
 import '../shell/business_switcher_sheet.dart';
+import '../staff/staff_list_screen.dart';
+import '../auth/login_screen.dart';
+import '../backup/cloud_backup_sheet.dart';
 import 'import_screen.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -101,6 +104,8 @@ class _MoreTabState extends State<MoreTab> {
           ]),
         ),
       ),
+      const SizedBox(height: 12),
+      _buildCloudAccountTile(context, session),
       const SizedBox(height: 18),
       _menuTile(context, Icons.swap_horiz_rounded, isHi ? 'व्यापार बदलें' : 'Switch business', () => showBusinessSwitcher(context).then((changed) {
         if (changed == true) _load();
@@ -110,11 +115,34 @@ class _MoreTabState extends State<MoreTab> {
       _menuTile(context, Icons.account_balance_wallet_outlined, isHi ? 'कैश व बैंक खाते' : 'Cash & Bank Accounts Hub', () => nav(const CashBankHubScreen())),
       _menuTile(context, Icons.bar_chart_rounded, isHi ? 'रिपोर्ट्स' : 'Reports & analytics', () => nav(const ReportsScreen())),
       _menuTile(context, Icons.upload_file_rounded, isHi ? 'डेटा आयात' : 'Bulk import', () => nav(const ImportScreen())),
-      _menuTile(context, Icons.history_rounded, isHi ? 'ऑडिट लॉग' : 'Audit log', () => nav(const AuditLogScreen())),
+      _menuTile(context, Icons.history_rounded, isHi ? 'ऑडिट लॉग' : 'MCA Audit Trail', () => nav(const AuditTrailScreen())),
       _menuTile(context, Icons.cloud_sync_rounded, isHi ? 'डेटा सिंक' : 'Data sync', () => _syncMenu(context, sync), trailing: sync.pendingCount > 0
           ? Text(isHi ? '${sync.pendingCount} बाकी' : '${sync.pendingCount} pending', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.warning))
           : null),
-      _menuTile(context, Icons.backup_outlined, isHi ? 'बैकअप व निर्यात' : 'Backup & export', () => nav(const BackupExportScreen())),
+      _menuTile(
+        context,
+        Icons.cloud_upload_outlined,
+        isHi ? 'क्लाउड बैकअप व रिस्टोर' : 'Cloud Backup & Restore',
+        () => CloudBackupSheet.show(context),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: session.isCloudLinked
+                ? const Color(0xFF16A34A).withValues(alpha: 0.1)
+                : const Color(0xFF64748B).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            session.isCloudLinked ? 'AWS S3' : 'Local',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: session.isCloudLinked ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+            ),
+          ),
+        ),
+      ),
+      _menuTile(context, Icons.backup_outlined, isHi ? 'डेटा निर्यात व संग्रह' : 'Data Export & Archive', () => nav(const BackupExportScreen())),
       _menuTile(context, Icons.translate_rounded, 'Language / भाषा (${isHi ? 'हिन्दी' : 'English'})', () => _languageSelector(context, session)),
       _menuTile(
         context,
@@ -157,9 +185,20 @@ class _MoreTabState extends State<MoreTab> {
       ),
       _menuTile(
         context,
-        Icons.admin_panel_settings_rounded,
-        isHi ? 'भूमिका: ${session.currentRole}' : 'Role: ${session.currentRole}',
-        () => _switchRole(context, session),
+        Icons.badge_outlined,
+        isHi ? 'स्टाफ व अनुमतियां' : 'Staff & Role Permissions',
+        () => nav(const StaffListScreen()),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: StitchColors.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            session.role.label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: StitchColors.primary),
+          ),
+        ),
       ),
       const SizedBox(height: 18),
       const Padding(
@@ -323,29 +362,159 @@ class _MoreTabState extends State<MoreTab> {
     );
   }
 
-  void _switchRole(BuildContext context, Session session) {
+  Widget _buildCloudAccountTile(BuildContext context, Session session) {
+    final isLinked = session.isCloudLinked;
+    return InkWell(
+      onTap: () {
+        if (!isLinked) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginScreen(isModal: true)),
+          );
+        } else {
+          _showCloudAccountDetails(context, session);
+        }
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        decoration: BoxDecoration(
+          color: isLinked ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isLinked ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: isLinked ? const Color(0xFFDCFCE7) : Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isLinked ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1),
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                isLinked ? Icons.cloud_done_rounded : Icons.cloud_outlined,
+                color: isLinked ? const Color(0xFF16A34A) : const Color(0xFF5B4DBC),
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        isLinked ? (session.cloudName ?? 'Google Account') : 'Link Cloud Account',
+                        style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                      ),
+                      if (isLinked) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF16A34A),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text('Active', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: Colors.white)),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isLinked
+                        ? (session.cloudEmail ?? 'Sync & Backups Active')
+                        : 'Sign in with Google for cloud backup & sync',
+                    style: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              isLinked ? Icons.more_vert_rounded : Icons.arrow_forward_ios_rounded,
+              size: 16,
+              color: const Color(0xFF94A3B8),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCloudAccountDetails(BuildContext context, Session session) {
     showModalBottomSheet<void>(
       context: context,
-      builder: (context) => Column(mainAxisSize: MainAxisSize.min, children: [
-        const Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('Switch Role (Testing)', style: TextStyle(fontWeight: FontWeight.bold)),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: const BoxDecoration(color: Color(0xFFDCFCE7), shape: BoxShape.circle),
+                    child: const Icon(Icons.cloud_done_rounded, color: Color(0xFF16A34A), size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(session.cloudName ?? 'Cloud Account', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                        Text(session.cloudEmail ?? '', style: const TextStyle(fontSize: 12.5, color: Color(0xFF64748B))),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.sync_rounded, color: StitchColors.primary),
+                title: const Text('Trigger On-Demand Sync', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                subtitle: const Text('Push local changes and pull remote updates'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  SyncEngine.instance.syncNow();
+                  showAppMessage(context, 'Sync initiated');
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.logout_rounded, color: StitchColors.error),
+                title: const Text('Disconnect Cloud Account', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: StitchColors.error)),
+                subtitle: const Text('Local SQLite billing and records stay completely safe on device'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await session.unlinkCloudSession();
+                  if (context.mounted) {
+                    showAppMessage(context, 'Cloud account disconnected');
+                  }
+                },
+              ),
+            ],
+          ),
         ),
-        ListTile(
-          title: const Text('Admin / Owner'),
-          onTap: () {
-            session.switchRole('Admin');
-            Navigator.pop(context);
-          },
-        ),
-        ListTile(
-          title: const Text('Salesman'),
-          onTap: () {
-            session.switchRole('Salesman');
-            Navigator.pop(context);
-          },
-        ),
-      ]),
+      ),
     );
   }
 
@@ -842,6 +1011,51 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Backup & export')),
         body: ListView(padding: const EdgeInsets.all(16), children: [
+          AppCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF5B4DBC).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.cloud_sync_rounded, color: Color(0xFF5B4DBC), size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Cloud Backup & Disaster Recovery', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                      Text('Encrypted snapshots on AWS S3 vault', style: TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
+                    ],
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              const Text(
+                'Point-in-time snapshots protect your ledger against device loss or damage. Restore in 1-tap on any new phone.',
+                style: TextStyle(fontSize: 13, color: StitchColors.textSecondary, height: 1.35),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: StitchColors.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.cloud_upload_rounded, size: 18),
+                  label: const Text('Open Cloud Backup Vault'),
+                  onPressed: () => CloudBackupSheet.show(context),
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 14),
           AppCard(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

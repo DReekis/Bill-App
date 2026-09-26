@@ -1,4 +1,5 @@
 import 'money.dart';
+import 'session.dart';
 
 class Business {
   Business({
@@ -1399,6 +1400,35 @@ class SyncRecord {
         'created_at': createdAt,
         'synced_at': syncedAt,
       };
+
+  SyncRecord copyWith({
+    int? id,
+    int? businessId,
+    String? entity,
+    int? entityId,
+    String? op,
+    String? payload,
+    String? idempotencyKey,
+    String? status,
+    int? attempts,
+    String? lastError,
+    String? createdAt,
+    String? syncedAt,
+  }) =>
+      SyncRecord(
+        id: id ?? this.id,
+        businessId: businessId ?? this.businessId,
+        entity: entity ?? this.entity,
+        entityId: entityId ?? this.entityId,
+        op: op ?? this.op,
+        payload: payload ?? this.payload,
+        idempotencyKey: idempotencyKey ?? this.idempotencyKey,
+        status: status ?? this.status,
+        attempts: attempts ?? this.attempts,
+        lastError: lastError ?? this.lastError,
+        createdAt: createdAt ?? this.createdAt,
+        syncedAt: syncedAt ?? this.syncedAt,
+      );
 }
 
 const List<String> paymentModes = [
@@ -2009,5 +2039,53 @@ class SalesSummaryReportData {
   final int invoiceCount;
   final Map<String, int> paymentModes;
   final List<Invoice> invoices;
+}
+
+class StaffMember {
+  StaffMember({
+    this.id,
+    required this.businessId,
+    required this.name,
+    required this.phone,
+    this.email,
+    required this.role,
+    this.pin,
+    this.isActive = true,
+    String? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now().toIso8601String();
+
+  final int? id;
+  final int businessId;
+  String name;
+  String phone;
+  String? email;
+  UserRole role;
+  String? pin;
+  bool isActive;
+  String createdAt;
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'business_id': businessId,
+        'name': name,
+        'phone': phone,
+        'email': email,
+        'role': role.name,
+        'pin': pin,
+        'is_active': isActive ? 1 : 0,
+        'created_at': createdAt,
+      };
+
+  static StaffMember fromMap(Map<String, Object?> map) => StaffMember(
+        id: map['id'] as int?,
+        businessId: (map['business_id'] as num?)?.toInt() ?? 0,
+        name: map['name'] as String? ?? '',
+        phone: map['phone'] as String? ?? '',
+        email: map['email'] as String?,
+        role: UserRole.fromString(map['role'] as String?),
+        pin: map['pin'] as String?,
+        isActive: (map['is_active'] as int? ?? 1) == 1,
+        createdAt: map['created_at'] as String? ?? '',
+      );
 }
 
