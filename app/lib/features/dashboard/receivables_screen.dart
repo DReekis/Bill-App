@@ -174,7 +174,7 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
                           controller: searchController,
                           onChanged: (v) => setState(() => query = v),
                           decoration: InputDecoration(
-                            hintText: l10n.isHindi ? 'ग्राहक या बिल खोजें' : 'Search customer or bill...',
+                            hintText: l10n.text('search_customer_or_bill'),
                             prefixIcon: const Icon(Icons.search_rounded, size: 20),
                             suffixIcon: query.isNotEmpty
                                 ? IconButton(
@@ -201,7 +201,7 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
                   child: Row(
                     children: [
                       _FilterChip(
-                        label: '${l10n.isHindi ? 'सभी' : 'All'} (${allItems.length})',
+                        label: '${l10n.text('all')} (${allItems.length})',
                         selected: filterIndex == 0,
                         onTap: () => setState(() => filterIndex = 0),
                       ),
@@ -214,7 +214,7 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
                       ),
                       const SizedBox(width: 8),
                       _FilterChip(
-                        label: l10n.isHindi ? 'जल्द देय' : 'Due Soon',
+                        label: l10n.text('due_soon'),
                         selected: filterIndex == 2,
                         onTap: () => setState(() => filterIndex = 2),
                       ),
@@ -346,7 +346,7 @@ class _ReceivablesHero extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  '$partyCount ${l10n.isHindi ? 'पार्टियां' : 'Parties'}',
+                  '$partyCount ${l10n.text('parties')}',
                   style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -377,7 +377,7 @@ class _ReceivablesHero extends StatelessWidget {
                   const Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFFF8A80)),
                   const SizedBox(width: 6),
                   Text(
-                    '${formatPaise(overdueAmount)} ${l10n.text('overdue').toLowerCase()} ($overdueCount ${l10n.isHindi ? 'पार्टियां' : 'parties'})',
+                    '${formatPaise(overdueAmount)} ${l10n.text('overdue').toLowerCase()} ($overdueCount ${l10n.text('parties')})',
                     style: const TextStyle(
                       color: Color(0xFFFFEBEE),
                       fontSize: 12,
@@ -522,7 +522,7 @@ class _DebtorCardState extends State<_DebtorCard> {
                               ),
                             ] else
                               Text(
-                                l10n.isHindi ? 'कोई फोन नहीं' : 'No contact saved',
+                                l10n.text('no_contact_saved'),
                                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                               ),
                           ],
@@ -536,7 +536,7 @@ class _DebtorCardState extends State<_DebtorCard> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              '${item.maxOverdueDays} ${l10n.isHindi ? 'दिन बकाया' : 'days overdue'}',
+                              '${item.maxOverdueDays} ${l10n.text('days_overdue')}',
                               style: const TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
@@ -672,7 +672,7 @@ class _DebtorCardState extends State<_DebtorCard> {
                     ),
                     icon: const Icon(Icons.chat_outlined, size: 16),
                     label: Text(
-                      l10n.isHindi ? 'व्हाट्सएप' : 'WhatsApp',
+                      l10n.isHindi ? 'व्हाट्सएप' : (l10n.isBengali ? 'হোয়াটসঅ্যাপ' : 'WhatsApp'),
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                     ),
                   ),

@@ -114,7 +114,7 @@ class _PayablesScreenState extends State<PayablesScreen> {
                     controller: searchController,
                     onChanged: (v) => setState(() => query = v),
                     decoration: InputDecoration(
-                      hintText: l10n.isHindi ? 'सप्लायर खोजें' : 'Search supplier or phone...',
+                      hintText: l10n.text('search_suppliers'),
                       prefixIcon: const Icon(Icons.search_rounded, size: 20),
                       suffixIcon: query.isNotEmpty
                           ? IconButton(
@@ -248,7 +248,7 @@ class _PayablesHero extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  '$partyCount ${l10n.isHindi ? 'सप्लायर' : 'Suppliers'}',
+                  '$partyCount ${l10n.text('suppliers')}',
                   style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -266,7 +266,7 @@ class _PayablesHero extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            l10n.isHindi ? 'कुल बकाया जो आपको चुकाना है' : 'Total outstanding balance owed to suppliers',
+            l10n.text('total_owed_suppliers'),
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.8),
               fontSize: 12,
@@ -348,7 +348,7 @@ class _CreditorCard extends StatelessWidget {
                               ),
                             ] else
                               Text(
-                                l10n.isHindi ? 'कोई फोन नहीं' : 'No contact saved',
+                                l10n.text('no_contact_saved'),
                                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                               ),
                           ],

@@ -44,11 +44,40 @@ void main() {
       }
     });
 
+    test('Bengali quick actions are clean, short, and under 12 characters', () {
+      final l10nBn = AppLocalizations(const Locale('bn'));
+      final shortActions = [
+        l10nBn.text('sale'),
+        l10nBn.text('purchase'),
+        l10nBn.text('gst'),
+        l10nBn.text('cash_bank'),
+        l10nBn.text('item'),
+        l10nBn.text('estimate'),
+        l10nBn.text('order'),
+        l10nBn.text('reports'),
+      ];
+
+      expect(l10nBn.text('sale'), 'বিক্রি');
+      expect(l10nBn.text('purchase'), 'ক্রয়');
+      expect(l10nBn.text('gst'), 'জিএসটি');
+      expect(l10nBn.text('cash_bank'), 'ক্যাশ-ব্যাংক');
+      expect(l10nBn.text('item'), 'পণ্য');
+      expect(l10nBn.text('estimate'), 'কোটেশন');
+      expect(l10nBn.text('order'), 'অর্ডার');
+      expect(l10nBn.text('reports'), 'রিপোর্ট');
+
+      for (final action in shortActions) {
+        expect(action.length, lessThanOrEqualTo(12),
+            reason: '$action should be short so it never overflows');
+      }
+    });
+
     test('Delegate reloads properly when locale changes', () {
       const delegate = AppLocalizations.delegate;
       expect(delegate.shouldReload(delegate), isTrue);
       expect(delegate.isSupported(const Locale('en')), isTrue);
       expect(delegate.isSupported(const Locale('hi')), isTrue);
+      expect(delegate.isSupported(const Locale('bn')), isTrue);
       expect(delegate.isSupported(const Locale('fr')), isFalse);
     });
   });

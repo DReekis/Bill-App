@@ -1091,17 +1091,23 @@ class _ReferenceDashboard extends StatelessWidget {
           _AlertRow(
               icon: Icons.warning_amber_rounded,
               color: const Color(0xFFF44336),
-              title: l10n.isHindi ? 'कम स्टॉक: $low सामान' : 'Low Stock: $low products',
+              title: l10n.isBengali
+                  ? 'কম স্টক: $low পণ্য'
+                  : (l10n.isHindi ? 'कम स्टॉक: $low सामान' : 'Low Stock: $low products'),
               onTap: onShowLowStock),
           const SizedBox(height: 12),
           _AlertRow(
               icon: Icons.access_time_rounded,
               color: const Color(0xFFFFA000),
               title: overdueCount > 0
-                  ? (l10n.isHindi
-                      ? 'बकाया: ₹${formatPaise(overdueAmount)} ($overdueCount बिल)'
-                      : 'Overdue: ₹${formatPaise(overdueAmount)} from $overdueCount invoices')
-                  : (l10n.isHindi ? 'बकाया: कोई बकाया नहीं' : 'Overdue: No overdue invoices'),
+                  ? (l10n.isBengali
+                      ? 'বকেয়া: ₹${formatPaise(overdueAmount)} ($overdueCount বিল)'
+                      : (l10n.isHindi
+                          ? 'बकाया: ₹${formatPaise(overdueAmount)} ($overdueCount बिल)'
+                          : 'Overdue: ₹${formatPaise(overdueAmount)} from $overdueCount invoices'))
+                  : (l10n.isBengali
+                      ? 'বকেয়া: কোনো বকেয়া নেই'
+                      : (l10n.isHindi ? 'बकाया: कोई बकाया नहीं' : 'Overdue: No overdue invoices')),
               onTap: onShowOverdue),
           if (out > 0)
             Padding(
@@ -1109,7 +1115,9 @@ class _ReferenceDashboard extends StatelessWidget {
                 child: _AlertRow(
                     icon: Icons.error_outline_rounded,
                     color: const Color(0xFFF44336),
-                    title: l10n.isHindi ? 'स्टॉक खत्म: $out सामान' : 'Out of stock: $out products',
+                    title: l10n.isBengali
+                        ? 'স্টক শেষ: $out পণ্য'
+                        : (l10n.isHindi ? 'स्टॉक खत्म: $out सामान' : 'Out of stock: $out products'),
                     onTap: onShowOutOfStock)),
 
           const SizedBox(height: 32),
@@ -1344,7 +1352,7 @@ class _Snapshot extends StatelessWidget {
     };
     final snapshotTitle = timeframe == 'Today'
         ? l10n.text('todays_snapshot')
-        : (l10n.isHindi
+        : (l10n.isHindi || l10n.isBengali
             ? '$timeframeLabel ${l10n.text('snapshot')}'
             : "$timeframe's ${l10n.text('snapshot')}");
 
@@ -1519,8 +1527,8 @@ class _CashFlowSummaryRow extends StatelessWidget {
             title: l10n.text('to_collect'),
             amount: formatPaise(receivables?.totalReceivable ?? 0),
             subtitle: (receivables?.partyCount ?? 0) > 0
-                ? '${receivables!.partyCount} ${l10n.isHindi ? 'पार्टियां' : 'parties'}'
-                : (l10n.isHindi ? 'कोई बकाया नहीं' : 'All clear'),
+                ? '${receivables!.partyCount} ${l10n.isBengali ? 'পার্টি' : (l10n.isHindi ? 'पार्टियां' : 'parties')}'
+                : (l10n.isBengali ? 'কোনো বকেয়া নেই' : (l10n.isHindi ? 'कोई बकाया नहीं' : 'All clear')),
             badgeText: (receivables?.overdueCount ?? 0) > 0
                 ? '${receivables!.overdueCount} ${l10n.text('overdue').toLowerCase()}'
                 : null,
@@ -1538,8 +1546,8 @@ class _CashFlowSummaryRow extends StatelessWidget {
               title: l10n.text('to_pay'),
               amount: formatPaise(payables?.totalPayable ?? 0),
               subtitle: (payables?.partyCount ?? 0) > 0
-                  ? '${payables!.partyCount} ${l10n.isHindi ? 'सप्लायर' : 'suppliers'}'
-                  : (l10n.isHindi ? 'कोई देनदारी नहीं' : 'All clear'),
+                  ? '${payables!.partyCount} ${l10n.isBengali ? 'সাপ্লায়ার' : (l10n.isHindi ? 'सप्लायर' : 'suppliers')}'
+                  : (l10n.isBengali ? 'কোনো দেনা নেই' : (l10n.isHindi ? 'कोई देनदारी नहीं' : 'All clear')),
               icon: Icons.call_made_rounded,
               primaryColor: const Color(0xFFC62828),
               bgColor: const Color(0xFFFDF4F4),

@@ -31,8 +31,8 @@ class _PartiesTabState extends State<PartiesTab> {
         child: SegmentedButton<int>(
           showSelectedIcon: false,
           segments: [
-            ButtonSegment(value: 0, label: Text(l10n.isHindi ? 'ग्राहक' : 'Customers')),
-            ButtonSegment(value: 1, label: Text(l10n.isHindi ? 'सप्लायर' : 'Suppliers')),
+            ButtonSegment(value: 0, label: Text(l10n.text('customers'))),
+            ButtonSegment(value: 1, label: Text(l10n.text('suppliers'))),
           ],
           selected: {segment},
           onSelectionChanged: (s) => setState(() => segment = s.first),
@@ -100,7 +100,7 @@ class _CustomerListTabState extends State<CustomerListTab> {
               controller: search,
               onChanged: (v) => setState(() => query = v),
               decoration: InputDecoration(
-                hintText: context.l10n.isHindi ? 'ग्राहक या फोन खोजें' : 'Search customers or phone',
+                hintText: context.l10n.text('search_customers_or_phone'),
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
               ),
             ),
@@ -124,7 +124,7 @@ class _CustomerListTabState extends State<CustomerListTab> {
                 ? ListView(children: [
                     AppEmptyState(
                       icon: Icons.people_alt_outlined,
-                      title: context.l10n.isHindi ? 'कोई ग्राहक नहीं मिला' : 'No customers found',
+                      title: context.l10n.text('no_customers_found'),
                     )
                   ])
                 : ListView.builder(
@@ -254,7 +254,7 @@ class _SupplierListTabState extends State<SupplierListTab> {
               controller: search,
               onChanged: (v) => setState(() => query = v),
               decoration: InputDecoration(
-                hintText: context.l10n.isHindi ? 'सप्लायर खोजें' : 'Search suppliers',
+                hintText: context.l10n.text('search_suppliers'),
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
               ),
             ),
@@ -278,7 +278,7 @@ class _SupplierListTabState extends State<SupplierListTab> {
                 ? ListView(children: [
                     AppEmptyState(
                       icon: Icons.storefront_outlined,
-                      title: context.l10n.isHindi ? 'कोई सप्लायर नहीं मिला' : 'No suppliers found',
+                      title: context.l10n.text('no_suppliers_found'),
                     )
                   ])
                 : ListView.builder(
