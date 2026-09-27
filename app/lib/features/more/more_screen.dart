@@ -58,9 +58,13 @@ class _MoreTabState extends State<MoreTab> {
     final session = context.watch<Session>();
     final sync = context.watch<SyncEngine>();
     final l10n = context.l10n;
-    final isHi = session.localeCode == 'hi';
     final isBn = session.localeCode == 'bn';
-    String t(String en, String hi, String bn) => isBn ? bn : (isHi ? hi : en);
+    final isHi = session.localeCode == 'hi';
+    String t(String en, String hi, String bn) {
+      if (isBn) return bn;
+      if (isHi) return hi;
+      return en;
+    }
     final biz = business;
     void nav(Widget screen) {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen)).then((_) => _load());
@@ -93,7 +97,7 @@ class _MoreTabState extends State<MoreTab> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(biz?.name ?? 'My Business', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 2),
-                Text(biz?.gstin?.isNotEmpty == true ? 'GSTIN ${biz!.gstin}' : t('Tap to switch business', 'व्यापार बदलने के लिए टैप करें', 'ব্যবসা পরিবর্তন করতে ট্যাপ করুন'),
+                Text(biz?.gstin?.isNotEmpty == true ? 'GSTIN ${biz!.gstin}' : t('Tap to switch business', 'व्यापार बदलने के लिए टैप करें', 'ব্যবসা পরিবর্তনের জন্য ট্যাপ করুন'),
                     style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
               ]),
             ),
@@ -112,14 +116,14 @@ class _MoreTabState extends State<MoreTab> {
       _menuTile(context, Icons.swap_horiz_rounded, t('Switch business', 'व्यापार बदलें', 'ব্যবসা পরিবর্তন'), () => showBusinessSwitcher(context).then((changed) {
         if (changed == true) _load();
       })),
-      _menuTile(context, Icons.receipt_long_outlined, t('All Transactions', 'सभी लेन-देन', 'সমস্ত লেনদেন'), () => nav(const TransactionListScreen())),
+      _menuTile(context, Icons.receipt_long_outlined, t('All Transactions', 'सभी लेन-देन', 'সকল লেনদেন'), () => nav(const TransactionListScreen())),
       _menuTile(context, Icons.account_balance_outlined, t('GST Compliance Center', 'जीएसटी केंद्र', 'জিএসটি কেন্দ্র'), () => nav(const GstCenterScreen())),
-      _menuTile(context, Icons.account_balance_wallet_outlined, t('Cash & Bank Accounts Hub', 'कैश व बैंक खाते', 'ক্যাশ ও ব্যাংক একাউন্ট'), () => nav(const CashBankHubScreen())),
+      _menuTile(context, Icons.account_balance_wallet_outlined, t('Cash & Bank Accounts Hub', 'कैश व बैंक खाते', 'ক্যাশ ও ব্যাংক অ্যাকাউন্ট'), () => nav(const CashBankHubScreen())),
       _menuTile(context, Icons.bar_chart_rounded, t('Reports & analytics', 'रिपोर्ट्स', 'রিপোর্ট ও বিশ্লেষণ'), () => nav(const ReportsScreen())),
-      _menuTile(context, Icons.upload_file_rounded, t('Bulk import', 'डेटा आयात', 'বাল্ক ডেটা আমদানি'), () => nav(const ImportScreen())),
-      _menuTile(context, Icons.history_rounded, t('MCA Audit Trail', 'ऑडिट लॉग', 'এমসিএ অডিট লগ'), () => nav(const AuditTrailScreen())),
-      _menuTile(context, Icons.cloud_sync_rounded, t('Data sync', 'डेटा सिंक', 'ডেটা সিঙ্ক'), () => _syncMenu(context, sync), trailing: sync.pendingCount > 0
-          ? Text(t('${sync.pendingCount} pending', '${sync.pendingCount} बाकी', '${sync.pendingCount} বাকি'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.warning))
+      _menuTile(context, Icons.upload_file_rounded, t('Bulk import', 'डेटा आयात', 'বাল্ক আমদানি'), () => nav(const ImportScreen())),
+      _menuTile(context, Icons.history_rounded, t('MCA Audit Trail', 'ऑडिट लॉग', 'অডিট লগ'), () => nav(const AuditTrailScreen())),
+      _menuTile(context, Icons.cloud_sync_rounded, t('Data sync', 'डेटा सिंक', 'ডাটা সিঙ্ক'), () => _syncMenu(context, sync), trailing: sync.pendingCount > 0
+          ? Text('${sync.pendingCount} ${t('pending', 'बाकी', 'বাকি')}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.warning))
           : null),
       _menuTile(
         context,
@@ -144,12 +148,17 @@ class _MoreTabState extends State<MoreTab> {
           ),
         ),
       ),
-      _menuTile(context, Icons.backup_outlined, t('Data Export & Archive', 'डेटा निर्यात व संग्रह', 'ডেটা রপ্তানি ও আর্কাইভ'), () => nav(const BackupExportScreen())),
-      _menuTile(context, Icons.translate_rounded, 'Language / भाषा / ভাষা (${isBn ? 'বাংলা' : isHi ? 'हिन्दी' : 'English'})', () => _languageSelector(context, session)),
+      _menuTile(context, Icons.backup_outlined, t('Data Export & Archive', 'डेटा निर्यात व संग्रह', 'ডাটা এক্সপোর্ট ও আর্কাইভ'), () => nav(const BackupExportScreen())),
+      _menuTile(
+        context,
+        Icons.translate_rounded,
+        'Language / ভাষা (${session.localeCode == 'bn' ? 'বাংলা' : (session.localeCode == 'hi' ? 'हिन्दी' : 'English')})',
+        () => _languageSelector(context, session),
+      ),
       _menuTile(
         context,
         Icons.security_rounded,
-        t('Screen security (block capture)', 'स्क्रीन सुरक्षा (स्क्रीनशॉट रोकें)', 'স্ক্রিন নিরাপত্তা (স্ক্রিনশট ব্লক)'),
+        t('Screen security (block capture)', 'स्क्रीन सुरक्षा (स्क्रीनशॉट रोकें)', 'স্ক্রিন সুরক্ষা (ক্যাপচার রোধ)'),
         () => session.setFlagSecure(!session.flagSecureEnabled),
         trailing: Switch(
           value: session.flagSecureEnabled,
@@ -171,7 +180,7 @@ class _MoreTabState extends State<MoreTab> {
       _menuTile(
         context,
         Icons.gpp_good_rounded,
-        t('GSTIN Autofill API Key', 'GSTIN ऑटो-फिल API कुंजी', 'GSTIN অটো-ফিল API কী'),
+        t('GSTIN Autofill API Key', 'GSTIN ऑटो-फिल API कुंजी', 'GSTIN অটো-ফিল API কি'),
         () => _showGstnApiKeyDialog(context, session),
         trailing: session.gstnApiKey.isNotEmpty
             ? const Icon(Icons.check_circle_rounded, color: StitchColors.success, size: 18)
@@ -181,14 +190,14 @@ class _MoreTabState extends State<MoreTab> {
         context,
         Icons.lock_rounded,
         session.hasPin
-            ? t('App lock · PIN set', 'ऐप लॉक · पिन सेट है', 'অ্যাপ লক · পিন সেট করা আছে')
+            ? t('App lock · PIN set', 'ऐप लॉक · पिन सेट है', 'অ্যাপ লক · পিন সেট আছে')
             : t('App lock (set PIN)', 'ऐप लॉक (पिन सेट करें)', 'অ্যাপ লক (পিন সেট করুন)'),
         () => _pinSettings(context),
       ),
       _menuTile(
         context,
         Icons.badge_outlined,
-        t('Staff & Role Permissions', 'स्टाफ व अनुमतियां', 'কর্মী ও ভূমিকা অনুমতি'),
+        t('Staff & Role Permissions', 'स्टाफ व अनुमतियां', 'কর্মী ও অনুমতি'),
         () => nav(const StaffListScreen()),
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -262,7 +271,7 @@ class _MoreTabState extends State<MoreTab> {
           children: [
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 18, 20, 10),
-              child: Text('Choose Language / भाषा चुनें / ভাষা নির্বাচন',
+              child: Text('Choose Language / ভাষা বেছে নিন / भाषा चुनें',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
             ),
             ListTile(
@@ -290,7 +299,7 @@ class _MoreTabState extends State<MoreTab> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.g_translate_rounded, color: StitchColors.primary),
+              leading: const Icon(Icons.translate_rounded, color: StitchColors.primary),
               title: const Text('বাংলা (Bengali)', style: TextStyle(fontWeight: FontWeight.w600)),
               trailing: session.localeCode == 'bn'
                   ? const Icon(Icons.check_circle_rounded, color: StitchColors.success)
@@ -310,7 +319,14 @@ class _MoreTabState extends State<MoreTab> {
 
   void _showGstnApiKeyDialog(BuildContext context, Session session) {
     final controller = TextEditingController(text: session.gstnApiKey);
+    final isBn = session.localeCode == 'bn';
     final isHi = session.localeCode == 'hi';
+    String t(String en, String hi, String bn) {
+      if (isBn) return bn;
+      if (isHi) return hi;
+      return en;
+    }
+
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -319,7 +335,7 @@ class _MoreTabState extends State<MoreTab> {
             const Icon(Icons.gpp_good_rounded, color: StitchColors.primary),
             const SizedBox(width: 8),
             Text(
-              isHi ? 'GSTIN ऑटो-फिल API कुंजी' : 'GSTIN Autofill API Key',
+              t('GSTIN Autofill API Key', 'GSTIN ऑटो-फिल API कुंजी', 'GSTIN অটো-ফিল API কি'),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ],
@@ -329,9 +345,11 @@ class _MoreTabState extends State<MoreTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isHi
-                  ? 'gstincheck.co.in से API कुंजी दर्ज करें ताकि GSTIN डालने पर पार्टी का नाम और पता अपने आप भर सके। यदि कुंजी नहीं है, तो ऐप स्मार्ट ऑफलाइन पद्धति का उपयोग करेगा।'
-                  : 'Enter your free API key (e.g. from gstincheck.co.in) to automatically fetch full business names and addresses for any GSTIN. If blank, smart offline resolution is used.',
+              t(
+                'Enter your free API key (e.g. from gstincheck.co.in) to automatically fetch full business names and addresses for any GSTIN. If blank, smart offline resolution is used.',
+                'gstincheck.co.in से API कुंजी दर्ज करें ताकि GSTIN डालने पर पार्टी का नाम और पता अपने आप भर सके। यदि कुंजी नहीं है, तो ऐप स्मार्ट ऑफलाइन पद्धति का उपयोग करेगा।',
+                'GSTIN দিয়ে স্বয়ংক্রিয়ভাবে নাম ও ঠিকানা পেতে gstincheck.co.in থেকে ফ্রি API কি লিখুন। ফাঁকা রাখলে অফলাইন পদ্ধতি ব্যবহৃত হবে।',
+              ),
               style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary),
             ),
             const SizedBox(height: 14),
@@ -352,24 +370,24 @@ class _MoreTabState extends State<MoreTab> {
                 await session.saveGstnApiKey('');
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
-                  showAppMessage(context, 'API key cleared');
+                  showAppMessage(context, t('API key cleared', 'API कुंजी हटा दी गई', 'API কি মোছা হয়েছে'));
                 }
               },
-              child: const Text('Clear', style: TextStyle(color: StitchColors.error)),
+              child: Text(t('Clear', 'हटाएं', 'মুছুন'), style: const TextStyle(color: StitchColors.error)),
             ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(t('Cancel', 'रद्द करें', 'বাতিল')),
           ),
           ElevatedButton(
             onPressed: () async {
               await session.saveGstnApiKey(controller.text.trim());
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) {
-                showAppMessage(context, 'GSTIN API key saved');
+                showAppMessage(context, t('GSTIN API key saved', 'GSTIN API कुंजी सहेजी गई', 'GSTIN API কি সংরক্ষিত হয়েছে'));
               }
             },
-            child: const Text('Save'),
+            child: Text(t('Save', 'सहेजें', 'সংরক্ষণ')),
           ),
         ],
       ),

@@ -1,7 +1,7 @@
 name: billket
 description: Billket business billing application.
 publish_to: 'none'
-version: 1.0.2+5
+version: 1.0.3+5
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
