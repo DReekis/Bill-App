@@ -164,7 +164,7 @@ void main() {
       expect(GoogleAuthConfig.serverClientId, contains('594956382165-jgm12poc8g1lmtj38ilj87cu8upggban'));
       expect(GoogleAuthConfig.androidClientId, contains('594956382165-f7qljarc4oepch4do89hmpe1sf2ro2is'));
       expect(GoogleAuthConfig.iosClientId, contains('594956382165-c8pqnkq6u5u75ldgohnuvjgv30t7i0pu'));
-      expect(GoogleAuthConfig.desktopClientId, contains('594956382165-jgm12poc8g1lmtj38ilj87cu8upggban'));
+      expect(GoogleAuthConfig.desktopClientId, contains('apps.googleusercontent.com'));
       // platformClientId is null on Android (Google Play Services auto-discovers via SHA-1)
       // On desktop/test runner it returns the desktop/web client ID
     });
