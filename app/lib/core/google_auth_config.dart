@@ -39,6 +39,16 @@ class GoogleAuthConfig {
     defaultValue: '594956382165-jgm12poc8g1lmtj38ilj87cu8upggban.apps.googleusercontent.com',
   );
 
+  /// Android application package name
+  static const String appPackageName = 'com.pricepilot.bill';
+
+  /// Active debug/build signing certificate SHA-1 fingerprint
+  static const String debugSha1 = '7D:C8:69:0D:50:7F:30:38:A4:15:2E:C7:DE:0C:5E:40:B9:EB:68:E7';
+
+  /// Active debug/build signing certificate SHA-256 fingerprint
+  static const String debugSha256 =
+      'CF:84:B7:DC:0C:C9:E7:54:9E:3B:DA:46:DC:6D:70:C1:CA:39:5A:A4:32:E1:4A:1F:55:5C:5A:93:E7:0A:A1:CB';
+
   /// Returns the appropriate platform client ID
   static String? get platformClientId {
     if (kIsWeb) {

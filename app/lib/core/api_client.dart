@@ -10,19 +10,28 @@ class ApiClient {
     defaultValue: 'http://43.204.237.49',
   );
 
-  ApiClient({String? baseUrl}) : _baseUrl = _cachedBaseUrl ?? baseUrl ?? defaultBaseUrl {
-    _loadBaseUrl();
+  ApiClient({String? baseUrl})
+      : _explicitBaseUrl = baseUrl != null,
+        _baseUrl = baseUrl ?? _cachedBaseUrl ?? defaultBaseUrl {
+    _ready = _loadBaseUrl();
   }
 
   static const String _kBaseUrlKey = 'api.base_url';
   static String? _cachedBaseUrl;
+  final bool _explicitBaseUrl;
   String _baseUrl;
   String? _token;
   String? _businessId;
+  Future<void>? _ready;
 
   String get baseUrl => _baseUrl;
 
+  Future<void> ensureReady() async {
+    await (_ready ??= _loadBaseUrl());
+  }
+
   Future<void> _loadBaseUrl() async {
+    if (_explicitBaseUrl) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getString(_kBaseUrlKey);
@@ -65,20 +74,51 @@ class ApiClient {
 
   Future<bool> ping() async {
     try {
+      await ensureReady();
       final uri = Uri.parse('$_baseUrl/health');
-      final res = await http.get(uri).timeout(const Duration(milliseconds: 600));
+      final res = await http.get(uri).timeout(const Duration(seconds: 5));
       return res.statusCode == 200;
     } catch (_) {
       return false;
     }
   }
 
+  String _errorFromResponse(http.Response res, String fallback) {
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map && decoded['error'] != null) {
+        return decoded['error'].toString();
+      }
+    } catch (_) {}
+    if (res.body.isEmpty) {
+      return '$fallback (HTTP ${res.statusCode})';
+    }
+    return '$fallback (HTTP ${res.statusCode})';
+  }
+
+  AuthSessionResult _parseAuth(http.Response res, String fallback) {
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final decoded = jsonDecode(res.body);
+      if (decoded is! Map) {
+        throw Exception(fallback);
+      }
+      final result = AuthSessionResult.fromMap(Map<String, dynamic>.from(decoded));
+      setToken(result.token);
+      if (result.businessId != null) {
+        setBusinessId(result.businessId);
+      }
+      return result;
+    }
+    throw Exception(_errorFromResponse(res, fallback));
+  }
+
   Future<http.Response> post(
     String path,
     Map<String, dynamic> body, {
     Map<String, String>? headers,
-    Duration timeout = const Duration(seconds: 6),
+    Duration timeout = const Duration(seconds: 20),
   }) async {
+    await ensureReady();
     final uri = Uri.parse('$_baseUrl$path');
     return await http
         .post(uri, headers: _headers(extra: headers), body: jsonEncode(body))
@@ -88,8 +128,9 @@ class ApiClient {
   Future<http.Response> get(
     String path, {
     Map<String, String>? headers,
-    Duration timeout = const Duration(seconds: 6),
+    Duration timeout = const Duration(seconds: 20),
   }) async {
+    await ensureReady();
     final uri = Uri.parse('$_baseUrl$path');
     return await http
         .get(uri, headers: _headers(extra: headers))
@@ -110,19 +151,34 @@ class ApiClient {
       if (idToken != null) 'idToken': idToken,
       if (businessName != null) 'businessName': businessName,
     });
+    return _parseAuth(res, 'Google authentication failed');
+  }
 
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      final result = AuthSessionResult.fromMap(data);
-      setToken(result.token);
-      if (result.businessId != null) {
-        setBusinessId(result.businessId);
-      }
-      return result;
-    }
+  Future<AuthSessionResult> loginWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    final res = await post('/api/v1/auth/login', {
+      'email': email,
+      'password': password,
+    });
+    return _parseAuth(res, 'Login failed');
+  }
 
-    final err = jsonDecode(res.body);
-    throw Exception(err is Map ? (err['error'] ?? 'Google authentication failed') : 'Google authentication failed');
+  Future<AuthSessionResult> registerWithEmail({
+    required String name,
+    required String email,
+    required String password,
+    String? businessName,
+  }) async {
+    final res = await post('/api/v1/auth/register', {
+      'name': name,
+      'email': email,
+      'password': password,
+      if (businessName != null && businessName.isNotEmpty)
+        'businessName': businessName,
+    });
+    return _parseAuth(res, 'Registration failed');
   }
 
   Future<AuthSessionResult> loginWithPhone({
@@ -136,18 +192,7 @@ class ApiClient {
       if (name != null) 'name': name,
     });
 
-    if (res.statusCode >= 200 && res.statusCode < 300) {
-      final data = jsonDecode(res.body) as Map<String, dynamic>;
-      final result = AuthSessionResult.fromMap(data);
-      setToken(result.token);
-      if (result.businessId != null) {
-        setBusinessId(result.businessId);
-      }
-      return result;
-    }
-
-    final err = jsonDecode(res.body);
-    throw Exception(err is Map ? (err['error'] ?? 'Phone verification failed') : 'Phone verification failed');
+    return _parseAuth(res, 'Phone verification failed');
   }
 
   Future<void> requestPhoneOtp(String phone) async {
@@ -173,8 +218,7 @@ class ApiClient {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       return jsonDecode(res.body) as Map<String, dynamic>;
     }
-    final err = jsonDecode(res.body);
-    throw Exception(err is Map ? (err['error'] ?? 'Backup upload failed') : 'Backup upload failed');
+    throw Exception(_errorFromResponse(res, 'Backup upload failed'));
   }
 
   Future<List<Map<String, dynamic>>> fetchBackups() async {
@@ -197,6 +241,7 @@ class ApiClient {
   }
 
   Future<void> deleteBackup(String backupId) async {
+    await ensureReady();
     final uri = Uri.parse('$_baseUrl/api/v1/backup/$backupId');
     await http.delete(uri, headers: _headers());
   }

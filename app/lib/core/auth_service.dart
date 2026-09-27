@@ -82,17 +82,23 @@ class AuthSessionResult {
         'is_new_user': isNewUser,
       };
 
-  factory AuthSessionResult.fromMap(Map<String, dynamic> map) => AuthSessionResult(
-        token: map['token']?.toString() ?? '',
-        user: AuthUser.fromMap((map['user'] as Map<String, dynamic>?) ?? {}),
-        businessId: map['business'] != null
-            ? (map['business'] as Map<String, dynamic>)['id']?.toString()
-            : map['business_id']?.toString(),
-        businessName: map['business'] != null
-            ? (map['business'] as Map<String, dynamic>)['name']?.toString()
-            : map['business_name']?.toString(),
-        isNewUser: map['is_new_user'] == true,
-      );
+  factory AuthSessionResult.fromMap(Map<String, dynamic> map) {
+    Map<String, dynamic> asStringMap(dynamic value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) return Map<String, dynamic>.from(value);
+      return <String, dynamic>{};
+    }
+
+    final userMap = asStringMap(map['user']);
+    final businessMap = asStringMap(map['business']);
+    return AuthSessionResult(
+      token: map['token']?.toString() ?? '',
+      user: AuthUser.fromMap(userMap),
+      businessId: businessMap['id']?.toString() ?? map['business_id']?.toString(),
+      businessName: businessMap['name']?.toString() ?? map['business_name']?.toString(),
+      isNewUser: map['is_new_user'] == true,
+    );
+  }
 }
 
 /// Abstract upgradable authentication interface.
@@ -106,6 +112,7 @@ abstract class AuthService {
     required String name,
     required String email,
     required String password,
+    String? businessName,
     ApiClient? apiClient,
   });
   Future<AuthSessionResult> login({
@@ -124,34 +131,49 @@ class CloudAuthService implements AuthService {
   bool _initialized = false;
 
   Future<void> _ensureInitialized() async {
-    if (!_initialized) {
-      try {
-        await _googleSignIn.initialize(
-          clientId: GoogleAuthConfig.platformClientId,
-          serverClientId: GoogleAuthConfig.serverClientId,
-        );
-        _initialized = true;
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[CloudAuthService] GoogleSignIn initialization notice: $e');
-        }
-      }
-    }
+    if (_initialized) return;
+    await _googleSignIn.initialize(
+      clientId: GoogleAuthConfig.platformClientId,
+      serverClientId: GoogleAuthConfig.serverClientId,
+    );
+    _initialized = true;
   }
 
   @override
   Future<AuthSessionResult> signInWithGoogle({ApiClient? apiClient, String? businessName}) async {
     try {
       await _ensureInitialized();
-      final account = await _googleSignIn.authenticate();
+      bool isSupported = false;
+      try {
+        isSupported = _googleSignIn.supportsAuthenticate();
+      } catch (_) {
+        isSupported = false;
+      }
+      if (!isSupported) {
+        throw Exception(
+          'GOOGLE_SIGN_IN_UNSUPPORTED: Google Sign-In is not supported on this platform directly.',
+        );
+      }
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+      final account = await _googleSignIn.authenticate(
+        scopeHint: const ['email', 'openid', 'profile'],
+      );
       final auth = account.authentication;
       final email = account.email;
       final name = account.displayName ?? account.email.split('@').first;
       final photoUrl = account.photoUrl;
-      final idToken = auth.idToken ?? account.id;
+      final idToken = auth.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception(
+          'MISSING_ID_TOKEN: Google did not return an OpenID token. Confirm the Web client ID is passed as serverClientId.',
+        );
+      }
 
       // Exchange with backend if API client is provided
       if (apiClient != null) {
+        await apiClient.ensureReady();
         final res = await apiClient.loginWithGoogle(
           email: email,
           name: name,
@@ -192,6 +214,7 @@ class CloudAuthService implements AuthService {
     String? businessName,
   }) async {
     if (apiClient != null) {
+      await apiClient.ensureReady();
       return await apiClient.loginWithGoogle(
         email: email,
         name: name,
@@ -224,6 +247,7 @@ class CloudAuthService implements AuthService {
     ApiClient? apiClient,
   }) async {
     if (apiClient != null) {
+      await apiClient.ensureReady();
       return await apiClient.loginWithPhone(phone: phone, otp: otp);
     }
 
@@ -258,21 +282,17 @@ class CloudAuthService implements AuthService {
     required String name,
     required String email,
     required String password,
+    String? businessName,
     ApiClient? apiClient,
   }) async {
     if (apiClient != null) {
-      final res = await apiClient.post('/api/v1/auth/register', {
-        'name': name,
-        'email': email,
-        'password': password,
-      });
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        return AuthSessionResult.fromMap({
-          'token': 'jwt_reg_${DateTime.now().millisecondsSinceEpoch}',
-          'user': {'email': email, 'display_name': name, 'id': 'u_${email.hashCode}'}
-        });
-      }
-      throw Exception('Registration failed');
+      await apiClient.ensureReady();
+      return await apiClient.registerWithEmail(
+        name: name,
+        email: email,
+        password: password,
+        businessName: businessName,
+      );
     }
 
     return AuthSessionResult(
@@ -283,6 +303,7 @@ class CloudAuthService implements AuthService {
         displayName: name,
         provider: AuthProviderType.emailPassword,
       ),
+      businessName: businessName ?? "$name's Business",
     );
   }
 
@@ -293,17 +314,8 @@ class CloudAuthService implements AuthService {
     ApiClient? apiClient,
   }) async {
     if (apiClient != null) {
-      final res = await apiClient.post('/api/v1/auth/login', {
-        'email': email,
-        'password': password,
-      });
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        return AuthSessionResult.fromMap({
-          'token': 'jwt_login_${DateTime.now().millisecondsSinceEpoch}',
-          'user': {'email': email, 'display_name': email.split('@').first, 'id': 'u_${email.hashCode}'}
-        });
-      }
-      throw Exception('Login failed');
+      await apiClient.ensureReady();
+      return await apiClient.loginWithEmail(email: email, password: password);
     }
 
     return AuthSessionResult(

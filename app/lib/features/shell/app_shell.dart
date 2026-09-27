@@ -43,6 +43,11 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SyncEngine.instance.refreshPending();
+      final session = context.read<Session>();
+      if (session.isCloudLinked) {
+        SyncEngine.instance.startAutoSync();
+        SyncEngine.instance.syncNow();
+      }
     });
   }
 
@@ -72,6 +77,7 @@ class _AppShellState extends State<AppShell> {
   Future<void> _reloadTabs() async {
     if (mounted) setState(() => _dataVersion++);
     await SyncEngine.instance.refreshPending();
+    SyncEngine.instance.triggerSync();
   }
 
   void _launchAction(String action) {

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:billket/core/auth_service.dart';
 import 'package:billket/core/google_auth_config.dart';
 import 'package:billket/core/session.dart';
@@ -61,6 +62,22 @@ void main() {
       expect(result.user.photoUrl, 'https://photos.google.com/avatar.png');
       expect(result.businessId, 'biz_cloud_456');
       expect(result.businessName, 'Priya Super Store');
+    });
+
+    test('AuthSessionResult.fromMap accepts jsonDecode nested maps', () {
+      final decoded = jsonDecode('''
+        {
+          "token": "jwt.cloud.token",
+          "user": {"id": "u1", "name": "Ravi", "email": "ravi@gmail.com", "avatarUrl": "https://x/a.png"},
+          "business": {"id": "biz_1", "name": "Ravi Store"}
+        }
+      ''') as Map<String, dynamic>;
+
+      final result = AuthSessionResult.fromMap(decoded);
+      expect(result.token, 'jwt.cloud.token');
+      expect(result.user.displayName, 'Ravi');
+      expect(result.user.photoUrl, 'https://x/a.png');
+      expect(result.businessId, 'biz_1');
     });
   });
 

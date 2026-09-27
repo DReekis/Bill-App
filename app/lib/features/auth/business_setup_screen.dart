@@ -9,6 +9,7 @@ import '../../core/models.dart';
 import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../data/seed_data.dart';
+import '../../sync/sync_engine.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../shell/app_shell.dart';
@@ -35,6 +36,22 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
   bool fetchingGst = false;
   String? gstStatusMessage;
   bool gstValid = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final session = context.read<Session>();
+      if (session.cloudName != null &&
+          session.cloudName!.isNotEmpty &&
+          owner.text.isEmpty) {
+        setState(() {
+          owner.text = session.cloudName!;
+        });
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -159,6 +176,11 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
       }
 
       await session.completeOnboarding(businessId);
+
+      if (session.isCloudLinked) {
+        SyncEngine.instance.startAutoSync();
+        SyncEngine.instance.syncNow(force: true);
+      }
 
       if (mounted) {
         showAppMessage(context, 'Business created successfully!');

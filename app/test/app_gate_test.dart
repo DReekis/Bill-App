@@ -25,7 +25,7 @@ void main() {
     await session.load();
     await pumpGate(tester, session);
     await tester.pumpAndSettle();
-    expect(find.text('Connect to Billket Cloud'), findsOneWidget);
+    expect(find.text('Welcome to Billket'), findsOneWidget);
     expect(find.text('Sign in with Google'), findsOneWidget);
   });
 

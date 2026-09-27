@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -49,6 +50,8 @@ class SyncEngine extends ChangeNotifier {
     } catch (_) {}
   }
 
+  Timer? _debounceTimer;
+
   void startAutoSync({Duration interval = const Duration(seconds: 45)}) {
     _autoSyncTimer?.cancel();
     _autoSyncTimer = Timer.periodic(interval, (_) {
@@ -59,6 +62,19 @@ class SyncEngine extends ChangeNotifier {
   void stopAutoSync() {
     _autoSyncTimer?.cancel();
     _autoSyncTimer = null;
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+  }
+
+  /// Trigger a debounced background sync when an entity is saved locally.
+  void triggerSync({Duration debounce = const Duration(seconds: 2)}) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(debounce, () {
+      final session = Repository.instance.session;
+      if (!syncing && session.token != null && session.token!.isNotEmpty) {
+        syncNow();
+      }
+    });
   }
 
   Future<void> syncNow({bool force = false}) async {
@@ -74,16 +90,34 @@ class SyncEngine extends ChangeNotifier {
       // 1. Verify Reachability
       final online = await checkConnectivity();
       if (!online) {
-        // Offline — fail gracefully without blocking UI or throwing
+        lastError =
+            'Cloud server unreachable at ${apiClient.baseUrl}. Start the AWS instance or update the Backend Server URL.';
         return;
       }
 
       // Configure session credentials onto ApiClient
       final session = Repository.instance.session;
-      if (session.token != null) {
-        apiClient.setToken(session.token);
+      if (session.token == null || session.token!.isEmpty) {
+        lastError = 'Sign in to Billket Cloud before syncing.';
+        return;
       }
-      final cloudBizId = session.cloudBusinessId;
+      apiClient.setToken(session.token);
+
+      var cloudBizId = session.cloudBusinessId;
+      if ((cloudBizId == null || cloudBizId.isEmpty) && session.token != null) {
+        try {
+          final res = await apiClient.get('/api/v1/businesses');
+          if (res.statusCode == 200) {
+            final decoded = jsonDecode(res.body);
+            if (decoded is List && decoded.isNotEmpty && decoded.first['id'] != null) {
+              final fetchedId = decoded.first['id'].toString();
+              await session.setCloudBusinessId(fetchedId);
+              cloudBizId = fetchedId;
+            }
+          }
+        } catch (_) {}
+      }
+
       if (cloudBizId != null && cloudBizId.isNotEmpty) {
         apiClient.setBusinessId(cloudBizId);
       } else if (session.businessId != null) {

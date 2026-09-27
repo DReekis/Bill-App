@@ -39,6 +39,14 @@ void main() {
     expect(client.baseUrl, 'http://192.168.1.50:4000');
   });
 
+  test('ApiClient constructor argument is not overwritten by cached URL', () async {
+    final first = ApiClient(baseUrl: 'http://cached.example:4000');
+    await first.setBaseUrl('http://cached.example:4000');
+
+    final second = ApiClient(baseUrl: 'http://localhost:4000');
+    expect(second.baseUrl, 'http://localhost:4000');
+  });
+
   test('SyncRecord model serialization round-trip', () {
     final record = SyncRecord(
       id: 42,

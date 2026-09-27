@@ -7,6 +7,7 @@ import '../core/dates.dart';
 import '../core/models.dart';
 import '../core/money.dart';
 import '../core/session.dart';
+import '../sync/sync_engine.dart';
 import 'app_database.dart';
 
 class Repository {
@@ -55,6 +56,7 @@ class Repository {
       'attempts': 0,
       'created_at': timestampNow(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+    SyncEngine.instance.triggerSync();
   }
 
   Future<void> _syncOpeningBalance(Database db, int businessId, {

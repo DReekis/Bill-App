@@ -24,7 +24,7 @@ class SyncBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final sync = context.watch<SyncEngine>();
     final isBusy = sync.syncing;
-    final hasError = sync.lastError != null && sync.pendingCount > 0;
+    final hasError = sync.lastError != null && sync.lastError!.isNotEmpty;
     final hasPending = sync.pendingCount > 0;
 
     final Color color;
