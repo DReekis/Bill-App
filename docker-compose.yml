@@ -36,9 +36,9 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@pricepilot.in}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-594956382165-jgm12poc8g1lmtj38ilj87cu8upggban.apps.googleusercontent.com}
-      GOOGLE_ANDROID_CLIENT_ID: ${GOOGLE_ANDROID_CLIENT_ID:-594956382165-f7qljarc4oepch4do89hmpe1sf2ro2is.apps.googleusercontent.com}
-      GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-594956382165-c8pqnkq6u5u75ldgohnuvjgv30t7i0pu.apps.googleusercontent.com}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-1088562819881-tesapmissm77nd7o5maom90nh4sjv87h.apps.googleusercontent.com}
+      GOOGLE_ANDROID_CLIENT_ID: ${GOOGLE_ANDROID_CLIENT_ID:-1088562819881-rv6kpg40eqnlsaqp196g5ligiqeujunr.apps.googleusercontent.com}
+      GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-1088562819881-sfbc09v1khbn6188ps24o2kd5qmp39hu.apps.googleusercontent.com}
     ports:
       - "80:4000"
       - "4000:4000"

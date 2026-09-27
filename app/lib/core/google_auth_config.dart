@@ -36,7 +36,7 @@ class GoogleAuthConfig {
   /// Desktop / Web Client ID
   static const String desktopClientId = String.fromEnvironment(
     'GOOGLE_DESKTOP_CLIENT_ID',
-    defaultValue: '594956382165-jgm12poc8g1lmtj38ilj87cu8upggban.apps.googleusercontent.com',
+    defaultValue: '1088562819881-tesapmissm77nd7o5maom90nh4sjv87h.apps.googleusercontent.com',
   );
 
   /// Android application package name

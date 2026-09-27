@@ -11,14 +11,14 @@ export const config = {
   google: {
     clientId:
       process.env.GOOGLE_CLIENT_ID ||
-      '594956382165-jgm12poc8g1lmtj38ilj87cu8upggban.apps.googleusercontent.com',
+      '1088562819881-tesapmissm77nd7o5maom90nh4sjv87h.apps.googleusercontent.com',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
     androidClientId:
       process.env.GOOGLE_ANDROID_CLIENT_ID ||
-      '594956382165-f7qljarc4oepch4do89hmpe1sf2ro2is.apps.googleusercontent.com',
+      '1088562819881-rv6kpg40eqnlsaqp196g5ligiqeujunr.apps.googleusercontent.com',
     iosClientId:
       process.env.GOOGLE_IOS_CLIENT_ID ||
-      '594956382165-c8pqnkq6u5u75ldgohnuvjgv30t7i0pu.apps.googleusercontent.com',
+      '1088562819881-sfbc09v1khbn6188ps24o2kd5qmp39hu.apps.googleusercontent.com',
   },
 };
 
