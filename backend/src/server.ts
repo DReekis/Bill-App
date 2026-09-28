@@ -653,98 +653,140 @@ app.get('/api/v1/gst/lookup/:gstin', async (request, reply) => {
     };
   }
 
-  // Live lookup query to public GST directory if API key is present or available
-  const apiKey = process.env.GST_API_KEY;
-  if (config.nodeEnv !== 'test' && apiKey) {
+  // Live lookup query to public GST directory (genuine live lookup via jamku / gstincheck)
+  if (config.nodeEnv !== 'test' && isValidFormat) {
+    // 1. Try public live GST portal endpoint (no key required, returns real registered tradeName & address)
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch(`https://sheet.gstincheck.co.in/check/${apiKey}/${gstin}`, {
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`https://gst.jamku.app/api/gstin/${gstin}`, {
         signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
       });
       clearTimeout(timeout);
 
       if (res.ok) {
         const json: any = await res.json();
-        if (json?.flag === true && json?.data) {
+        if (json?.success === true && json?.data) {
           const d = json.data;
-          const addr = d.pradr?.addr;
-          const tradeName = d.tradeNam?.trim() || null;
-          const legalName = d.lgnm?.trim() || null;
-          const city = addr?.dst || addr?.city || capital.city;
-          const pinCode = addr?.pncd || capital.pinCode;
-          const addressParts = [addr?.bno, addr?.bnm, addr?.st, addr?.loc, city, addr?.stcd, pinCode]
-            .filter(Boolean)
-            .join(', ');
+          const tradeName = (d.tradeName || d.lgnm || '').trim();
+          const legalName = (d.lgnm || d.tradeName || '').trim();
+          const fullAddress = (d.adr || '').trim();
+          const pinMatch = fullAddress.match(/\b([1-9][0-9]{5})\b/);
+          const pinCode = d.pincode || (pinMatch ? pinMatch[1] : capital.pinCode);
 
-          return {
-            gstin,
-            valid: true,
-            businessName: tradeName || legalName,
-            tradeName,
-            legalName,
-            ownerName: legalName,
-            pan,
-            stateCode,
-            state,
-            city,
-            address: addressParts,
-            pinCode,
-            constitution: d.ctb || constitution,
-            industry,
-            isComposition: String(d.dty || '').toLowerCase().includes('composition'),
-            status: d.sts || 'Active',
-            registrationDate: d.rgdt || null,
-            isOnlineFetched: true,
-          };
+          let city = capital.city;
+          if (fullAddress) {
+            const parts = fullAddress.split(',').map((s: string) => s.trim()).filter(Boolean);
+            if (parts.length >= 3) {
+              const potentialCity = parts[parts.length - 3];
+              if (potentialCity && potentialCity.length > 2 && !/\d/.test(potentialCity)) {
+                city = potentialCity;
+              }
+            }
+          }
+
+          if (tradeName.length > 0 || legalName.length > 0 || fullAddress.length > 0) {
+            return {
+              gstin,
+              valid: true,
+              businessName: tradeName || legalName,
+              tradeName: tradeName || legalName,
+              legalName: legalName || tradeName,
+              ownerName: legalName,
+              pan,
+              stateCode,
+              state,
+              city,
+              address: fullAddress,
+              pinCode,
+              constitution: d.ctb || constitution,
+              industry,
+              isComposition: String(d.dty || '').toLowerCase().includes('composition'),
+              status: d.sts || 'Active',
+              registrationDate: d.rgdt || null,
+              isOnlineFetched: true,
+            };
+          }
         }
       }
     } catch {
-      // Network lookup timed out or failed, return deterministic fallback
+      // Primary live lookup timed out or failed, try secondary if key is present
+    }
+
+    // 2. Try sheet.gstincheck.co.in if private API key is configured
+    const apiKey = process.env.GST_API_KEY;
+    if (apiKey) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+        const res = await fetch(`https://sheet.gstincheck.co.in/check/${apiKey}/${gstin}`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const json: any = await res.json();
+          if (json?.flag === true && json?.data) {
+            const d = json.data;
+            const addr = d.pradr?.addr;
+            const tradeName = d.tradeNam?.trim() || null;
+            const legalName = d.lgnm?.trim() || null;
+            const city = addr?.dst || addr?.city || capital.city;
+            const pinCode = addr?.pncd || capital.pinCode;
+            const addressParts = [addr?.bno, addr?.bnm, addr?.st, addr?.loc, city, addr?.stcd, pinCode]
+              .filter(Boolean)
+              .join(', ');
+
+            return {
+              gstin,
+              valid: true,
+              businessName: tradeName || legalName,
+              tradeName,
+              legalName,
+              ownerName: legalName,
+              pan,
+              stateCode,
+              state,
+              city,
+              address: addressParts,
+              pinCode,
+              constitution: d.ctb || constitution,
+              industry,
+              isComposition: String(d.dty || '').toLowerCase().includes('composition'),
+              status: d.sts || 'Active',
+              registrationDate: d.rgdt || null,
+              isOnlineFetched: true,
+            };
+          }
+        }
+      } catch {
+        // Secondary network lookup timed out or failed
+      }
     }
   }
 
-  // Intelligent deterministic fallback so business name, city, and address are NEVER blank
-  const entityChar = pan.length >= 4 ? pan[3] : 'P';
-  const nameInitial = pan.length >= 5 ? pan[4] : 'A';
-  let defaultBusinessName = `${nameInitial}-Star Enterprises`;
-  let defaultLegalName = `${nameInitial} Commercial Proprietorship`;
-
-  if (entityChar === 'C') {
-    defaultBusinessName = `${nameInitial} Corp Commercial Pvt Ltd`;
-    defaultLegalName = `${nameInitial} Corp Commercial Private Limited`;
-  } else if (entityChar === 'F') {
-    defaultBusinessName = `${nameInitial} & Sons Trading LLP`;
-    defaultLegalName = `${nameInitial} & Associates LLP`;
-  } else if (entityChar === 'H') {
-    defaultBusinessName = `${nameInitial} Family Provisions (HUF)`;
-    defaultLegalName = `${nameInitial} Family HUF`;
-  } else if (entityChar === 'T' || entityChar === 'A') {
-    defaultBusinessName = `${nameInitial} Trust Commercial Agency`;
-    defaultLegalName = `${nameInitial} Commercial Trust`;
-  }
-
-  const defaultAddress = isValidFormat
-    ? `Shop No. 12, Commercial Market, Main Road, ${capital.city}, ${state} - ${capital.pinCode}`
-    : '';
-
+  // Clean, honest fallback: state and PAN are accurately derived; no fake placeholder names/addresses
   return {
     gstin,
     valid: isValidFormat,
-    businessName: isValidFormat ? defaultBusinessName : '',
-    tradeName: isValidFormat ? defaultBusinessName : '',
-    legalName: isValidFormat ? defaultLegalName : '',
-    ownerName: isValidFormat ? defaultLegalName : '',
+    businessName: '',
+    tradeName: '',
+    legalName: '',
+    ownerName: '',
     pan,
     stateCode,
     state,
-    city: isValidFormat ? capital.city : '',
-    address: defaultAddress,
-    pinCode: isValidFormat ? capital.pinCode : '',
+    city: '',
+    address: '',
+    pinCode: '',
     constitution,
     industry,
     isComposition: false,
-    status: 'Active',
+    status: isValidFormat ? 'Format Valid' : 'Invalid',
     isOnlineFetched: false,
   };
 });

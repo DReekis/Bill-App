@@ -87,36 +87,35 @@ void main() {
   });
 
   group('GstService lookup resilience', () {
-    test('lookup resolves deterministic info when network is unreachable', () async {
-      final info = await GstService.instance.lookup('29AABPB1234A1Z5');
+    test('lookup resolves verified enterprise directory profiles accurately', () async {
+      final info = await GstService.instance.lookup('27AAPFU0939F1ZV');
       expect(info.valid, isTrue);
-      expect(info.stateCode, '29');
-      expect(info.state, 'Karnataka');
-      expect(info.pan, 'AABPB1234A');
-      expect(info.constitution, 'Sole Proprietorship');
-      expect(info.businessName, isNotNull);
-      expect(info.businessName!.isNotEmpty, isTrue);
-      expect(info.city, 'Bengaluru');
-      expect(info.address, isNotNull);
-      expect(info.address!.contains('Karnataka'), isTrue);
+      expect(info.stateCode, '27');
+      expect(info.state, 'Maharashtra');
+      expect(info.pan, 'AAPFU0939F');
+      expect(info.constitution, 'Partnership / LLP');
+      expect(info.businessName, 'Apex Electronics & Trade');
+      expect(info.city, 'Mumbai');
+      expect(info.pinCode, '400007');
+      expect(info.isOnlineFetched, isTrue);
     });
 
-    test('parseDeterministic guarantees non-empty businessName, city, and address for valid GSTIN', () {
+    test('parseDeterministic reliably extracts state, PAN, and constitution without fake names for unindexed GSTIN', () {
       final arb = GstService.parseDeterministic('27ABCFE1234F1Z5');
       expect(arb.valid, isTrue);
       expect(arb.stateCode, '27');
       expect(arb.state, 'Maharashtra');
-      expect(arb.city, 'Mumbai');
-      expect(arb.pinCode, '400001');
-      expect(arb.businessName, isNotNull);
-      expect(arb.businessName!.isNotEmpty, isTrue);
-      expect(arb.address, isNotNull);
-      expect(arb.address!.contains('Mumbai'), isTrue);
+      expect(arb.pan, 'ABCFE1234F');
+      expect(arb.constitution, 'Partnership / LLP');
+      expect(arb.businessName, isNull);
+      expect(arb.address, isNull);
+      expect(arb.isOnlineFetched, isFalse);
 
       final enterprise = GstService.parseDeterministic('27AAPFU0939F1ZV');
       expect(enterprise.businessName, 'Apex Electronics & Trade');
       expect(enterprise.city, 'Mumbai');
       expect(enterprise.pinCode, '400007');
+      expect(enterprise.isOnlineFetched, isTrue);
     });
 
     test('GstBusinessInfo effectiveName and effectiveOwner fallback correctly', () {

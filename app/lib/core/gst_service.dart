@@ -85,7 +85,7 @@ class GstBusinessInfo {
       isComposition: json['isComposition'] as bool? ?? (json['taxpayerType'] == 'Composition'),
       status: json['status'] as String? ?? 'Active',
       registrationDate: json['registrationDate'] as String?,
-      isOnlineFetched: true,
+      isOnlineFetched: json['isOnlineFetched'] as bool? ?? false,
     );
   }
 
@@ -367,70 +367,51 @@ class GstService {
     String? pan;
     String? constitution;
     String industry = 'Retail';
-    String? derivedBusinessName;
-    String? derivedCity;
-    String? derivedAddress;
-    String? derivedPinCode;
 
     if (clean.length >= 12) {
       pan = clean.substring(2, 12);
       final entityChar = pan.length >= 4 ? pan[3] : 'P';
-      final nameInitial = pan.length >= 5 ? pan[4] : 'A';
       constitution = panEntityTypes[entityChar] ?? 'Business Entity';
-
       if (entityChar == 'P') {
-        derivedBusinessName = '$nameInitial-Star Enterprises';
         industry = 'Retail';
       } else if (entityChar == 'C') {
-        derivedBusinessName = '$nameInitial Corp Commercial Pvt Ltd';
         industry = 'Manufacturing';
       } else if (entityChar == 'F') {
-        derivedBusinessName = '$nameInitial & Sons Trading LLP';
         industry = 'Wholesale';
       } else if (entityChar == 'H') {
-        derivedBusinessName = '$nameInitial Family Provisions (HUF)';
         industry = 'Retail';
       } else if (entityChar == 'T' || entityChar == 'A') {
-        derivedBusinessName = '$nameInitial Commercial Agency';
         industry = 'Services';
-      } else {
-        derivedBusinessName = '$nameInitial Enterprises';
-        industry = 'Retail';
       }
-    }
-
-    final cap = stateCommercialCapitals[stateCode];
-    if (cap != null) {
-      derivedCity = cap.city;
-      derivedPinCode = cap.pinCode;
-      derivedAddress = 'Commercial Market, Main Road, $derivedCity, $stateName - $derivedPinCode';
     }
 
     return GstBusinessInfo(
       gstin: clean,
       valid: isValid,
-      businessName: derivedBusinessName,
-      tradeName: derivedBusinessName,
-      legalName: derivedBusinessName,
+      businessName: null,
+      tradeName: null,
+      legalName: null,
       ownerName: null,
       pan: pan,
       stateCode: stateCode,
       state: stateName,
-      city: derivedCity,
-      address: derivedAddress,
-      pinCode: derivedPinCode,
+      city: null,
+      address: null,
+      pinCode: null,
       constitution: constitution,
       industry: industry,
-      status: 'Active',
+      status: isValid ? 'Active' : 'Unverified',
       isComposition: false,
       isOnlineFetched: false,
     );
   }
 
   /// Looks up business details from a GSTIN.
-  /// 1. Tries backend `/api/v1/gst/lookup/:gstin` via [apiClient].
-  /// 2. If a [gstnApiKey] is provided, queries gstincheck.co.in (free signup at https://gstincheck.co.in).
-  /// 3. If offline or error occurs, seamlessly falls back to [parseDeterministic].
+  /// 1. Instant hit for verified directory profiles.
+  /// 2. Tries backend `/api/v1/gst/lookup/:gstin` via [apiClient].
+  /// 3. Direct public live GST query to https://gst.jamku.app/api/gstin/:gstin (no key required).
+  /// 4. If a [gstnApiKey] is provided, queries gstincheck.co.in.
+  /// 5. If offline or error occurs, cleanly falls back to [parseDeterministic].
   Future<GstBusinessInfo> lookup(
     String gstin, {
     ApiClient? apiClient,
@@ -442,18 +423,26 @@ class GstService {
       return fallback;
     }
 
-    // 1. Try local backend proxy if available
+    // 0. Instant hit for verified directory profiles
+    if (fallback.isOnlineFetched && fallback.effectiveName.isNotEmpty) {
+      return fallback;
+    }
+
+    // 1. Try local/configured backend proxy if available
     try {
       final client = apiClient ?? ApiClient();
       final url = '${client.baseUrl}/api/v1/gst/lookup/$clean';
       final response = await http.get(
         Uri.parse(url),
         headers: {'Accept': 'application/json'},
-      ).timeout(const Duration(milliseconds: 2500));
+      ).timeout(const Duration(milliseconds: 3500));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return GstBusinessInfo.fromJson(data);
+        final info = GstBusinessInfo.fromJson(data);
+        if (info.isOnlineFetched && info.effectiveName.isNotEmpty) {
+          return info;
+        }
       }
     } catch (e) {
       if (kDebugMode) {
@@ -461,15 +450,44 @@ class GstService {
       }
     }
 
-    // 2. Try gstincheck.co.in if API key is provided
-    // Free signup: https://gstincheck.co.in (20 free lookups)
+    // 2. Direct public live GST query (no key required, returns real registered tradeName & address)
+    try {
+      final response = await http.get(
+        Uri.parse('https://gst.jamku.app/api/gstin/$clean'),
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      ).timeout(const Duration(milliseconds: 4000));
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json is Map<String, dynamic> && json['success'] == true && json['data'] != null) {
+          final d = json['data'] as Map<String, dynamic>;
+          final tradeName = (d['tradeName'] as String?)?.trim();
+          final legalName = (d['lgnm'] as String?)?.trim();
+          final adr = (d['adr'] as String?)?.trim();
+          if ((tradeName != null && tradeName.isNotEmpty) ||
+              (legalName != null && legalName.isNotEmpty) ||
+              (adr != null && adr.isNotEmpty)) {
+            return _parseJamkuResponse(clean, d, fallback);
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Direct live GST lookup skipped/failed: $e');
+      }
+    }
+
+    // 3. Try gstincheck.co.in if API key is provided
     if (gstnApiKey != null && gstnApiKey.trim().isNotEmpty) {
       try {
         final directUrl = 'https://sheet.gstincheck.co.in/check/${gstnApiKey.trim()}/$clean';
         final response = await http.get(
           Uri.parse(directUrl),
           headers: {'Accept': 'application/json'},
-        ).timeout(const Duration(milliseconds: 5000));
+        ).timeout(const Duration(milliseconds: 4000));
 
         if (response.statusCode == 200) {
           final json = jsonDecode(response.body);
@@ -484,8 +502,73 @@ class GstService {
       }
     }
 
-    // 3. Guaranteed reliable fallback to deterministic parsing
+    // 4. Honest fallback: returns valid state & PAN without inventing fake names
     return fallback;
+  }
+
+  /// Parses the jamku public GST response into a clean GstBusinessInfo model.
+  GstBusinessInfo _parseJamkuResponse(
+    String gstin,
+    Map<String, dynamic> d,
+    GstBusinessInfo fallback,
+  ) {
+    final tradeName = (d['tradeName'] as String?)?.trim();
+    final legalName = (d['lgnm'] as String?)?.trim();
+    final adr = (d['adr'] as String?)?.trim();
+    final stateCode = gstin.substring(0, 2);
+    final state = stateCodes[stateCode] ?? fallback.state;
+    final pan = gstin.length >= 12 ? gstin.substring(2, 12) : fallback.pan;
+
+    // Pin code
+    String? pin = (d['pincode'] as String?)?.trim();
+    if (pin == null || pin.isEmpty) {
+      if (adr != null) {
+        final match = RegExp(r'\b([1-9][0-9]{5})\b').firstMatch(adr);
+        if (match != null) pin = match.group(1);
+      }
+    }
+
+    // City extraction from address
+    String? city;
+    if (adr != null && adr.isNotEmpty) {
+      final parts = adr.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      if (parts.length >= 3) {
+        final candidate = parts[parts.length - 3];
+        if (candidate.length > 2 && !RegExp(r'\d').hasMatch(candidate)) {
+          city = candidate;
+        }
+      }
+    }
+    city ??= stateCommercialCapitals[stateCode]?.city;
+
+    final ctb = (d['ctb'] as String?)?.trim();
+    final constitution = (ctb != null && ctb.isNotEmpty) ? ctb : fallback.constitution;
+    final dty = (d['dty'] as String?)?.trim() ?? '';
+    final isComposition = dty.toLowerCase().contains('composition');
+    final sts = (d['sts'] as String?)?.trim() ?? 'Active';
+
+    final effectiveName = (tradeName?.isNotEmpty == true ? tradeName : legalName) ?? '';
+
+    return GstBusinessInfo(
+      gstin: gstin,
+      valid: true,
+      businessName: effectiveName.isNotEmpty ? effectiveName : null,
+      tradeName: tradeName?.isNotEmpty == true ? tradeName : null,
+      legalName: legalName?.isNotEmpty == true ? legalName : null,
+      ownerName: legalName?.isNotEmpty == true ? legalName : null,
+      pan: pan,
+      stateCode: stateCode,
+      state: state,
+      city: city,
+      address: adr,
+      pinCode: pin,
+      constitution: constitution,
+      industry: fallback.industry,
+      isComposition: isComposition,
+      status: sts,
+      registrationDate: (d['rgdt'] as String?)?.trim(),
+      isOnlineFetched: true,
+    );
   }
 
   /// Parses the gstincheck.co.in / standard GST portal JSON response.

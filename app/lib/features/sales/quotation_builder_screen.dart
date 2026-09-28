@@ -90,13 +90,16 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
           selectedCustomer = custs.firstWhere((c) => c.id == customerId);
           customerName = selectedCustomer?.name;
         }
-        if (quotationNumber == null && biz != null) {
-          quotationNumber = InvoiceNumbering.format(biz.quotationPrefix, biz.quotationSequence + 1);
-        }
         if (_notesController.text.trim().isEmpty && biz?.termsQuotation != null) {
           _notesController.text = biz!.termsQuotation!;
         }
       });
+      if (quotationNumber == null && biz != null) {
+        final nextQuote = await repo.peekNextQuotationNumber(businessId, biz.quotationPrefix);
+        if (mounted) {
+          setState(() => quotationNumber = nextQuote);
+        }
+      }
     } catch (_) {}
   }
 

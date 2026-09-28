@@ -24,7 +24,7 @@ class Business {
     this.isComposition = false,
     this.invoicePrefix = 'INV',
     this.invoiceSequence = 0,
-    this.allowNegativeStock = false,
+    this.allowNegativeStock = true,
     this.fyStart = '2026-04-01',
     this.currency = 'INR',
     this.decimalPlaces = 2,
@@ -158,7 +158,7 @@ class Business {
         isComposition: (map['composition_scheme'] as int? ?? 0) == 1,
         invoicePrefix: map['invoice_prefix'] as String? ?? 'INV',
         invoiceSequence: (map['invoice_sequence'] as num?)?.toInt() ?? 0,
-        allowNegativeStock: (map['allow_negative_stock'] as int? ?? 0) == 1,
+        allowNegativeStock: (map['allow_negative_stock'] as int? ?? 1) == 1,
         fyStart: map['fy_start'] as String? ?? '2026-04-01',
         currency: map['currency'] as String? ?? 'INR',
         invoicePhone: map['invoice_phone'] as String?,
@@ -354,6 +354,7 @@ class Product {
     this.hasSerial = false,
     this.imagePath,
     this.description,
+    this.expiryDate,
     this.inactive = false,
   });
   final int? id;
@@ -380,6 +381,7 @@ class Product {
   bool hasSerial;
   String? imagePath;
   String? description;
+  String? expiryDate;
   bool inactive;
 
   bool get low => stock > 0 && stock <= lowStockThreshold;
@@ -409,6 +411,7 @@ class Product {
         'has_serial': hasSerial ? 1 : 0,
         'image_path': imagePath,
         'description': description,
+        'expiry_date': expiryDate,
         'inactive': inactive ? 1 : 0,
       };
 
@@ -437,6 +440,7 @@ class Product {
         hasSerial: (map['has_serial'] as int? ?? 0) == 1,
         imagePath: map['image_path'] as String?,
         description: map['description'] as String?,
+        expiryDate: map['expiry_date'] as String?,
         inactive: (map['inactive'] as int? ?? 0) == 1,
       );
 }

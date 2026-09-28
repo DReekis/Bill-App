@@ -38,16 +38,24 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
   double total = 0;
   bool saving = false;
 
+  String? billNumber;
+  String billDate = todayIso();
+  Business? business;
+
   Future<void> _load() async {
     final businessId = context.read<Session>().businessId;
     if (businessId == null) return;
     final repo = Repository.instance;
+    final biz = await repo.getBusiness(businessId);
     final prods = await repo.products(businessId);
     final supps = await repo.suppliers(businessId);
+    final nextBill = await repo.peekNextPurchaseNumber(businessId, biz?.purchasePrefix ?? 'PUR');
     if (!mounted) return;
     setState(() {
+      business = biz;
       products = prods;
       suppliers = supps;
+      billNumber ??= nextBill;
       if (supplierId == null && widget.initialSupplierId != null) {
         for (final s in supps) {
           if (s.id == widget.initialSupplierId) {
@@ -58,6 +66,69 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
         }
       }
     });
+  }
+
+  Future<void> _editBillNumber() async {
+    final controller = TextEditingController(text: billNumber ?? '');
+
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.edit_note_rounded, color: StitchColors.primary),
+            SizedBox(width: 8),
+            Text('Purchase Bill Number', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Enter vendor bill / purchase invoice number:', style: TextStyle(fontSize: 13, color: StitchColors.textSecondary)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: inputDecoration('Bill Number', hint: 'e.g. PUR-0001 or BILL/24/01'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isEmpty) return;
+              Navigator.pop(ctx, text);
+            },
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+
+    if (updated != null && updated.isNotEmpty && mounted) {
+      setState(() => billNumber = updated);
+    }
+  }
+
+  Future<void> _pickBillDate() async {
+    final cur = DateTime.tryParse(billDate) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: cur,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null && mounted) {
+      setState(() => billDate = isoDate(picked));
+    }
   }
 
   @override
@@ -260,7 +331,7 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
           ? '0'
           : (paymentType == 2 ? (total / 100).toStringAsFixed(2) : ''),
     );
-    String date = todayIso();
+    String date = billDate;
     String? mode = 'Cash';
     final notes = TextEditingController();
     final vendorSearchController = TextEditingController(
@@ -768,6 +839,7 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
         amountPaid: paidAmount,
         paymentMode: paidAmount > 0 ? (mode ?? 'Cash') : 'Credit',
         notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
+        purchaseNumber: billNumber,
       );
       if (mounted) {
         showAppMessage(context, 'Purchase saved · stock updated');
@@ -805,6 +877,86 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('New purchase')),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 120), children: [
+        // Bill Number & Bill Date cards (Billbook style)
+        Row(
+          children: [
+            Expanded(
+              child: AppCard(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: InkWell(
+                  onTap: _editBillNumber,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: StitchColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.tag_rounded, color: StitchColors.primary, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Bill No.', style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                            Text(
+                              billNumber ?? 'PUR-0001',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.edit_outlined, size: 16, color: StitchColors.textTertiary),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: AppCard(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: InkWell(
+                  onTap: _pickBillDate,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: StitchColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.calendar_today_rounded, color: StitchColors.primary, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Bill Date', style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                            Text(
+                              displayDate(billDate),
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         AppCard(
           padding: const EdgeInsets.all(14),
           child: InkWell(

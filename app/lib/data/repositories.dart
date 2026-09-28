@@ -112,25 +112,66 @@ class Repository {
     await _audit(id, action: 'update', entity: 'business', entityId: id, after: business.toMap());
   }
 
+  Future<int> _resolveHighestInvoiceSequence(DatabaseExecutor db, int businessId, String prefix) async {
+    final rows = await db.query('businesses',
+        columns: ['invoice_sequence'], where: 'id = ?', whereArgs: [businessId]);
+    int highest = rows.isNotEmpty ? (rows.first['invoice_sequence'] as int? ?? 0) : 0;
+
+    final pfx = prefix.trim().isEmpty ? 'INV' : prefix.trim().toUpperCase();
+    final invRows = await db.rawQuery(
+      "SELECT number FROM invoices WHERE business_id = ? AND (number LIKE ? OR number LIKE ?)",
+      [businessId, '$pfx-%', '$pfx%'],
+    );
+    for (final r in invRows) {
+      final numStr = r['number'] as String?;
+      if (numStr != null) {
+        final seq = InvoiceNumbering.extractSequence(numStr);
+        if (seq != null && seq > highest) {
+          highest = seq;
+        }
+      }
+    }
+    return highest;
+  }
+
   Future<String> nextInvoiceNumber(int businessId, String prefix) async {
     final db = await _database;
     return db.transaction((txn) async {
-      final rows = await txn.query('businesses',
-          columns: ['invoice_sequence'], where: 'id = ?', whereArgs: [businessId]);
-      final current = (rows.isNotEmpty ? rows.first['invoice_sequence'] as int : 0);
-      final next = current + 1;
-      await txn.update('businesses', {'invoice_sequence': next},
-          where: 'id = ?', whereArgs: [businessId]);
-      return InvoiceNumbering.format(prefix, next);
+      final highest = await _resolveHighestInvoiceSequence(txn, businessId, prefix);
+      int candidateSeq = highest + 1;
+      while (true) {
+        final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+        final exists = await txn.query('invoices',
+            columns: ['id'],
+            where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+            whereArgs: [businessId, candidate.trim().toLowerCase()],
+            limit: 1);
+        if (exists.isEmpty) {
+          await txn.update('businesses', {'invoice_sequence': candidateSeq},
+              where: 'id = ?', whereArgs: [businessId]);
+          return candidate;
+        }
+        candidateSeq++;
+      }
     });
   }
 
   Future<String> peekNextInvoiceNumber(int businessId, String prefix) async {
     final db = await _database;
-    final rows = await db.query('businesses',
-        columns: ['invoice_sequence'], where: 'id = ?', whereArgs: [businessId]);
-    final current = (rows.isNotEmpty ? (rows.first['invoice_sequence'] as int? ?? 0) : 0);
-    return InvoiceNumbering.format(prefix, current + 1);
+    final highest = await _resolveHighestInvoiceSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('invoices',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
   }
 
   Future<bool> isInvoiceNumberAvailable(int businessId, String number, {int? excludeInvoiceId}) async {
@@ -149,34 +190,95 @@ class Repository {
     return rows.isEmpty;
   }
 
+  Future<int> _resolveHighestQuotationSequence(DatabaseExecutor db, int businessId, String prefix) async {
+    final rows = await db.query('businesses',
+        columns: ['quotation_sequence'], where: 'id = ?', whereArgs: [businessId]);
+    int highest = rows.isNotEmpty ? (rows.first['quotation_sequence'] as int? ?? 0) : 0;
+
+    final pfx = prefix.trim().isEmpty ? 'EST' : prefix.trim().toUpperCase();
+    final qRows = await db.rawQuery(
+      "SELECT number FROM quotations WHERE business_id = ? AND (number LIKE ? OR number LIKE ?)",
+      [businessId, '$pfx-%', '$pfx%'],
+    );
+    for (final r in qRows) {
+      final numStr = r['number'] as String?;
+      if (numStr != null) {
+        final seq = InvoiceNumbering.extractSequence(numStr);
+        if (seq != null && seq > highest) {
+          highest = seq;
+        }
+      }
+    }
+    return highest;
+  }
+
   Future<String> nextQuotationNumber(int businessId, String prefix) async {
     final db = await _database;
     return db.transaction((txn) async {
-      final rows = await txn.query('businesses',
-          columns: ['quotation_sequence'], where: 'id = ?', whereArgs: [businessId]);
-      final current = (rows.isNotEmpty ? (rows.first['quotation_sequence'] as int? ?? 0) : 0);
-      final next = current + 1;
-      await txn.update('businesses', {'quotation_sequence': next},
-          where: 'id = ?', whereArgs: [businessId]);
-      return InvoiceNumbering.format(prefix, next);
+      final highest = await _resolveHighestQuotationSequence(txn, businessId, prefix);
+      int candidateSeq = highest + 1;
+      while (true) {
+        final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+        final exists = await txn.query('quotations',
+            columns: ['id'],
+            where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+            whereArgs: [businessId, candidate.trim().toLowerCase()],
+            limit: 1);
+        if (exists.isEmpty) {
+          await txn.update('businesses', {'quotation_sequence': candidateSeq},
+              where: 'id = ?', whereArgs: [businessId]);
+          return candidate;
+        }
+        candidateSeq++;
+      }
     });
   }
 
   Future<String> peekNextQuotationNumber(int businessId, String prefix) async {
     final db = await _database;
+    final highest = await _resolveHighestQuotationSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('quotations',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
+  }
+
+  Future<int> _resolveHighestPurchaseSequence(DatabaseExecutor db, int businessId, String prefix) async {
     final rows = await db.query('businesses',
-        columns: ['quotation_sequence'], where: 'id = ?', whereArgs: [businessId]);
-    final current = (rows.isNotEmpty ? (rows.first['quotation_sequence'] as int? ?? 0) : 0);
-    return InvoiceNumbering.format(prefix, current + 1);
+        columns: ['purchase_sequence'], where: 'id = ?', whereArgs: [businessId]);
+    int highest = rows.isNotEmpty ? (rows.first['purchase_sequence'] as int? ?? 0) : 0;
+
+    final pfx = prefix.trim().isEmpty ? 'PUR' : prefix.trim().toUpperCase();
+    final expRows = await db.rawQuery(
+      "SELECT description FROM expenses WHERE business_id = ? AND category = 'Purchase'",
+      [businessId],
+    );
+    for (final r in expRows) {
+      final desc = r['description'] as String?;
+      if (desc != null && desc.contains(pfx)) {
+        final seq = InvoiceNumbering.extractSequence(desc);
+        if (seq != null && seq > highest) {
+          highest = seq;
+        }
+      }
+    }
+    return highest;
   }
 
   Future<String> nextPurchaseNumber(int businessId, String prefix) async {
     final db = await _database;
     return db.transaction((txn) async {
-      final rows = await txn.query('businesses',
-          columns: ['purchase_sequence'], where: 'id = ?', whereArgs: [businessId]);
-      final current = (rows.isNotEmpty ? (rows.first['purchase_sequence'] as int? ?? 0) : 0);
-      final next = current + 1;
+      final highest = await _resolveHighestPurchaseSequence(txn, businessId, prefix);
+      final next = highest + 1;
       await txn.update('businesses', {'purchase_sequence': next},
           where: 'id = ?', whereArgs: [businessId]);
       return InvoiceNumbering.format(prefix, next);
@@ -185,10 +287,8 @@ class Repository {
 
   Future<String> peekNextPurchaseNumber(int businessId, String prefix) async {
     final db = await _database;
-    final rows = await db.query('businesses',
-        columns: ['purchase_sequence'], where: 'id = ?', whereArgs: [businessId]);
-    final current = (rows.isNotEmpty ? (rows.first['purchase_sequence'] as int? ?? 0) : 0);
-    return InvoiceNumbering.format(prefix, current + 1);
+    final highest = await _resolveHighestPurchaseSequence(db, businessId, prefix);
+    return InvoiceNumbering.format(prefix, highest + 1);
   }
 
   Future<int> upsertCustomer(Customer customer, {int? businessIdOverride}) async {
@@ -415,15 +515,68 @@ class Repository {
   }
 
   Future<void> adjustStock(Product product, double change, String moveType,
-      {String? refType, int? refId, String? reason}) async {
+      {String? refType,
+      int? refId,
+      String? reason,
+      int? newPurchasePrice,
+      int? newSalePrice,
+      String? newExpiryDate}) async {
     final db = await _database;
     final businessId = session.businessId;
     if (businessId == null) return;
     final newQty = (product.stock + change).round();
+
+    final updates = <String, Object?>{'stock': newQty};
+
+    if (newSalePrice != null && newSalePrice > 0) {
+      updates['sale_price'] = newSalePrice;
+      product.salePrice = newSalePrice;
+    }
+
+    if (newPurchasePrice != null && newPurchasePrice > 0) {
+      updates['purchase_price'] = newPurchasePrice;
+      product.purchasePrice = newPurchasePrice;
+
+      if (change > 0) {
+        final oldStock = product.stock > 0 ? product.stock : 0;
+        final oldCost = oldStock *
+            (product.costAverage > 0
+                ? product.costAverage
+                : product.purchasePrice);
+        final addedCost = (change * newPurchasePrice).round();
+        final totalQty = oldStock + change;
+        if (totalQty > 0) {
+          final newAvg = ((oldCost + addedCost) / totalQty).round();
+          updates['cost_average'] = newAvg;
+          product.costAverage = newAvg;
+        }
+      }
+    }
+
+    if (newExpiryDate != null && newExpiryDate.trim().isNotEmpty) {
+      final exp = newExpiryDate.trim();
+      updates['expiry_date'] = exp;
+      product.expiryDate = exp;
+      try {
+        await db.insert('batches', {
+          'business_id': businessId,
+          'product_id': product.id,
+          'batch_number':
+              'ADJ-${DateTime.now().millisecondsSinceEpoch % 1000000}',
+          'expiry_date': exp,
+          'quantity':
+              change > 0 ? change : (newQty > 0 ? newQty.toDouble() : 0.0),
+          'purchase_price': newPurchasePrice ?? product.purchasePrice,
+          'sale_price': newSalePrice ?? product.salePrice,
+        });
+      } catch (_) {}
+    }
+
     final success = await db.update(
       'products',
-      {'stock': newQty},
-      where: 'id = ?', whereArgs: [product.id],
+      updates,
+      where: 'id = ?',
+      whereArgs: [product.id],
     );
     if (success == 0) return;
     final effectiveMoveType = (reason != null && reason.trim().isNotEmpty)
@@ -440,6 +593,15 @@ class Repository {
       'date': todayIso(),
     });
     product.stock = newQty;
+    if (product.id != null) {
+      await _enqueueSync(
+        businessId,
+        entity: 'product',
+        entityId: product.id!,
+        op: 'upsert',
+        payload: jsonEncode(updates),
+      );
+    }
   }
 
   Future<int> finalizeSale({
@@ -457,12 +619,45 @@ class Repository {
     required int amountPaid,
   }) async {
     final db = await _database;
+    String finalNumber = number;
     final invoiceId = await db.transaction<int>((txn) async {
       final total = quote.total.paise;
       final status = resolveInvoiceStatus(total: total, amountPaid: amountPaid);
+
+      // Verify number availability; if taken, automatically resolve to next sequence candidate
+      final exists = await txn.query(
+        'invoices',
+        columns: ['id'],
+        where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+        whereArgs: [businessId, number.trim().toLowerCase()],
+        limit: 1,
+      );
+      if (exists.isNotEmpty) {
+        final bizRows = await txn.query('businesses',
+            columns: ['invoice_prefix'], where: 'id = ?', whereArgs: [businessId], limit: 1);
+        final pfx = bizRows.isNotEmpty ? (bizRows.first['invoice_prefix'] as String? ?? 'INV') : 'INV';
+        final highest = await _resolveHighestInvoiceSequence(txn, businessId, pfx);
+        int cand = highest + 1;
+        while (true) {
+          final testNum = InvoiceNumbering.format(pfx, cand);
+          final clash = await txn.query(
+            'invoices',
+            columns: ['id'],
+            where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+            whereArgs: [businessId, testNum.trim().toLowerCase()],
+            limit: 1,
+          );
+          if (clash.isEmpty) {
+            finalNumber = testNum;
+            break;
+          }
+          cand++;
+        }
+      }
+
       final invoiceId = await txn.insert('invoices', {
         'business_id': businessId,
-        'number': number,
+        'number': finalNumber,
         'customer_id': customerId,
         'customer_name': customerName,
         'date': date,
@@ -484,6 +679,18 @@ class Repository {
         'notes': notes,
       });
 
+      // Automatically advance invoice_sequence in businesses table
+      final seq = InvoiceNumbering.extractSequence(finalNumber);
+      if (seq != null) {
+        final currentSeqRows = await txn.query('businesses',
+            columns: ['invoice_sequence'], where: 'id = ?', whereArgs: [businessId]);
+        final curSeq = currentSeqRows.isNotEmpty ? (currentSeqRows.first['invoice_sequence'] as int? ?? 0) : 0;
+        if (seq > curSeq) {
+          await txn.update('businesses', {'invoice_sequence': seq},
+              where: 'id = ?', whereArgs: [businessId]);
+        }
+      }
+
       for (final line in lines) {
         await txn.insert('invoice_items', {
           'invoice_id': invoiceId,
@@ -502,7 +709,7 @@ class Repository {
 
       final bizRows = await txn.query('businesses',
           columns: ['allow_negative_stock'], where: 'id = ?', whereArgs: [businessId], limit: 1);
-      final allowNegative = (bizRows.isEmpty ? 0 : (bizRows.first['allow_negative_stock'] as int? ?? 0)) == 1;
+      final allowNegative = (bizRows.isEmpty ? 1 : (bizRows.first['allow_negative_stock'] as int? ?? 1)) == 1;
       for (var i = 0; i < lines.length; i++) {
         final line = lines[i];
         if (line.productId == null) continue;
@@ -511,7 +718,7 @@ class Repository {
         if (line.serialNumber != null) {
           final sRows = await txn.query('serial_numbers', where: 'serial_number = ? AND status = ?', whereArgs: [line.serialNumber, 'Available'], limit: 1);
           if (sRows.isEmpty) throw StateError('Serial Number ${line.serialNumber} not available');
-          await txn.update('serial_numbers', {'status': 'Sold', 'sale_ref': number}, where: 'serial_number = ?', whereArgs: [line.serialNumber]);
+          await txn.update('serial_numbers', {'status': 'Sold', 'sale_ref': finalNumber}, where: 'serial_number = ?', whereArgs: [line.serialNumber]);
         }
 
         // Batch Validation (Simple check for expiry)
@@ -543,7 +750,7 @@ class Repository {
         if (!allowNegative && next < 0) {
           throw StateError('Not enough stock for ${line.name} — only ${_qty(current)} in stock');
         }
-        await txn.update('products', {'stock': next},
+        await txn.update('products', {'stock': next.round()},
             where: 'id = ?', whereArgs: [line.productId]);
         await txn.insert('stock_moves', {
           'business_id': businessId,
@@ -578,7 +785,7 @@ class Repository {
         'credit': quote.taxable.paise,
         'ref_type': 'invoice',
         'ref_id': invoiceId,
-        'note': 'Sales $number',
+        'note': 'Sales $finalNumber',
       });
       final taxAmount = quote.cgst.paise + quote.sgst.paise + quote.igst.paise;
       if (taxAmount > 0) {
@@ -590,7 +797,7 @@ class Repository {
           'credit': taxAmount,
           'ref_type': 'invoice',
           'ref_id': invoiceId,
-          'note': 'GST output $number',
+          'note': 'GST output $finalNumber',
         });
       }
       await txn.insert('ledger', {
@@ -601,7 +808,7 @@ class Repository {
         'credit': 0,
         'ref_type': 'invoice',
         'ref_id': invoiceId,
-        'note': '$customerName — $number',
+        'note': '$customerName — $finalNumber',
       });
       if (amountPaid > 0) {
         final paymentId = await txn.insert('payments', {
@@ -610,7 +817,7 @@ class Repository {
           'party_id': customerId,
           'party_name': customerName,
           'invoice_id': invoiceId,
-          'invoice_number': number,
+          'invoice_number': finalNumber,
           'amount': amountPaid,
           'mode': paymentMode ?? 'Cash',
           'date': date,
@@ -625,7 +832,7 @@ class Repository {
           'credit': 0,
           'ref_type': 'payment',
           'ref_id': paymentId,
-          'note': 'Payment in $number',
+          'note': 'Payment in $finalNumber',
         });
         await txn.insert('ledger', {
           'business_id': businessId,
@@ -635,17 +842,17 @@ class Repository {
           'credit': amountPaid,
           'ref_type': 'payment',
           'ref_id': paymentId,
-          'note': 'Receipt $number',
+          'note': 'Receipt $finalNumber',
         });
       }
       return invoiceId;
     });
     await _audit(businessId,
-        action: 'create', entity: 'invoice', entityId: invoiceId, after: {'number': number, 'total': quote.total.paise});
+        action: 'create', entity: 'invoice', entityId: invoiceId, after: {'number': finalNumber, 'total': quote.total.paise});
     final invoicePayload = {
       'id': invoiceId,
       'businessId': businessId.toString(),
-      'number': number,
+      'number': finalNumber,
       'customerId': customerId?.toString(),
       'customerName': customerName,
       'date': date,
@@ -802,8 +1009,8 @@ class Repository {
           whereArgs: [businessId],
           limit: 1);
       final allowNegative = (bizRows.isEmpty
-              ? 0
-              : (bizRows.first['allow_negative_stock'] as int? ?? 0)) ==
+              ? 1
+              : (bizRows.first['allow_negative_stock'] as int? ?? 1)) ==
           1;
 
       for (var i = 0; i < lines.length; i++) {
@@ -857,7 +1064,7 @@ class Repository {
           throw StateError(
               'Not enough stock for ${line.name} — only ${_qty(current)} in stock');
         }
-        await txn.update('products', {'stock': next},
+        await txn.update('products', {'stock': next.round()},
             where: 'id = ?', whereArgs: [line.productId]);
         await txn.insert('stock_moves', {
           'business_id': businessId,
@@ -1187,12 +1394,28 @@ class Repository {
     required int amountPaid,
     String? paymentMode,
     String? notes,
+    String? purchaseNumber,
   }) async {
     final db = await _database;
     final purchaseId = await db.transaction<int>((txn) async {
-      final seq = await txn.rawQuery(
-          'SELECT COUNT(*) AS c FROM expenses WHERE business_id = ?', [businessId]);
-      final number = 'PUR-${(seq.first['c'] as int) + 1}';
+      final bizRows = await txn.query('businesses',
+          columns: ['purchase_prefix', 'purchase_sequence'], where: 'id = ?', whereArgs: [businessId]);
+      final pfx = bizRows.isNotEmpty ? (bizRows.first['purchase_prefix'] as String? ?? 'PUR') : 'PUR';
+      final highest = await _resolveHighestPurchaseSequence(txn, businessId, pfx);
+      final nextSeq = highest + 1;
+      final number = (purchaseNumber != null && purchaseNumber.trim().isNotEmpty)
+          ? purchaseNumber.trim()
+          : InvoiceNumbering.format(pfx, nextSeq);
+
+      final seq = InvoiceNumbering.extractSequence(number);
+      if (seq != null) {
+        final curSeq = bizRows.isNotEmpty ? (bizRows.first['purchase_sequence'] as int? ?? 0) : 0;
+        if (seq > curSeq) {
+          await txn.update('businesses', {'purchase_sequence': seq},
+              where: 'id = ?', whereArgs: [businessId]);
+        }
+      }
+
       final purchaseId = await txn.insert('expenses', {
         'business_id': businessId,
         'category': 'Purchase',
@@ -1200,8 +1423,8 @@ class Repository {
         'mode': paymentMode ?? 'Credit',
         'date': date,
         'description': notes == null || notes.isEmpty
-            ? 'Purchase from $supplierName'
-            : 'Purchase from $supplierName — $notes',
+            ? 'Purchase $number from $supplierName'
+            : 'Purchase $number from $supplierName — $notes',
         'vendor': supplierName,
       });
       var total = 0;
@@ -1556,6 +1779,16 @@ class Repository {
             ..remove('discount_percent')
             ..remove('unit');
           await txn.insert('quotation_items', fallbackItemMap);
+        }
+      }
+      final seq = InvoiceNumbering.extractSequence(quote.number);
+      if (seq != null) {
+        final currentSeqRows = await txn.query('businesses',
+            columns: ['quotation_sequence'], where: 'id = ?', whereArgs: [bizId]);
+        final curSeq = currentSeqRows.isNotEmpty ? (currentSeqRows.first['quotation_sequence'] as int? ?? 0) : 0;
+        if (seq > curSeq) {
+          await txn.update('businesses', {'quotation_sequence': seq},
+              where: 'id = ?', whereArgs: [bizId]);
         }
       }
       return qId;
@@ -4274,12 +4507,27 @@ class Repository {
     );
   }
 
-  Future<List<TransactionRecord>> recentTransactions(int businessId, {int limit = 50}) async {
+  Future<List<TransactionRecord>> recentTransactions(
+    int businessId, {
+    int? limit = 50,
+    String? fromDate,
+    String? toDate,
+  }) async {
     final db = await _database;
     final List<TransactionRecord> list = [];
 
+    final invWhere = <String>['business_id = ?'];
+    final invArgs = <Object?>[businessId];
+    if (fromDate != null && fromDate.isNotEmpty) {
+      invWhere.add('date >= ?');
+      invArgs.add(fromDate);
+    }
+    if (toDate != null && toDate.isNotEmpty) {
+      invWhere.add('date <= ?');
+      invArgs.add(toDate);
+    }
     final invs = await db.query('invoices',
-        where: 'business_id = ?', whereArgs: [businessId],
+        where: invWhere.join(' AND '), whereArgs: invArgs,
         orderBy: 'date DESC, id DESC', limit: limit);
     for (final r in invs) {
       final total = (r['total'] as num?)?.toInt() ?? 0;
@@ -4301,8 +4549,18 @@ class Repository {
       ));
     }
 
+    final expWhere = <String>['business_id = ?'];
+    final expArgs = <Object?>[businessId];
+    if (fromDate != null && fromDate.isNotEmpty) {
+      expWhere.add('date >= ?');
+      expArgs.add(fromDate);
+    }
+    if (toDate != null && toDate.isNotEmpty) {
+      expWhere.add('date <= ?');
+      expArgs.add(toDate);
+    }
     final exps = await db.query('expenses',
-        where: 'business_id = ?', whereArgs: [businessId],
+        where: expWhere.join(' AND '), whereArgs: expArgs,
         orderBy: 'date DESC, id DESC', limit: limit);
     for (final r in exps) {
       final cat = r['category'] as String? ?? 'Expense';
@@ -4326,9 +4584,25 @@ class Repository {
       ));
     }
 
+    final payWhere = <String>[
+      'business_id = ?',
+      "(reference IS NULL OR reference != 'initial_sale')",
+      "(reference IS NULL OR reference != 'initial_purchase')",
+      "(invoice_number NOT LIKE 'PUR-%' OR invoice_number IS NULL)",
+      "(type != 'expense' OR type IS NULL)",
+    ];
+    final payArgs = <Object?>[businessId];
+    if (fromDate != null && fromDate.isNotEmpty) {
+      payWhere.add('date >= ?');
+      payArgs.add(fromDate);
+    }
+    if (toDate != null && toDate.isNotEmpty) {
+      payWhere.add('date <= ?');
+      payArgs.add(toDate);
+    }
     final pays = await db.query('payments',
-        where: "business_id = ? AND (reference IS NULL OR reference != 'initial_sale') AND (reference IS NULL OR reference != 'initial_purchase') AND (invoice_number NOT LIKE 'PUR-%' OR invoice_number IS NULL) AND (type != 'expense' OR type IS NULL)",
-        whereArgs: [businessId],
+        where: payWhere.join(' AND '),
+        whereArgs: payArgs,
         orderBy: 'date DESC, id DESC', limit: limit);
     for (final r in pays) {
       final isIn = r['type'] == 'in' || r['party_type'] == 'customer';
@@ -4362,7 +4636,10 @@ class Repository {
       return b.id.compareTo(a.id);
     });
 
-    return list.length > limit ? list.sublist(0, limit) : list;
+    if (limit != null && list.length > limit) {
+      return list.sublist(0, limit);
+    }
+    return list;
   }
 
   Future<List<BillProfitRecord>> billWiseProfitReport(

@@ -65,6 +65,9 @@ class _StockMovesScreenState extends State<StockMovesScreen> {
         change,
         moveType,
         reason: reason,
+        newPurchasePrice: result['newPurchasePrice'] as int?,
+        newSalePrice: result['newSalePrice'] as int?,
+        newExpiryDate: result['newExpiryDate'] as String?,
       );
       await _load();
       if (mounted) {
@@ -232,6 +235,9 @@ class _StockAdjustmentSheetState extends State<_StockAdjustmentSheet> {
   StockAdjustmentMode _mode = StockAdjustmentMode.add;
   final _qtyController = TextEditingController();
   final _noteController = TextEditingController();
+  late final TextEditingController _purchasePriceController;
+  late final TextEditingController _salePriceController;
+  String? _expiryDate;
   String? _selectedReason;
 
   static const _addReasons = [
@@ -262,12 +268,25 @@ class _StockAdjustmentSheetState extends State<_StockAdjustmentSheet> {
     super.initState();
     _selectedReason = _addReasons.first;
     _qtyController.addListener(() => setState(() {}));
+    _purchasePriceController = TextEditingController(
+      text: widget.product.purchasePrice > 0
+          ? (widget.product.purchasePrice / 100).toStringAsFixed(2)
+          : '',
+    );
+    _salePriceController = TextEditingController(
+      text: widget.product.salePrice > 0
+          ? (widget.product.salePrice / 100).toStringAsFixed(2)
+          : '',
+    );
+    _expiryDate = widget.product.expiryDate;
   }
 
   @override
   void dispose() {
     _qtyController.dispose();
     _noteController.dispose();
+    _purchasePriceController.dispose();
+    _salePriceController.dispose();
     super.dispose();
   }
 
@@ -309,10 +328,6 @@ class _StockAdjustmentSheetState extends State<_StockAdjustmentSheet> {
       showAppMessage(context, 'Quantity must be greater than 0', error: true);
       return;
     }
-    if (_mode == StockAdjustmentMode.set && entered < 0) {
-      showAppMessage(context, 'Stock count cannot be negative', error: true);
-      return;
-    }
 
     final current = widget.product.stock.toDouble();
     double change;
@@ -341,10 +356,31 @@ class _StockAdjustmentSheetState extends State<_StockAdjustmentSheet> {
       reasonParts.add(_noteController.text.trim());
     }
 
+    int? newPurchasePrice;
+    final ppText = _purchasePriceController.text.trim();
+    if (ppText.isNotEmpty) {
+      final ppVal = double.tryParse(ppText);
+      if (ppVal != null && ppVal >= 0) {
+        newPurchasePrice = (ppVal * 100).round();
+      }
+    }
+
+    int? newSalePrice;
+    final spText = _salePriceController.text.trim();
+    if (spText.isNotEmpty) {
+      final spVal = double.tryParse(spText);
+      if (spVal != null && spVal >= 0) {
+        newSalePrice = (spVal * 100).round();
+      }
+    }
+
     Navigator.of(context).pop({
       'change': change,
       'moveType': moveType,
       'reason': reasonParts.isEmpty ? null : reasonParts.join(' - '),
+      'newPurchasePrice': newPurchasePrice,
+      'newSalePrice': newSalePrice,
+      'newExpiryDate': _expiryDate,
     });
   }
 
@@ -451,18 +487,15 @@ class _StockAdjustmentSheetState extends State<_StockAdjustmentSheet> {
                 segments: const [
                   ButtonSegment(
                     value: StockAdjustmentMode.add,
-                    label: Text('Add Stock (+)'),
-                    icon: Icon(Icons.add_circle_outline_rounded, size: 16),
+                    label: Text('Add Stock'),
                   ),
                   ButtonSegment(
                     value: StockAdjustmentMode.reduce,
-                    label: Text('Reduce (-)'),
-                    icon: Icon(Icons.remove_circle_outline_rounded, size: 16),
+                    label: Text('Reduce'),
                   ),
                   ButtonSegment(
                     value: StockAdjustmentMode.set,
-                    label: Text('Set Total (=)'),
-                    icon: Icon(Icons.pin_outlined, size: 16),
+                    label: Text('Set Total'),
                   ),
                 ],
                 selected: {_mode},
@@ -503,7 +536,7 @@ class _StockAdjustmentSheetState extends State<_StockAdjustmentSheet> {
                       child: Icon(
                         isAdd
                             ? Icons.add_rounded
-                            : (isReduce ? Icons.remove_rounded : Icons.calculate_outlined),
+                            : (isReduce ? Icons.remove_rounded : Icons.inventory_2_outlined),
                         size: 20,
                         color: isAdd
                             ? StitchColors.success
@@ -517,10 +550,10 @@ class _StockAdjustmentSheetState extends State<_StockAdjustmentSheet> {
                         children: [
                           Text(
                             isAdd
-                                ? 'Additive Calculation ($current + $enteredInt)'
+                                ? 'Adding to stock: $current ➔ $newTotal'
                                 : isReduce
-                                    ? 'Deduction Calculation ($current - $enteredInt)'
-                                    : 'Direct Count Reconciliation',
+                                    ? 'Deducting from stock: $current ➔ $newTotal'
+                                    : 'Direct Count: $newTotal',
                             style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary),
                           ),
                           const SizedBox(height: 2),
@@ -572,14 +605,12 @@ class _StockAdjustmentSheetState extends State<_StockAdjustmentSheet> {
                 autofocus: true,
                 decoration: InputDecoration(
                   labelText: isAdd
-                      ? 'Quantity to add (+)'
-                      : (isReduce ? 'Quantity to reduce (-)' : 'New total count (=)'),
+                      ? 'Quantity to add'
+                      : (isReduce ? 'Quantity to reduce' : 'New total count'),
                   hintText: isAdd ? 'e.g. 20' : (isReduce ? 'e.g. 5' : 'e.g. 50'),
                   suffixText: widget.product.unit,
-                  prefixIcon: Icon(
-                    isAdd
-                        ? Icons.add_circle_outline
-                        : (isReduce ? Icons.remove_circle_outline : Icons.pin_outlined),
+                  prefixIcon: const Icon(
+                    Icons.inventory_2_outlined,
                     size: 20,
                   ),
                 ),
@@ -629,6 +660,109 @@ class _StockAdjustmentSheetState extends State<_StockAdjustmentSheet> {
                 ),
               ),
               const SizedBox(height: 14),
+              // Pricing and Expiry Section
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: StitchColors.surfaceVariant.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: StitchColors.outline.withValues(alpha: 0.6)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Price & Expiry Details',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.textPrimary),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _purchasePriceController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: InputDecoration(
+                              labelText: 'New Buying Price',
+                              hintText: '0.00',
+                              prefixText: '₹ ',
+                              isDense: true,
+                              helperText: widget.product.purchasePrice > 0
+                                  ? 'Current: ${formatPaise(widget.product.purchasePrice)}'
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: _salePriceController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: 'New Selling Price',
+                              hintText: '0.00',
+                              prefixText: '₹ ',
+                              isDense: true,
+                              helperText: 'Reflects in sales',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    InkWell(
+                      onTap: () async {
+                        final now = DateTime.now();
+                        final initial = _expiryDate != null
+                            ? (DateTime.tryParse(_expiryDate!) ?? now)
+                            : now.add(const Duration(days: 365));
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: initial,
+                          firstDate: now.subtract(const Duration(days: 365)),
+                          lastDate: now.add(const Duration(days: 3650)),
+                        );
+                        if (picked != null) {
+                          setState(() => _expiryDate = isoDate(picked));
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: StitchColors.outline),
+                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.white,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.event_outlined, size: 18, color: StitchColors.textSecondary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _expiryDate != null
+                                    ? 'Expiry: ${displayDate(_expiryDate!)}'
+                                    : 'Set Expiry Date (optional)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: _expiryDate != null ? StitchColors.textPrimary : StitchColors.textSecondary,
+                                  fontWeight: _expiryDate != null ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                            if (_expiryDate != null)
+                              GestureDetector(
+                                onTap: () => setState(() => _expiryDate = null),
+                                child: const Icon(Icons.clear_rounded, size: 18, color: StitchColors.textSecondary),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
               DropdownButtonFormField<String>(
                 initialValue: _selectedReason,
                 decoration: const InputDecoration(labelText: 'Adjustment Reason'),
@@ -661,9 +795,9 @@ class _StockAdjustmentSheetState extends State<_StockAdjustmentSheet> {
                       onPressed: _submit,
                       child: Text(
                         isAdd
-                            ? (enteredInt > 0 ? 'Add $enteredInt (➔ $newTotal)' : 'Add Stock (+)')
+                            ? (enteredInt > 0 ? 'Add $enteredInt (Total: $newTotal)' : 'Add Stock')
                             : isReduce
-                                ? (enteredInt > 0 ? 'Reduce $enteredInt (➔ $newTotal)' : 'Reduce Stock (-)')
+                                ? (enteredInt > 0 ? 'Reduce $enteredInt (Total: $newTotal)' : 'Reduce Stock')
                                 : 'Update Stock ($newTotal)',
                       ),
                     ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/dates.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
@@ -29,6 +30,16 @@ class _TransactionListTabState extends State<TransactionListTab> {
   String _query = '';
   final TextEditingController _searchController = TextEditingController();
 
+  DateFilterPreset _selectedPreset = DateFilterPreset.thisMonth;
+  DateTime? _customStart;
+  DateTime? _customEnd;
+
+  DateFilterRange get _currentRange => calculateDateRange(
+        _selectedPreset,
+        customStart: _customStart,
+        customEnd: _customEnd,
+      );
+
   static const _filterOptions = [
     'All',
     'Sales',
@@ -41,7 +52,13 @@ class _TransactionListTabState extends State<TransactionListTab> {
   Future<void> _load() async {
     final businessId = context.read<Session>().businessId;
     if (businessId == null) return;
-    final all = await Repository.instance.recentTransactions(businessId, limit: 300);
+    final range = _currentRange;
+    final all = await Repository.instance.recentTransactions(
+      businessId,
+      limit: null,
+      fromDate: range.startIso,
+      toDate: range.endIso,
+    );
     if (!mounted) return;
     setState(() => _transactions = all);
   }
@@ -242,6 +259,240 @@ class _TransactionListTabState extends State<TransactionListTab> {
         ],
       );
 
+  void _showDateFilterSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.45,
+        maxChildSize: 0.92,
+        expand: false,
+        builder: (ctx, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 6, 12, 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Select Date Range',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: StitchColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Filter transactions by timeframe',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.pop(sheetCtx),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  itemCount: DateFilterPreset.values.length,
+                  itemBuilder: (context, index) {
+                    final preset = DateFilterPreset.values[index];
+                    final isSelected = _selectedPreset == preset;
+                    final presetRange = calculateDateRange(
+                      preset,
+                      customStart: _customStart,
+                      customEnd: _customEnd,
+                    );
+
+                    final IconData icon = switch (preset) {
+                      DateFilterPreset.today => Icons.today_rounded,
+                      DateFilterPreset.yesterday => Icons.history_rounded,
+                      DateFilterPreset.thisWeek ||
+                      DateFilterPreset.lastWeek ||
+                      DateFilterPreset.last7Days =>
+                        Icons.date_range_rounded,
+                      DateFilterPreset.thisMonth ||
+                      DateFilterPreset.lastMonth =>
+                        Icons.calendar_month_rounded,
+                      DateFilterPreset.thisQuarter ||
+                      DateFilterPreset.lastQuarter =>
+                        Icons.pie_chart_outline_rounded,
+                      DateFilterPreset.currentFinancialYear ||
+                      DateFilterPreset.previousFinancialYear =>
+                        Icons.account_balance_rounded,
+                      DateFilterPreset.custom => Icons.edit_calendar_rounded,
+                    };
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: InkWell(
+                        onTap: () async {
+                          if (preset == DateFilterPreset.custom) {
+                            final now = DateTime.now();
+                            final initialRange = DateTimeRange(
+                              start: _customStart ?? _currentRange.start ?? now,
+                              end: _customEnd ?? _currentRange.end ?? now,
+                            );
+                            Navigator.pop(sheetCtx);
+                            final picked = await showDateRangePicker(
+                              context: context,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(now.year + 2, 12, 31),
+                              initialDateRange: initialRange,
+                              builder: (context, child) => Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: Theme.of(context).colorScheme.copyWith(
+                                        primary: StitchColors.primary,
+                                        onPrimary: Colors.white,
+                                      ),
+                                ),
+                                child: child!,
+                              ),
+                            );
+                            if (picked != null && mounted) {
+                              setState(() {
+                                _customStart = picked.start;
+                                _customEnd = picked.end;
+                                _selectedPreset = DateFilterPreset.custom;
+                              });
+                              _load();
+                            }
+                          } else {
+                            Navigator.pop(sheetCtx);
+                            setState(() => _selectedPreset = preset);
+                            _load();
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(14),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? StitchColors.primary.withValues(alpha: 0.08)
+                                : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isSelected
+                                  ? StitchColors.primary
+                                  : Colors.grey.shade200,
+                              width: isSelected ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? StitchColors.primary.withValues(alpha: 0.15)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? StitchColors.primary.withValues(alpha: 0.3)
+                                        : Colors.grey.shade200,
+                                  ),
+                                ),
+                                child: Icon(
+                                  icon,
+                                  size: 20,
+                                  color: isSelected
+                                      ? StitchColors.primary
+                                      : StitchColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      preset.label,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w800
+                                            : FontWeight.w600,
+                                        color: isSelected
+                                            ? StitchColors.primary
+                                            : StitchColors.textPrimary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      preset == DateFilterPreset.custom && _customStart == null
+                                          ? 'Pick custom date range'
+                                          : presetRange.formatted,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: isSelected
+                                            ? StitchColors.primary.withValues(alpha: 0.8)
+                                            : StitchColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isSelected)
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: StitchColors.primary,
+                                  size: 22,
+                                )
+                              else
+                                Icon(
+                                  Icons.radio_button_unchecked_rounded,
+                                  color: Colors.grey.shade400,
+                                  size: 20,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _getFiltered();
@@ -301,6 +552,81 @@ class _TransactionListTabState extends State<TransactionListTab> {
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+              ),
+            ),
+          ),
+
+          // Date Filter Button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: InkWell(
+              onTap: _showDateFilterSheet,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: StitchColors.primary.withValues(alpha: 0.25)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: StitchColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.calendar_month_rounded,
+                        size: 18,
+                        color: StitchColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _selectedPreset == DateFilterPreset.custom
+                                ? 'Custom Range'
+                                : _selectedPreset.label,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: StitchColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _currentRange.formatted,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: StitchColors.textSecondary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: StitchColors.textSecondary,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -392,7 +718,7 @@ class _TransactionListTabState extends State<TransactionListTab> {
                             title: 'No transactions found',
                             subtitle: _query.isNotEmpty
                                 ? 'No transactions matching "$_query"'
-                                : 'No ${_activeFilter == 'All' ? '' : _activeFilter.toLowerCase()} transactions recorded yet',
+                                : 'No ${_activeFilter == 'All' ? '' : _activeFilter.toLowerCase()} transactions for ${_selectedPreset.label.toLowerCase()}',
                           ),
                           const SizedBox(height: 20),
                           Row(

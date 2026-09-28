@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api_client.dart';
 import '../../core/gst_service.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
@@ -134,8 +135,10 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
       setState(() => _isGstLoading = true);
       try {
         final session = context.read<Session>();
+        final client = session.token != null ? (ApiClient()..setToken(session.token!)) : ApiClient();
         final info = await GstService.instance.lookup(
           clean,
+          apiClient: client,
           gstnApiKey: session.gstnApiKey.isNotEmpty ? session.gstnApiKey : null,
         );
         if (!mounted) return;
@@ -147,27 +150,33 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
           if ((_pan.text.trim().isEmpty || force) && (info.pan != null || extractedPan.isNotEmpty)) {
             _pan.text = info.pan ?? extractedPan;
           }
-          if ((_name.text.trim().isEmpty || force || _name.text == prevAutoName) &&
-              info.effectiveName.isNotEmpty) {
-            _name.text = info.effectiveName;
-          }
-          if ((_city.text.trim().isEmpty || force || _city.text == prevAutoCity) &&
-              info.city != null && info.city!.isNotEmpty) {
-            _city.text = info.city!;
-          }
-          if (info.address != null && info.address!.isNotEmpty) {
-            if (_billingAddress.text.trim().isEmpty || force || _billingAddress.text == prevAutoAddress) {
-              _billingAddress.text = info.address!;
+
+          if (info.isOnlineFetched && info.effectiveName.isNotEmpty) {
+            if (_name.text.trim().isEmpty || force || _name.text == prevAutoName) {
+              _name.text = info.effectiveName;
             }
-            if (_sameAsBilling || _shippingAddress.text.trim().isEmpty || force || _shippingAddress.text == prevAutoAddress) {
-              _shippingAddress.text = info.address!;
+            if ((_city.text.trim().isEmpty || force || _city.text == prevAutoCity) &&
+                info.city != null && info.city!.isNotEmpty) {
+              _city.text = info.city!;
             }
+            if (info.address != null && info.address!.isNotEmpty) {
+              if (_billingAddress.text.trim().isEmpty || force || _billingAddress.text == prevAutoAddress) {
+                _billingAddress.text = info.address!;
+              }
+              if (_sameAsBilling || _shippingAddress.text.trim().isEmpty || force || _shippingAddress.text == prevAutoAddress) {
+                _shippingAddress.text = info.address!;
+              }
+            }
+            _showAutofillSuccessBanner = true;
+          } else {
+            _showAutofillSuccessBanner = false;
           }
-          _showAutofillSuccessBanner = true;
         });
 
-        if (info.effectiveName.isNotEmpty) {
+        if (info.isOnlineFetched && info.effectiveName.isNotEmpty) {
           showAppMessage(context, 'Party details auto-filled from GSTIN ✓');
+        } else {
+          showAppMessage(context, 'State (${info.state ?? "State"}) & PAN identified from GSTIN');
         }
       } finally {
         if (mounted) setState(() => _isGstLoading = false);
@@ -467,7 +476,7 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
                       ),
                       const SizedBox(height: 14),
 
-                      // GSTIN Field with Live Lookup Indicator
+                      // GSTIN Field with Live Lookup Indicator & Fetch Trigger
                       TextFormField(
                         controller: _gstin,
                         textCapitalization: TextCapitalization.characters,
@@ -485,48 +494,114 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
                                   ),
                                 )
                               : isValidGstin
-                                  ? const Icon(Icons.check_circle_rounded, color: StitchColors.success)
+                                  ? IconButton(
+                                      icon: const Icon(Icons.refresh_rounded, color: StitchColors.primary, size: 20),
+                                      tooltip: 'Fetch GSTIN details',
+                                      onPressed: () => _handleGstInput(_gstin.text, force: true),
+                                    )
                                   : null,
                         ),
                         onChanged: (val) => _handleGstInput(val),
+                        onFieldSubmitted: (val) => _handleGstInput(val, force: true),
                       ),
 
-                      // Verified Taxpayer Info Strip
+                      // Verified Taxpayer Info Strip (Billbook Style)
                       if (_gstInfo != null) ...[
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: StitchColors.successSoft,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: StitchColors.success.withValues(alpha: 0.25)),
+                            color: _gstInfo!.isOnlineFetched
+                                ? StitchColors.successSoft
+                                : StitchColors.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: _gstInfo!.isOnlineFetched
+                                  ? StitchColors.success.withValues(alpha: 0.35)
+                                  : StitchColors.primary.withValues(alpha: 0.25),
+                            ),
                           ),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.verified_user_rounded, color: StitchColors.success, size: 14),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  '${_gstInfo!.status} • ${_gstInfo!.state ?? ''}${_gstInfo!.constitution != null ? ' • ${_gstInfo!.constitution}' : ''}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: StitchColors.success,
+                              Row(
+                                children: [
+                                  Icon(
+                                    _gstInfo!.isOnlineFetched ? Icons.verified_user_rounded : Icons.info_outline_rounded,
+                                    color: _gstInfo!.isOnlineFetched ? StitchColors.success : StitchColors.primary,
+                                    size: 16,
                                   ),
-                                ),
-                              ),
-                              if (isValidGstin)
-                                GestureDetector(
-                                  onTap: () => _handleGstInput(_gstin.text, force: true),
-                                  child: const Text(
-                                    'Re-fill',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: StitchColors.primary,
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      _gstInfo!.isOnlineFetched
+                                          ? '${_gstInfo!.status} • ${_gstInfo!.isComposition ? "Composition" : "Regular"} • ${_gstInfo!.state ?? ""}'
+                                          : 'Format Valid • ${_gstInfo!.state ?? ""}${_gstInfo!.constitution != null ? " • ${_gstInfo!.constitution}" : ""}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: _gstInfo!.isOnlineFetched ? StitchColors.success : StitchColors.primary,
+                                      ),
                                     ),
                                   ),
+                                  if (isValidGstin)
+                                    GestureDetector(
+                                      onTap: () => _handleGstInput(_gstin.text, force: true),
+                                      child: const Text(
+                                        'Re-fill',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: StitchColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              if (_gstInfo!.isOnlineFetched && _gstInfo!.effectiveName.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  _gstInfo!.effectiveName,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: StitchColors.textPrimary,
+                                  ),
                                 ),
+                                if (_gstInfo!.legalName != null &&
+                                    _gstInfo!.legalName != _gstInfo!.effectiveName &&
+                                    _gstInfo!.legalName!.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Legal: ${_gstInfo!.legalName}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: StitchColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                                if (_gstInfo!.address != null && _gstInfo!.address!.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _gstInfo!.address!,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: StitchColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ] else if (!_gstInfo!.isOnlineFetched) ...[
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'State and PAN identified. Please enter Party Name & Address.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: StitchColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),

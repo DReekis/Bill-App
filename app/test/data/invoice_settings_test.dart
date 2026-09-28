@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:billket/core/billing_engine.dart';
 import 'package:billket/core/models.dart';
 import 'package:billket/data/app_database.dart';
 import 'package:billket/data/repositories.dart';
@@ -105,5 +106,80 @@ void main() {
     expect(await repo.isInvoiceNumberAvailable(businessId, 'BILL-999'), isFalse);
     expect(await repo.isInvoiceNumberAvailable(businessId, 'bill-999'), isFalse); // Case-insensitive
     expect(await repo.isInvoiceNumberAvailable(businessId, 'BILL-1000'), isTrue);
+  });
+
+  test('peekNextInvoiceNumber detects existing invoices in database and avoids duplicate numbers', () async {
+    // Suppose businesses table has sequence = 3, but INV-0004 already exists in DB
+    await db.update('businesses', {'invoice_sequence': 3}, where: 'id = ?', whereArgs: [businessId]);
+    await db.insert('invoices', {
+      'business_id': businessId,
+      'number': 'INV-0004',
+      'date': '2026-09-28',
+      'total': 250000,
+    });
+
+    // Peeking must NOT return INV-0004 because it already exists; it must return INV-0005!
+    final peek = await repo.peekNextInvoiceNumber(businessId, 'INV');
+    expect(peek, 'INV-0005');
+
+    // nextInvoiceNumber must return INV-0005 and update sequence to 5
+    final next = await repo.nextInvoiceNumber(businessId, 'INV');
+    expect(next, 'INV-0005');
+
+    final biz = await repo.getBusiness(businessId);
+    expect(biz!.invoiceSequence, 5);
+  });
+
+  test('finalizeSale automatically advances invoice_sequence so subsequent sales never collide', () async {
+    final quote = BillingEngine.calculateQuote(
+      lines: [
+        LineCalcInput(quantity: 1, price: 10000, gstRate: 18),
+      ],
+      invoiceDiscount: const InvoiceDiscountInput.none(),
+      businessTaxRegistered: false,
+    );
+
+    // Finalize sale with number 'INV-0010'
+    await repo.finalizeSale(
+      businessId: businessId,
+      number: 'INV-0010',
+      customerId: null,
+      customerName: 'Test Customer',
+      date: '2026-09-28',
+      gstType: 'regular',
+      quote: quote,
+      lines: [
+        InvoiceLine(name: 'Widget', gstRate: 18, quantity: 1, price: 10000),
+      ],
+      amountPaid: 11800,
+    );
+
+    // Sequence in businesses table should now be at least 10
+    final biz = await repo.getBusiness(businessId);
+    expect(biz!.invoiceSequence, greaterThanOrEqualTo(10));
+
+    // Next peek must automatically be INV-0011!
+    final nextNum = await repo.peekNextInvoiceNumber(businessId, 'INV');
+    expect(nextNum, 'INV-0011');
+  });
+
+  test('createPurchase automatically advances purchase_sequence and avoids collisions', () async {
+    await repo.createPurchase(
+      businessId: businessId,
+      supplierId: null,
+      supplierName: 'Vendor ABC',
+      date: '2026-09-28',
+      items: [
+        (null, 'Raw Material', 10.0, 5000, 18),
+      ],
+      amountPaid: 59000,
+      purchaseNumber: 'PUR-0005',
+    );
+
+    final biz = await repo.getBusiness(businessId);
+    expect(biz!.purchaseSequence, greaterThanOrEqualTo(5));
+
+    final nextPurch = await repo.peekNextPurchaseNumber(businessId, 'PUR');
+    expect(nextPurch, 'PUR-0006');
   });
 }

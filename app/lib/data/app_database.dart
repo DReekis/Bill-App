@@ -149,6 +149,12 @@ class AppDatabase {
         );
       ''');
     } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE products ADD COLUMN expiry_date TEXT;');
+    } catch (_) {}
+    try {
+      await db.execute('UPDATE businesses SET allow_negative_stock = 1 WHERE allow_negative_stock = 0 OR allow_negative_stock IS NULL;');
+    } catch (_) {}
   }
 
   /// Lets tests drive the real repository against an in-memory database.
@@ -179,7 +185,7 @@ class AppDatabase {
         composition_scheme INTEGER DEFAULT 0,
         invoice_prefix TEXT DEFAULT 'INV',
         invoice_sequence INTEGER DEFAULT 0,
-        allow_negative_stock INTEGER DEFAULT 0,
+        allow_negative_stock INTEGER DEFAULT 1,
         fy_start TEXT DEFAULT '2026-04-01',
         currency TEXT DEFAULT 'INR',
         invoice_phone TEXT,
@@ -272,6 +278,7 @@ class AppDatabase {
         has_serial INTEGER DEFAULT 0,
         image_path TEXT,
         description TEXT,
+        expiry_date TEXT,
         inactive INTEGER DEFAULT 0
       )
     ''');

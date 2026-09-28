@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models.dart';
 import '../../core/session.dart';
+import '../../core/units.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
@@ -52,7 +53,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
   @override
   void initState() {
     super.initState();
-    unit = widget.product?.unit ?? 'pc';
+    unit = widget.product?.unit ?? 'PCS';
     gstRate = widget.product?.gstRate ?? 0;
     taxIncluded = widget.product?.taxIncluded ?? false;
     hasBatch = widget.product?.hasBatch ?? false;
@@ -126,7 +127,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
         category: _category.text.trim().isEmpty ? null : _category.text.trim(),
         hsn: _hsn.text.trim().isEmpty ? null : _hsn.text.trim(),
         barcode: _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
-        unit: unit ?? 'pc',
+        unit: unit ?? 'PCS',
         gstRate: gstRate,
         purchasePrice: context.read<Session>().canViewCosts
             ? _toPaise(_purchasePrice.text)
@@ -190,13 +191,24 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
               Expanded(child: AppTextField(controller: _hsn, label: 'HSN code')),
               const SizedBox(width: 12),
               Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: unit,
-                  decoration: inputDecoration('Unit'),
-                  items: ['pc', 'kg', 'g', 'l', 'ml', 'm', 'box', 'dozen', 'bottle', 'pack']
-                      .map((u) => DropdownMenuItem(value: u, child: Text(u)))
-                      .toList(),
-                  onChanged: (v) => unit = v,
+                child: InkWell(
+                  onTap: () async {
+                    final picked = await showUnitPicker(context, currentUnit: unit);
+                    if (picked != null) {
+                      setState(() => unit = picked);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: InputDecorator(
+                    decoration: inputDecoration('Unit').copyWith(
+                      suffixIcon: const Icon(Icons.arrow_drop_down_rounded, size: 22),
+                    ),
+                    child: Text(
+                      formatUnitDisplay(unit ?? 'PCS'),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
               ),
             ]),

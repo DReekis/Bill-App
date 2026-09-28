@@ -156,6 +156,8 @@ void main() {
   });
 
   test('stock cannot go negative unless the business allows it', () async {
+    await db.update('businesses', {'allow_negative_stock': 0},
+        where: 'id = ?', whereArgs: [businessId]);
     final productId = await addProduct(stock: 1);
     final customerId = await repo.upsertCustomer(Customer(name: 'Acme'),
         businessIdOverride: businessId);
@@ -163,6 +165,38 @@ void main() {
       sell(productId: productId, customerId: customerId, qty: 5),
       throwsA(isA<StateError>()),
     );
+  });
+
+  test('selling product with 0 stock generates invoice and decrements stock to negative', () async {
+    await db.update('businesses', {'allow_negative_stock': 1},
+        where: 'id = ?', whereArgs: [businessId]);
+    final productId = await addProduct(stock: 0, salePrice: 15000);
+    final customerId = await repo.upsertCustomer(Customer(name: 'Acme'),
+        businessIdOverride: businessId);
+    final invoiceId = await sell(productId: productId, customerId: customerId, qty: 6);
+    expect(invoiceId, isPositive);
+    final product = (await repo.products(businessId)).firstWhere((p) => p.id == productId);
+    expect(product.stock, -6);
+    final moves = await repo.stockMoves(businessId, productId);
+    expect(moves.any((m) => m.changeQty == -6.0 && m.qtyAfter == -6.0), isTrue);
+  });
+
+  test('adjustStock updates buying price, selling price, and expiry date', () async {
+    final productId = await addProduct(stock: 10, purchasePrice: 5000, salePrice: 10000);
+    final prod = (await repo.products(businessId)).firstWhere((p) => p.id == productId);
+    await repo.adjustStock(
+      prod,
+      20,
+      'adjustment_in',
+      newPurchasePrice: 6000,
+      newSalePrice: 12000,
+      newExpiryDate: '2027-12-31',
+    );
+    final updated = (await repo.products(businessId)).firstWhere((p) => p.id == productId);
+    expect(updated.stock, 30);
+    expect(updated.purchasePrice, 6000);
+    expect(updated.salePrice, 12000);
+    expect(updated.expiryDate, '2027-12-31');
   });
 
   test('createPurchase records the expense, stock and payables', () async {
@@ -384,6 +418,32 @@ void main() {
     // Verify latest transaction is first (Electricity Bill on 2026-09-05)
     expect(txs.first.type, TransactionType.expense);
     expect(txs.first.amount, 1500);
+
+    // 5. Test date filtering: Sep 4 to Sep 5 only
+    final filteredTxs = await repo.recentTransactions(
+      businessId,
+      fromDate: '2026-09-04',
+      toDate: '2026-09-05',
+    );
+    expect(filteredTxs.length, 2);
+    expect(filteredTxs.map((t) => t.date), everyElement(anyOf('2026-09-04', '2026-09-05')));
+
+    // Test single day filtering: Sep 5 only
+    final singleDayTxs = await repo.recentTransactions(
+      businessId,
+      fromDate: '2026-09-05',
+      toDate: '2026-09-05',
+    );
+    expect(singleDayTxs.length, 1);
+    expect(singleDayTxs.first.type, TransactionType.expense);
+
+    // Test empty date window: August 2026
+    final augustTxs = await repo.recentTransactions(
+      businessId,
+      fromDate: '2026-08-01',
+      toDate: '2026-08-31',
+    );
+    expect(augustTxs.isEmpty, isTrue);
   });
 
   test('lowStockProducts and outOfStockProducts return filtered inventory correctly', () async {

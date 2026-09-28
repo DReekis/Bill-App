@@ -35,7 +35,7 @@ class _LineEdit {
     this.batch,
     this.serial,
   });
-  final Product product;
+  Product product;
   double qty;
   int price;
   double discountPercent;
@@ -164,10 +164,13 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
       }
     }
 
-    if (invoiceNumber == null && biz != null) {
-      setState(() {
-        invoiceNumber = InvoiceNumbering.format(biz.invoicePrefix, biz.invoiceSequence + 1);
-      });
+    if (widget.existingInvoiceId == null && (invoiceNumber == null || invoiceNumber!.isEmpty)) {
+      if (biz != null) {
+        final nextNum = await repo.peekNextInvoiceNumber(businessId, biz.invoicePrefix);
+        setState(() {
+          invoiceNumber = nextNum;
+        });
+      }
     }
 
     if (widget.customerId != null) {
@@ -396,6 +399,17 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           ));
         }
 
+        String? resolvedDraftNum;
+        if (decoded['invoiceNumber'] != null) {
+          final draftNum = decoded['invoiceNumber'] as String;
+          final isAvail = await Repository.instance.isInvoiceNumberAvailable(bizId, draftNum);
+          if (isAvail) {
+            resolvedDraftNum = draftNum;
+          } else {
+            resolvedDraftNum = await Repository.instance.peekNextInvoiceNumber(bizId, business?.invoicePrefix ?? 'INV');
+          }
+        }
+
         setState(() {
           lines = restored;
           customerId = decoded['customerId'] as int?;
@@ -404,8 +418,8 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           dueDate = decoded['dueDate'] as String?;
           invoiceDiscountType = (decoded['invoiceDiscountType'] as String?) ?? 'percent';
           invoiceDiscountValue = (decoded['invoiceDiscountValue'] as num?)?.toDouble() ?? 0.0;
-          if (decoded['invoiceNumber'] != null) {
-            invoiceNumber = decoded['invoiceNumber'] as String;
+          if (resolvedDraftNum != null) {
+            invoiceNumber = resolvedDraftNum;
           }
           if (decoded['invoiceDate'] != null) {
             invoiceDate = decoded['invoiceDate'] as String;
@@ -421,7 +435,22 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     final businessId = context.read<Session>().businessId;
     if (businessId == null) return;
     final prods = await Repository.instance.products(businessId);
-    if (mounted) setState(() => products = prods);
+    if (mounted) {
+      setState(() {
+        products = prods;
+        for (final line in lines) {
+          if (line.product.id != null) {
+            final match = prods.cast<Product?>().firstWhere(
+              (p) => p?.id == line.product.id,
+              orElse: () => null,
+            );
+            if (match != null) {
+              line.product = match;
+            }
+          }
+        }
+      });
+    }
   }
 
   @override
@@ -453,52 +482,209 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) {
-        final all = customers ?? const <Customer>[];
-        final businessId = context.read<Session>().businessId!;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Select customer', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 10),
-            ListTile(
-              leading: const Icon(Icons.person_outline_rounded),
-              title: const Text('Walk-in customer', style: TextStyle(fontWeight: FontWeight.w600)),
-              onTap: () {
-                setState(() {
-                  customerId = null;
-                  customerName = null;
-                  customerState = null;
-                });
-                Navigator.pop(context);
-              },
-            ),
-            const Divider(height: 1),
-            ...all.map((c) => ListTile(
-                  leading: InitialsAvatar(c.name, size: 36),
-                  title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text(c.phone ?? ''),
-                  onTap: () {
-                    _selectCustomer(c);
-                    Navigator.pop(context);
-                  },
-                )),
-            TextButton.icon(
-              onPressed: () async {
-                Navigator.pop(context);
-                await showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (context) => CustomerFormSheet(
-                    businessId: businessId,
-                    onSaved: _load,
-                  ),
-                );
-              },
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add new party'),
-            ),
-          ]),
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final all = customers ?? const <Customer>[];
+            final businessId = context.read<Session>().businessId!;
+            final q = searchQuery.trim().toLowerCase();
+
+            final filtered = q.isEmpty
+                ? all
+                : all.where((c) {
+                    final name = c.name.toLowerCase();
+                    final phone = (c.phone ?? '').toLowerCase();
+                    final gstin = (c.gstin ?? '').toLowerCase();
+                    return name.contains(q) || phone.contains(q) || gstin.contains(q);
+                  }).toList();
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.85,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 12, 12),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Select Customer',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            await showModalBottomSheet<void>(
+                              context: this.context,
+                              isScrollControlled: true,
+                              builder: (ctx) => CustomerFormSheet(
+                                businessId: businessId,
+                                onSaved: _load,
+                                onSavedCustomer: (newCust) {
+                                  _selectCustomer(newCust);
+                                },
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.person_add_rounded, size: 18),
+                          label: const Text('+ Add New Customer', style: TextStyle(fontWeight: FontWeight.w700)),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TextField(
+                        autofocus: false,
+                        decoration: InputDecoration(
+                          hintText: 'Search customer by name or phone...',
+                          prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                          suffixIcon: searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded, size: 18),
+                                  onPressed: () {
+                                    setModalState(() => searchQuery = '');
+                                  },
+                                )
+                              : null,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        ),
+                        onChanged: (val) {
+                          setModalState(() => searchQuery = val);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(height: 1),
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          if (searchQuery.isEmpty)
+                            ListTile(
+                              leading: Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: StitchColors.primary.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.person_outline_rounded, color: StitchColors.primary, size: 20),
+                              ),
+                              title: const Text('Walk-in customer', style: TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: const Text('Cash sale / unregistered customer', style: TextStyle(fontSize: 12)),
+                              onTap: () {
+                                setState(() {
+                                  customerId = null;
+                                  customerName = null;
+                                  customerState = null;
+                                });
+                                Navigator.pop(context);
+                              },
+                            ),
+                          if (filtered.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                              child: Column(
+                                children: [
+                                  Icon(Icons.search_off_rounded, size: 40, color: Colors.grey.shade400),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'No customer found matching "$searchQuery"',
+                                    style: const TextStyle(fontSize: 13, color: StitchColors.textSecondary),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextButton.icon(
+                                    onPressed: () async {
+                                      Navigator.pop(context);
+                                      await showModalBottomSheet<void>(
+                                        context: this.context,
+                                        isScrollControlled: true,
+                                        builder: (ctx) => CustomerFormSheet(
+                                          businessId: businessId,
+                                          onSaved: _load,
+                                          onSavedCustomer: (newCust) {
+                                            _selectCustomer(newCust);
+                                          },
+                                        ),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.person_add_rounded, size: 18),
+                                    label: Text('Create "$searchQuery" as new customer'),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            ...filtered.map((c) => ListTile(
+                                  leading: InitialsAvatar(c.name, size: 38),
+                                  title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  subtitle: Text(
+                                    [c.phone, if (c.gstin != null && c.gstin!.isNotEmpty) 'GST: ${c.gstin}']
+                                        .whereType<String>()
+                                        .where((s) => s.isNotEmpty)
+                                        .join(' • '),
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  onTap: () {
+                                    _selectCustomer(c);
+                                    Navigator.pop(context);
+                                  },
+                                )),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -533,7 +719,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     _saveDraft();
   }
 
-  void _addItem() {
+  Future<void> _addItem() async {
+    await _refreshProducts();
+    if (!mounted) return;
     final initialMap = <int, double>{};
     for (final l in lines) {
       if (l.product.id != null) {
@@ -1101,11 +1289,22 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     final businessId = session.businessId!;
     setState(() => saving = true);
     try {
-      final number = (invoiceNumber != null && invoiceNumber!.trim().isNotEmpty)
+      var number = (invoiceNumber != null && invoiceNumber!.trim().isNotEmpty)
           ? invoiceNumber!.trim()
           : (widget.existingInvoiceId != null
               ? 'INV-0001'
               : await Repository.instance.nextInvoiceNumber(businessId, biz.invoicePrefix));
+
+      if (widget.existingInvoiceId == null) {
+        final isAvail = await Repository.instance.isInvoiceNumberAvailable(businessId, number);
+        if (!isAvail) {
+          final freshNumber = await Repository.instance.peekNextInvoiceNumber(businessId, biz.invoicePrefix);
+          number = freshNumber;
+          if (mounted) {
+            setState(() => invoiceNumber = freshNumber);
+          }
+        }
+      }
       final invoiceLines = <InvoiceLine>[];
       for (var i = 0; i < lines.length; i++) {
         final l = lines[i];
