@@ -218,6 +218,7 @@ class AppTextField extends StatelessWidget {
     this.icon,
     this.suffix,
     this.obscure = false,
+    this.autofocus = false,
     this.validator,
     this.maxLines = 1,
     this.onSubmitted,
@@ -231,6 +232,7 @@ class AppTextField extends StatelessWidget {
   final IconData? icon;
   final Widget? suffix;
   final bool obscure;
+  final bool autofocus;
   final String? Function(String?)? validator;
   final int maxLines;
   final ValueChanged<String>? onSubmitted;
@@ -238,6 +240,7 @@ class AppTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextFormField(
         controller: controller,
+        autofocus: autofocus,
         obscureText: obscure,
         keyboardType: keyboardType,
         maxLines: maxLines,

@@ -569,5 +569,69 @@ void main() {
     expect(perfYear.salesHistory.length, 12);
     expect(perfYear.profitHistory.length, 12);
   });
+
+  test('nearExpiryProducts and nearExpiryProductsCount detect near-expiry and expired products correctly', () async {
+    final now = DateTime.now();
+
+    // 1. Expiring in 10 days (should be caught by 30-day threshold)
+    final pExpiringSoon = Product(
+      name: 'Organic Milk',
+      sku: 'MILK-10',
+      salePrice: 6000,
+      stock: 25,
+      expiryDate: isoDate(now.add(const Duration(days: 10))),
+    );
+    await repo.upsertProduct(pExpiringSoon, businessIdOverride: businessId);
+
+    // 2. Already expired 3 days ago (should be caught by alert as urgent)
+    final pExpired = Product(
+      name: 'Greek Yogurt',
+      sku: 'YOG-03',
+      salePrice: 8000,
+      stock: 12,
+      expiryDate: isoDate(now.subtract(const Duration(days: 3))),
+    );
+    await repo.upsertProduct(pExpired, businessIdOverride: businessId);
+
+    // 3. Expiring in 90 days (should NOT be caught by 30-day threshold)
+    final pFarExpiry = Product(
+      name: 'Canned Beans',
+      sku: 'BEAN-90',
+      salePrice: 15000,
+      stock: 50,
+      expiryDate: isoDate(now.add(const Duration(days: 90))),
+    );
+    await repo.upsertProduct(pFarExpiry, businessIdOverride: businessId);
+
+    // 4. No expiry date (should NOT be caught)
+    final pNoExpiry = Product(
+      name: 'Steel Utensil',
+      sku: 'STEEL-01',
+      salePrice: 25000,
+      stock: 10,
+    );
+    await repo.upsertProduct(pNoExpiry, businessIdOverride: businessId);
+
+    // 5. Inactive product expiring tomorrow (should NOT be caught)
+    final pInactive = Product(
+      name: 'Old Soda',
+      sku: 'SODA-01',
+      salePrice: 4000,
+      stock: 5,
+      expiryDate: isoDate(now.add(const Duration(days: 1))),
+      inactive: true,
+    );
+    await repo.upsertProduct(pInactive, businessIdOverride: businessId);
+
+    final count = await repo.nearExpiryProductsCount(businessId, daysThreshold: 30);
+    expect(count, equals(2));
+
+    final items = await repo.nearExpiryProducts(businessId, daysThreshold: 30);
+    expect(items.length, equals(2));
+    // Should be sorted by expiry_date ASC (expired first, then near-expiry)
+    expect(items[0].name, equals('Greek Yogurt'));
+    expect(items[1].name, equals('Organic Milk'));
+  });
 }
+
 

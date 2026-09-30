@@ -353,11 +353,24 @@ class _MultiProductPickerSheetState extends State<MultiProductPickerSheet> {
                         ),
                       ),
                       if (widget.onAddNew != null)
-                        TextButton.icon(
+                        FilledButton.icon(
                           onPressed: widget.onAddNew,
-                          icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
-                          label: const Text('New Item', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: const Text(
+                            '+ New Item',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.2),
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: StitchColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            minimumSize: const Size(0, 38),
+                            elevation: 2,
+                            shadowColor: StitchColors.primary.withValues(alpha: 0.35),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -615,10 +628,16 @@ class _MultiProductPickerSheetState extends State<MultiProductPickerSheet> {
                             ),
                             if (widget.onAddNew != null) ...[
                               const SizedBox(height: 12),
-                              OutlinedButton.icon(
+                              FilledButton.icon(
                                 onPressed: widget.onAddNew,
-                                icon: const Icon(Icons.add_rounded, size: 16),
-                                label: const Text('Create This Product'),
+                                icon: const Icon(Icons.add_rounded, size: 18),
+                                label: const Text('+ Create This Product', style: TextStyle(fontWeight: FontWeight.w700)),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: StitchColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
                               ),
                             ],
                           ],

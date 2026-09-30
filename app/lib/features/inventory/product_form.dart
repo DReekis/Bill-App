@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/dates.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
 import '../../core/units.dart';
@@ -49,6 +50,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
   bool hasBatch = false;
   bool hasSerial = false;
   bool saving = false;
+  String? _expiryDate;
 
   @override
   void initState() {
@@ -58,6 +60,10 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
     taxIncluded = widget.product?.taxIncluded ?? false;
     hasBatch = widget.product?.hasBatch ?? false;
     hasSerial = widget.product?.hasSerial ?? false;
+    _expiryDate = widget.product?.expiryDate;
+    if (_expiryDate != null && _expiryDate!.isNotEmpty) {
+      hasBatch = true;
+    }
     final p = widget.product;
     if (p != null) {
       _name.text = p.name;
@@ -140,6 +146,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
         taxIncluded: taxIncluded,
         hasBatch: hasBatch,
         hasSerial: hasSerial,
+        expiryDate: hasBatch ? _expiryDate : (widget.product?.expiryDate ?? _expiryDate),
         description: _description.text.trim(),
         stock: finalStock,
         costAverage: widget.product?.costAverage ??
@@ -353,6 +360,45 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
                 ),
               ),
             ]),
+            if (hasBatch) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () async {
+                  final now = DateTime.now();
+                  final initial = _expiryDate != null
+                      ? (DateTime.tryParse(_expiryDate!) ?? now)
+                      : now.add(const Duration(days: 180));
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: initial,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2035),
+                  );
+                  if (picked != null) {
+                    setState(() => _expiryDate = isoDate(picked));
+                  }
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: InputDecorator(
+                  decoration: inputDecoration('Expiry Date (optional)').copyWith(
+                    suffixIcon: _expiryDate != null
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () => setState(() => _expiryDate = null),
+                          )
+                        : const Icon(Icons.calendar_today_rounded, size: 18),
+                  ),
+                  child: Text(
+                    _expiryDate != null ? displayDate(_expiryDate) : 'Select Expiry Date',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: _expiryDate != null ? FontWeight.w600 : FontWeight.normal,
+                      color: _expiryDate != null ? StitchColors.textPrimary : StitchColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             AppTextField(controller: _description, label: 'Description', maxLines: 2),
             const SizedBox(height: 20),

@@ -1447,13 +1447,16 @@ const List<String> paymentModes = [
 
 const List<String> expenseCategories = [
   'Rent',
+  'Staff Salary',
+  'Maintenance',
+  'Custom',
   'Salary',
+  'Repairs',
   'Electricity',
   'Internet',
   'Transport',
   'Marketing',
   'Packaging',
-  'Repairs',
   'Office',
   'Bank charges',
   'Other',

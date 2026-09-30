@@ -3782,6 +3782,30 @@ class Repository {
     return rows.map(Product.fromMap).toList();
   }
 
+  Future<int> nearExpiryProductsCount(int businessId, {int daysThreshold = 30}) async {
+    final db = await _database;
+    final now = DateTime.now();
+    final thresholdDate = isoDate(now.add(Duration(days: daysThreshold)));
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM products WHERE business_id = ? AND inactive = 0 AND expiry_date IS NOT NULL AND expiry_date != "" AND expiry_date <= ?',
+      [businessId, thresholdDate],
+    );
+    return rows.isEmpty ? 0 : (rows.first['c'] as num).toInt();
+  }
+
+  Future<List<Product>> nearExpiryProducts(int businessId, {int daysThreshold = 30}) async {
+    final db = await _database;
+    final now = DateTime.now();
+    final thresholdDate = isoDate(now.add(Duration(days: daysThreshold)));
+    final rows = await db.query(
+      'products',
+      where: 'business_id = ? AND inactive = 0 AND expiry_date IS NOT NULL AND expiry_date != "" AND expiry_date <= ?',
+      whereArgs: [businessId, thresholdDate],
+      orderBy: 'expiry_date ASC',
+    );
+    return rows.map(Product.fromMap).toList();
+  }
+
   Future<(int count, int total)> overdueInvoicesSummary(int businessId) async {
     final db = await _database;
     final today = todayIso();

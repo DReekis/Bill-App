@@ -103,6 +103,14 @@ class AppLocalizations {
       'payment_out': 'Payment Out',
       'gst_center': 'GST Center',
       'add_product': 'Add Product',
+      'expense': 'Expense',
+      'add_expense': 'Add Expense',
+      'quick_expenses': 'Quick Expenses',
+      'rent': 'Rent',
+      'staff_salary': 'Staff Salary',
+      'maintenance': 'Maintenance',
+      'custom': 'Custom',
+      'custom_category': 'Custom Category',
 
       // Document Builder & Checkout
       'invoice': 'Invoice',
@@ -306,6 +314,14 @@ class AppLocalizations {
       'payment_out': 'भुगतान',
       'gst_center': 'जीएसटी',
       'add_product': 'सामान जोड़ें',
+      'expense': 'खर्च',
+      'add_expense': 'खर्च जोड़ें',
+      'quick_expenses': 'त्वरित खर्च',
+      'rent': 'किराया',
+      'staff_salary': 'स्टाफ वेतन',
+      'maintenance': 'रखरखाव',
+      'custom': 'कस्टम',
+      'custom_category': 'कस्टम श्रेणी',
 
       // Document Builder & Checkout
       'invoice': 'बिल',
@@ -510,6 +526,14 @@ class AppLocalizations {
       'payment_out': 'প্রদান',
       'gst_center': 'জিএসটি',
       'add_product': 'পণ্য যোগ',
+      'expense': 'খরচ',
+      'add_expense': 'খরচ যোগ করুন',
+      'quick_expenses': 'দ্রুত খরচ',
+      'rent': 'ভাড়া',
+      'staff_salary': 'কর্মীদের বেতন',
+      'maintenance': 'রক্ষণাবেক্ষণ',
+      'custom': 'কাস্টম',
+      'custom_category': 'কাস্টম বিভাগ',
 
       // Document Builder & Checkout
       'invoice': 'বিল',

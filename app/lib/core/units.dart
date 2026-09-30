@@ -188,7 +188,7 @@ Future<String?> showUnitPicker(BuildContext context, {String? currentUnit}) {
     builder: (modalCtx) {
       String query = '';
       String selectedCategory = 'All';
-      final categories = kUnitCategories;
+      const categories = kUnitCategories;
 
       return StatefulBuilder(
         builder: (context, setModalState) {

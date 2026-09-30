@@ -27,7 +27,9 @@ import '../reports/reports_menu_screen.dart';
 import '../banking/cash_bank_hub_screen.dart';
 import '../gst/gst_center_screen.dart';
 import '../shell/business_switcher_sheet.dart';
+import '../../core/dates.dart';
 import '../../l10n/app_localizations.dart';
+import '../../finance/stock_moves_screen.dart';
 import 'payables_screen.dart';
 import 'receivables_screen.dart';
 
@@ -50,6 +52,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int out = 0;
   int overdueCount = 0;
   int overdueAmount = 0;
+  int nearExpiryCount = 0;
   ReceivablesSummary? receivables;
   PayablesSummary? payables;
   String snapshotTimeframe = 'Today';
@@ -74,6 +77,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       repo.overdueInvoicesSummary(businessId),
       repo.receivablesSummary(businessId),
       repo.payablesSummary(businessId),
+      repo.nearExpiryProductsCount(businessId),
     ]);
 
     final perf = results[0] as DashboardPerformance;
@@ -84,6 +88,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final overdueSummary = results[5] as (int, int);
     final recSummary = results[6] as ReceivablesSummary;
     final paySummary = results[7] as PayablesSummary;
+    final nearExpCount = results[8] as int;
 
     await SyncEngine.instance.refreshPending();
     if (!mounted) return;
@@ -103,6 +108,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       out = outCount;
       overdueCount = overdueSummary.$1;
       overdueAmount = overdueSummary.$2;
+      nearExpiryCount = nearExpCount;
       receivables = recSummary;
       payables = paySummary;
     });
@@ -379,6 +385,151 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Future<void> _showNearExpirySheet() async {
+    final session = context.read<Session>();
+    final businessId = session.businessId;
+    if (businessId == null) return;
+    final items = await Repository.instance.nearExpiryProducts(businessId);
+    if (!mounted) return;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.65,
+        minChildSize: 0.4,
+        maxChildSize: 0.88,
+        expand: false,
+        builder: (ctx, scroll) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: const Color(0xFFD97706).withValues(alpha: 0.15), shape: BoxShape.circle),
+                    child: const Icon(Icons.event_busy_rounded, color: Color(0xFFD97706), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Near Expiry Products', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                        Text('${items.length} ${items.length == 1 ? "product needs" : "products need"} attention before expiry', style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: items.isEmpty
+                    ? const Center(child: Text('No products near expiry.'))
+                    : ListView.separated(
+                        controller: scroll,
+                        itemCount: items.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (ctx, i) {
+                          final p = items[i];
+                          final expDate = parseIso(p.expiryDate);
+                          final isExpired = expDate != null && expDate.isBefore(today);
+                          final diffDays = expDate != null ? expDate.difference(today).inDays : 0;
+
+                          final Color badgeColor;
+                          final Color badgeBg;
+                          final String badgeText;
+
+                          if (isExpired) {
+                            badgeColor = Colors.red.shade900;
+                            badgeBg = Colors.red.shade100;
+                            badgeText = 'Expired (${displayDate(p.expiryDate)})';
+                          } else if (diffDays == 0) {
+                            badgeColor = Colors.deepOrange.shade900;
+                            badgeBg = Colors.deepOrange.shade100;
+                            badgeText = 'Expires Today';
+                          } else if (diffDays == 1) {
+                            badgeColor = Colors.amber.shade900;
+                            badgeBg = Colors.amber.shade100;
+                            badgeText = 'Expires Tomorrow';
+                          } else {
+                            badgeColor = Colors.amber.shade900;
+                            badgeBg = Colors.amber.shade100;
+                            badgeText = 'In $diffDays days (${displayDate(p.expiryDate)})';
+                          }
+
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                            subtitle: Text('SKU: ${p.sku ?? "—"} • Stock: ${p.stock} ${p.unit} • ₹${formatPaise(p.salePrice)}'),
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(color: badgeBg, borderRadius: BorderRadius.circular(6)),
+                              child: Text(
+                                badgeText,
+                                style: TextStyle(color: badgeColor, fontWeight: FontWeight.w700, fontSize: 11),
+                              ),
+                            ),
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              if (p.id != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => StockMovesScreen(productId: p.id!),
+                                  ),
+                                ).then((_) => _load());
+                              }
+                            },
+                          );
+                        },
+                      ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                      label: const Text('Manage Items'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        widget.onSwitchTab?.call(2);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+                      label: const Text('Sell Stock'),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const InvoiceBuilderScreen(),
+                          ),
+                        ).then((_) => _load());
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _openNotificationsSheet() {
     final pendingSync = SyncEngine.instance.pendingCount;
     showModalBottomSheet<void>(
@@ -425,6 +576,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _showOutOfStockSheet();
                 },
               ),
+            if (nearExpiryCount > 0)
+              _NotificationItemTile(
+                icon: Icons.event_busy_rounded,
+                color: const Color(0xFFD97706),
+                title: 'Near Expiry Alert',
+                subtitle: '$nearExpiryCount products are expiring within 30 days or expired',
+                actionLabel: 'View Products',
+                onAction: () {
+                  Navigator.pop(ctx);
+                  _showNearExpirySheet();
+                },
+              ),
             if (overdueCount > 0)
               _NotificationItemTile(
                 icon: Icons.access_time_rounded,
@@ -451,7 +614,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   if (mounted) showAppMessage(context, 'Sync triggered');
                 },
               ),
-            if (low == 0 && out == 0 && overdueCount == 0 && pendingSync == 0)
+            if (low == 0 && out == 0 && nearExpiryCount == 0 && overdueCount == 0 && pendingSync == 0)
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(14)),
@@ -490,7 +653,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       showAppMessage(context, 'Access Denied: Reports are restricted.', error: true);
       return;
     }
-    if ((action == 'Purchase' || action == 'Purchase Order' || action == 'Supplier' || action == 'Expense') && !session.canViewCosts) {
+    if ((action == 'Purchase' || action == 'Purchase Order' || action == 'Supplier' || action == 'Expense' || action.startsWith('Expense:')) && !session.canViewCosts) {
       showAppMessage(context, 'Access Restricted: You do not have permission to manage purchases or expenses.', error: true);
       return;
     }
@@ -511,6 +674,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Future<void> onDone() async {
       await _load();
       widget.onDataChanged?.call();
+    }
+
+    if (action.startsWith('Expense:')) {
+      final category = action.substring('Expense:'.length);
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => ExpenseFormSheet(
+          onSaved: onDone,
+          businessId: businessId,
+          initialCategory: category,
+        ),
+      );
+      return;
     }
 
     switch (action) {
@@ -560,6 +737,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         nav.push(MaterialPageRoute(builder: (_) => const GstCenterScreen()));
       case 'Cash & Bank':
         nav.push(MaterialPageRoute(builder: (_) => const CashBankHubScreen())).then((_) => onDone());
+      case 'Expense':
+        showExpenseCategoryPicker(
+          context,
+          businessId: businessId,
+          onSaved: onDone,
+        );
       default:
         showModalBottomSheet<void>(
             context: context,
@@ -575,8 +758,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onSaved: onDone,
                       businessId: businessId,
                       onSavedProduct: (_) {}),
-                  'Expense' =>
-                    ExpenseFormSheet(onSaved: onDone, businessId: businessId),
                   _ => const SizedBox.shrink(),
                 });
     }
@@ -623,14 +804,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onShowLowStock: _showLowStockSheet,
         onShowOverdue: _showOverdueSheet,
         onShowOutOfStock: _showOutOfStockSheet,
+        nearExpiryCount: nearExpiryCount,
+        onShowNearExpiry: _showNearExpirySheet,
         onSwitchBusiness: () => showBusinessSwitcher(context).then((changed) {
           if (changed == true) _load();
         }),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddMenu(context),
-        backgroundColor: StitchColors.primary,
-        child: const Icon(Icons.add_rounded, color: Colors.white, size: 30),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'fab_dashboard_one_click_sale',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const InvoiceBuilderScreen()),
+              ).then((_) => _load());
+            },
+            backgroundColor: const Color(0xFF10B981),
+            icon: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 20),
+            label: Text(
+              context.l10n.text('sale'),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                letterSpacing: 0.3,
+              ),
+            ),
+            elevation: 4,
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'fab_dashboard_quick_actions',
+            onPressed: () => _showAddMenu(context),
+            backgroundColor: StitchColors.primary,
+            child: const Icon(Icons.add_rounded, color: Colors.white, size: 30),
+          ),
+        ],
       ),
     );
   }
@@ -653,22 +865,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
             top: false,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(
                   child: Container(
                     width: 40,
                     height: 4,
-                    margin: const EdgeInsets.only(bottom: 20),
+                    margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade300,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 12),
+                  child: Text(
+                    l10n.text('quick_actions'),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: StitchColors.textPrimary),
+                  ),
+                ),
                 Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                  _actionItem(ctx, Icons.shopping_cart_outlined, l10n.text('sale'), 'New Sale', const Color(0xFF3F51B5)),
                   _actionItem(ctx, Icons.shopping_bag_outlined, l10n.text('purchase'), 'Purchase', const Color(0xFF2E7D32)),
                   _actionItem(ctx, Icons.description_outlined, l10n.text('estimate'), 'Estimate', const Color(0xFF0288D1)),
+                  _actionItem(ctx, Icons.receipt_long_outlined, l10n.text('expense'), 'Expense', const Color(0xFFE53935)),
+                  _actionItem(ctx, Icons.call_received_rounded, l10n.text('payment_in'), 'Payment In', const Color(0xFF3F51B5)),
+                ]),
+                const SizedBox(height: 18),
+                const Divider(height: 1),
+                const SizedBox(height: 14),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.flash_on_rounded, size: 16, color: Color(0xFFE53935)),
+                      const SizedBox(width: 6),
+                      Text(
+                        l10n.text('quick_expenses'),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                  _actionItem(ctx, Icons.apartment_rounded, l10n.text('rent'), 'Expense:Rent', const Color(0xFF3949AB)),
+                  _actionItem(ctx, Icons.badge_outlined, l10n.text('staff_salary'), 'Expense:Staff Salary', const Color(0xFF00897B)),
+                  _actionItem(ctx, Icons.build_outlined, l10n.text('maintenance'), 'Expense:Maintenance', const Color(0xFFE65100)),
+                  _actionItem(ctx, Icons.edit_note_rounded, l10n.text('custom'), 'Expense:Custom', const Color(0xFF8E24AA)),
                 ]),
               ],
             ),
@@ -742,6 +985,8 @@ class _ReferenceDashboard extends StatelessWidget {
     this.onShowLowStock,
     this.onShowOverdue,
     this.onShowOutOfStock,
+    this.nearExpiryCount = 0,
+    this.onShowNearExpiry,
     this.onSwitchBusiness,
   });
 
@@ -752,6 +997,7 @@ class _ReferenceDashboard extends StatelessWidget {
   final int out;
   final int overdueCount;
   final int overdueAmount;
+  final int nearExpiryCount;
   final ReceivablesSummary? receivables;
   final PayablesSummary? payables;
   final String snapshotTimeframe;
@@ -772,6 +1018,7 @@ class _ReferenceDashboard extends StatelessWidget {
   final VoidCallback? onShowLowStock;
   final VoidCallback? onShowOverdue;
   final VoidCallback? onShowOutOfStock;
+  final VoidCallback? onShowNearExpiry;
   final VoidCallback? onSwitchBusiness;
 
   String amount(int? value) => value == null ? '₹0' : formatPaise(value);
@@ -803,7 +1050,10 @@ class _ReferenceDashboard extends StatelessWidget {
     final l10n = context.l10n;
     final t = totals;
     final name = business?.ownerName?.split(' ').first ?? 'Rahul';
-    final alertCount = (low > 0 ? 1 : 0) + (out > 0 ? 1 : 0) + (overdueCount > 0 ? 1 : 0);
+    final alertCount = (low > 0 ? 1 : 0) +
+        (out > 0 ? 1 : 0) +
+        (overdueCount > 0 ? 1 : 0) +
+        (nearExpiryCount > 0 ? 1 : 0);
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -1065,6 +1315,7 @@ class _ReferenceDashboard extends StatelessWidget {
             children: [
               _ReferenceAction(Icons.shopping_cart_outlined, l10n.text('sale'), 'New Sale', onQuick, color: const Color(0xFF3F51B5)),
               _ReferenceAction(Icons.shopping_bag_outlined, l10n.text('purchase'), 'Purchase', onQuick, color: const Color(0xFF2E7D32)),
+              _ReferenceAction(Icons.receipt_long_outlined, l10n.text('expense'), 'Expense', onQuick, color: const Color(0xFFE53935)),
               _ReferenceAction(Icons.account_balance_outlined, l10n.text('gst'), 'GST Center', onQuick, color: const Color(0xFF00897B)),
               _ReferenceAction(Icons.account_balance_wallet_outlined, l10n.text('cash_bank'), 'Cash & Bank', onQuick, color: const Color(0xFF1B5E20)),
               _ReferenceAction(Icons.inventory_2_outlined, l10n.text('item'), 'Product', onQuick, color: const Color(0xFF7B1FA2)),
@@ -1072,6 +1323,75 @@ class _ReferenceDashboard extends StatelessWidget {
               _ReferenceAction(Icons.assignment_outlined, l10n.text('order'), 'Sales Order', onQuick, color: const Color(0xFFE65100)),
               _ReferenceAction(Icons.bar_chart_rounded, l10n.text('reports'), 'Reports', onQuick, color: const Color(0xFF5C6BC0)),
             ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: StitchColors.outline.withValues(alpha: 0.7)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.flash_on_rounded, size: 16, color: Color(0xFFE53935)),
+                    const SizedBox(width: 6),
+                    Text(
+                      l10n.text('quick_expenses'),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.textPrimary),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: () => onQuick('Expense'),
+                      child: Text(
+                        l10n.text('view_all'),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFE53935)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _QuickExpenseDashboardChip(
+                      label: l10n.text('rent'),
+                      icon: Icons.apartment_rounded,
+                      color: const Color(0xFF3949AB),
+                      onTap: () => onQuick('Expense:Rent'),
+                    ),
+                    const SizedBox(width: 8),
+                    _QuickExpenseDashboardChip(
+                      label: l10n.text('staff_salary'),
+                      icon: Icons.badge_outlined,
+                      color: const Color(0xFF00897B),
+                      onTap: () => onQuick('Expense:Staff Salary'),
+                    ),
+                    const SizedBox(width: 8),
+                    _QuickExpenseDashboardChip(
+                      label: l10n.text('maintenance'),
+                      icon: Icons.build_outlined,
+                      color: const Color(0xFFE65100),
+                      onTap: () => onQuick('Expense:Maintenance'),
+                    ),
+                    const SizedBox(width: 8),
+                    _QuickExpenseDashboardChip(
+                      label: l10n.text('custom'),
+                      icon: Icons.edit_note_rounded,
+                      color: const Color(0xFF8E24AA),
+                      onTap: () => onQuick('Expense:Custom'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 32),
 
@@ -1119,6 +1439,16 @@ class _ReferenceDashboard extends StatelessWidget {
                         ? 'স্টক শেষ: $out পণ্য'
                         : (l10n.isHindi ? 'स्टॉक खत्म: $out सामान' : 'Out of stock: $out products'),
                     onTap: onShowOutOfStock)),
+          if (nearExpiryCount > 0)
+            Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: _AlertRow(
+                    icon: Icons.event_busy_rounded,
+                    color: const Color(0xFFD97706),
+                    title: l10n.isBengali
+                        ? 'মেয়াদোত্তীর্ণের কাছাকাছি: $nearExpiryCount পণ্য'
+                        : (l10n.isHindi ? 'एक्सपायरी के करीब: $nearExpiryCount सामान' : 'Near Expiry: $nearExpiryCount products expiring soon'),
+                    onTap: onShowNearExpiry)),
 
           const SizedBox(height: 32),
           Row(children: [
@@ -1902,6 +2232,56 @@ class _ReferenceActionState extends State<_ReferenceAction> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickExpenseDashboardChip extends StatelessWidget {
+  const _QuickExpenseDashboardChip({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ],
           ),
         ),
       ),
