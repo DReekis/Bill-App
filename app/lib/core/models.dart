@@ -96,6 +96,99 @@ class Business {
       ? invoiceEmail!.trim()
       : (email ?? '');
 
+  String get formattedAddress {
+    final parts = [
+      if (address != null && address!.trim().isNotEmpty) address!.trim(),
+      if (city != null && city!.trim().isNotEmpty) city!.trim(),
+      if (state != null && state!.trim().isNotEmpty) state!.trim(),
+      if (pinCode != null && pinCode!.trim().isNotEmpty) 'PIN: ${pinCode!.trim()}',
+    ];
+    return parts.join(', ');
+  }
+
+  Business copyWith({
+    int? id,
+    String? name,
+    String? ownerName,
+    String? phone,
+    String? email,
+    String? address,
+    String? state,
+    String? city,
+    String? pinCode,
+    String? country,
+    String? logoPath,
+    String? signaturePath,
+    String? website,
+    String? gstin,
+    String? pan,
+    String? industry,
+    String? upiId,
+    bool? taxRegistered,
+    bool? isComposition,
+    String? invoicePrefix,
+    int? invoiceSequence,
+    bool? allowNegativeStock,
+    String? fyStart,
+    String? currency,
+    int? decimalPlaces,
+    String? invoicePhone,
+    String? invoiceEmail,
+    String? termsSales,
+    String? termsQuotation,
+    String? termsPurchase,
+    String? termsChallan,
+    String? signatureText,
+    bool? showEmptySignatureBox,
+    bool? showPaymentQr,
+    int? bankAccountId,
+    String? quotationPrefix,
+    int? quotationSequence,
+    String? purchasePrefix,
+    int? purchaseSequence,
+  }) =>
+      Business(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        ownerName: ownerName ?? this.ownerName,
+        phone: phone ?? this.phone,
+        email: email ?? this.email,
+        address: address ?? this.address,
+        state: state ?? this.state,
+        city: city ?? this.city,
+        pinCode: pinCode ?? this.pinCode,
+        country: country ?? this.country,
+        logoPath: logoPath ?? this.logoPath,
+        signaturePath: signaturePath ?? this.signaturePath,
+        website: website ?? this.website,
+        gstin: gstin ?? this.gstin,
+        pan: pan ?? this.pan,
+        industry: industry ?? this.industry,
+        upiId: upiId ?? this.upiId,
+        taxRegistered: taxRegistered ?? this.taxRegistered,
+        isComposition: isComposition ?? this.isComposition,
+        invoicePrefix: invoicePrefix ?? this.invoicePrefix,
+        invoiceSequence: invoiceSequence ?? this.invoiceSequence,
+        allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
+        fyStart: fyStart ?? this.fyStart,
+        currency: currency ?? this.currency,
+        decimalPlaces: decimalPlaces ?? this.decimalPlaces,
+        invoicePhone: invoicePhone ?? this.invoicePhone,
+        invoiceEmail: invoiceEmail ?? this.invoiceEmail,
+        termsSales: termsSales ?? this.termsSales,
+        termsQuotation: termsQuotation ?? this.termsQuotation,
+        termsPurchase: termsPurchase ?? this.termsPurchase,
+        termsChallan: termsChallan ?? this.termsChallan,
+        signatureText: signatureText ?? this.signatureText,
+        showEmptySignatureBox: showEmptySignatureBox ?? this.showEmptySignatureBox,
+        showPaymentQr: showPaymentQr ?? this.showPaymentQr,
+        bankAccountId: bankAccountId ?? this.bankAccountId,
+        quotationPrefix: quotationPrefix ?? this.quotationPrefix,
+        quotationSequence: quotationSequence ?? this.quotationSequence,
+        purchasePrefix: purchasePrefix ?? this.purchasePrefix,
+        purchaseSequence: purchaseSequence ?? this.purchaseSequence,
+      );
+
   Map<String, Object?> toMap() => {
         'name': name,
         'owner_name': ownerName,
@@ -1807,7 +1900,9 @@ class TransactionRecord {
   final int? refId;
 
   bool get isInflow =>
-      type == TransactionType.sale || type == TransactionType.paymentIn;
+      type == TransactionType.sale ||
+      type == TransactionType.paymentIn ||
+      type == TransactionType.salesOrder;
 
   String get typeLabel => switch (type) {
         TransactionType.sale => 'Sale',

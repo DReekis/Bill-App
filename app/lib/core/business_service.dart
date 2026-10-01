@@ -47,13 +47,15 @@ class BusinessService {
       String? ownerName,
       String? gstin,
       String? city,
-      String? state}) async {
+      String? state,
+      String? address}) async {
     final response = await _client.post('/api/v1/businesses', {
       'name': name,
       if (ownerName != null && ownerName.isNotEmpty) 'ownerName': ownerName,
       if (gstin != null && gstin.isNotEmpty) 'gstin': gstin,
       if (city != null && city.isNotEmpty) 'city': city,
       if (state != null && state.isNotEmpty) 'state': state,
+      if (address != null && address.isNotEmpty) 'address': address,
       'currency': 'INR',
     });
 

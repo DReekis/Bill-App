@@ -22,8 +22,10 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
   final _name = TextEditingController();
   final _owner = TextEditingController();
   final _gstin = TextEditingController();
-  final _state = TextEditingController();
+  final _address = TextEditingController();
   final _city = TextEditingController();
+  final _pinCode = TextEditingController();
+  final _state = TextEditingController();
   final _prefix = TextEditingController(text: 'INV');
   final _upiId = TextEditingController();
   Business? business;
@@ -56,8 +58,10 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
         _name.text = b.name;
         _owner.text = b.ownerName ?? '';
         _gstin.text = b.gstin ?? '';
-        _state.text = b.state ?? '';
+        _address.text = b.address ?? '';
         _city.text = b.city ?? '';
+        _pinCode.text = b.pinCode ?? '';
+        _state.text = b.state ?? '';
         _prefix.text = b.invoicePrefix;
         _upiId.text = b.upiId ?? '';
         taxRegistered = b.taxRegistered;
@@ -73,13 +77,9 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
 
   @override
   void dispose() {
-    _name.dispose();
-    _owner.dispose();
-    _gstin.dispose();
-    _state.dispose();
-    _city.dispose();
-    _prefix.dispose();
-    _upiId.dispose();
+    for (final c in [_name, _owner, _gstin, _address, _city, _pinCode, _state, _prefix, _upiId]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -99,7 +99,11 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
     try {
       final session = context.read<Session>();
       final client = session.token != null ? (ApiClient()..setToken(session.token!)) : null;
-      final info = await GstService.instance.lookup(target, apiClient: client);
+      final info = await GstService.instance.lookup(
+        target,
+        apiClient: client,
+        gstnApiKey: session.gstnApiKey.isNotEmpty ? session.gstnApiKey : null,
+      );
       if (!mounted) return;
 
       setState(() {
@@ -109,7 +113,7 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
         }
         taxRegistered = true;
 
-        // Only fill name, owner, city from real online-fetched data
+        // Only fill name, owner, city, address, pinCode from real online-fetched data
         if (info.isOnlineFetched) {
           if (info.effectiveName.isNotEmpty) {
             _name.text = info.effectiveName;
@@ -119,6 +123,12 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
           }
           if (info.city != null && info.city!.isNotEmpty) {
             _city.text = info.city!;
+          }
+          if (info.address != null && info.address!.isNotEmpty) {
+            _address.text = info.address!;
+          }
+          if (info.pinCode != null && info.pinCode!.isNotEmpty) {
+            _pinCode.text = info.pinCode!;
           }
           gstStatusMessage = '✓ Verified GSTIN (${info.status} • ${info.state ?? "India"})';
         } else {
@@ -158,8 +168,10 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
           name: _name.text.trim(),
           ownerName: _owner.text.trim().isEmpty ? null : _owner.text.trim(),
           gstin: _gstin.text.trim().isEmpty ? null : _gstin.text.trim().toUpperCase(),
-          state: _state.text.trim().isEmpty ? null : _state.text.trim(),
+          address: _address.text.trim().isEmpty ? null : _address.text.trim(),
           city: _city.text.trim().isEmpty ? null : _city.text.trim(),
+          pinCode: _pinCode.text.trim().isEmpty ? null : _pinCode.text.trim(),
+          state: _state.text.trim().isEmpty ? null : _state.text.trim(),
           industry: 'Retail',
           upiId: _upiId.text.trim().isEmpty ? null : _upiId.text.trim(),
           invoicePrefix: _prefix.text.trim().isEmpty ? 'INV' : _prefix.text.trim(),
@@ -178,21 +190,17 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
       } else {
         final b = business;
         if (b == null) return;
-        final updated = Business(
-          id: b.id,
+        final updated = b.copyWith(
           name: _name.text.trim(),
           ownerName: _owner.text.trim().isEmpty ? null : _owner.text.trim(),
           gstin: _gstin.text.trim().isEmpty ? null : _gstin.text.trim().toUpperCase(),
-          state: _state.text.trim().isEmpty ? null : _state.text.trim(),
+          address: _address.text.trim().isEmpty ? null : _address.text.trim(),
           city: _city.text.trim().isEmpty ? null : _city.text.trim(),
-          industry: b.industry,
+          pinCode: _pinCode.text.trim().isEmpty ? null : _pinCode.text.trim(),
+          state: _state.text.trim().isEmpty ? null : _state.text.trim(),
           upiId: _upiId.text.trim().isEmpty ? null : _upiId.text.trim(),
           invoicePrefix: _prefix.text.trim().isEmpty ? 'INV' : _prefix.text.trim(),
           taxRegistered: taxRegistered,
-          allowNegativeStock: b.allowNegativeStock,
-          invoiceSequence: b.invoiceSequence,
-          fyStart: b.fyStart,
-          currency: b.currency,
         );
         await Repository.instance.updateBusiness(updated, businessIdOverride: b.id);
         if (mounted) {
@@ -270,11 +278,28 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
                 const SizedBox(height: 12),
                 AppTextField(controller: _owner, label: 'Owner name'),
                 const SizedBox(height: 12),
+                AppTextField(
+                  controller: _address,
+                  label: 'Business address',
+                  hint: 'Shop / Building, Street, Area',
+                  icon: Icons.location_on_outlined,
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(child: AppTextField(controller: _state, label: 'State')),
-                  const SizedBox(width: 12),
                   Expanded(child: AppTextField(controller: _city, label: 'City')),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AppTextField(
+                      controller: _pinCode,
+                      label: 'PIN Code',
+                      hint: 'e.g. 560001',
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
                 ]),
+                const SizedBox(height: 12),
+                AppTextField(controller: _state, label: 'State'),
                 const SizedBox(height: 12),
                 AppTextField(controller: _prefix, label: 'Invoice prefix', hint: 'INV'),
                 const SizedBox(height: 12),

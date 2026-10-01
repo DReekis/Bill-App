@@ -291,6 +291,116 @@ class Repository {
     return InvoiceNumbering.format(prefix, highest + 1);
   }
 
+  Future<int> _resolveHighestSalesOrderSequence(DatabaseExecutor db, int businessId, String prefix) async {
+    int highest = 0;
+    final pfx = prefix.trim().isEmpty ? 'SO' : prefix.trim().toUpperCase();
+    final rows = await db.rawQuery(
+      "SELECT number FROM sales_orders WHERE business_id = ? AND (number LIKE ? OR number LIKE ?)",
+      [businessId, '$pfx-%', '$pfx%'],
+    );
+    for (final r in rows) {
+      final numStr = r['number'] as String?;
+      if (numStr != null) {
+        final seq = InvoiceNumbering.extractSequence(numStr);
+        if (seq != null && seq > highest) {
+          highest = seq;
+        }
+      }
+    }
+    return highest;
+  }
+
+  Future<String> nextSalesOrderNumber(int businessId, [String prefix = 'SO']) async {
+    final db = await _database;
+    final highest = await _resolveHighestSalesOrderSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('sales_orders',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
+  }
+
+  Future<String> peekNextSalesOrderNumber(int businessId, [String prefix = 'SO']) async {
+    final db = await _database;
+    final highest = await _resolveHighestSalesOrderSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('sales_orders',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
+  }
+
+  Future<int> _resolveHighestPurchaseOrderSequence(DatabaseExecutor db, int businessId, String prefix) async {
+    int highest = 0;
+    final pfx = prefix.trim().isEmpty ? 'PO' : prefix.trim().toUpperCase();
+    final rows = await db.rawQuery(
+      "SELECT number FROM purchase_orders WHERE business_id = ? AND (number LIKE ? OR number LIKE ?)",
+      [businessId, '$pfx-%', '$pfx%'],
+    );
+    for (final r in rows) {
+      final numStr = r['number'] as String?;
+      if (numStr != null) {
+        final seq = InvoiceNumbering.extractSequence(numStr);
+        if (seq != null && seq > highest) {
+          highest = seq;
+        }
+      }
+    }
+    return highest;
+  }
+
+  Future<String> nextPurchaseOrderNumber(int businessId, [String prefix = 'PO']) async {
+    final db = await _database;
+    final highest = await _resolveHighestPurchaseOrderSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('purchase_orders',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
+  }
+
+  Future<String> peekNextPurchaseOrderNumber(int businessId, [String prefix = 'PO']) async {
+    final db = await _database;
+    final highest = await _resolveHighestPurchaseOrderSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('purchase_orders',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
+  }
+
   Future<int> upsertCustomer(Customer customer, {int? businessIdOverride}) async {
     final db = await _database;
     final businessId = businessIdOverride ?? session.businessId;
@@ -2383,6 +2493,56 @@ class Repository {
         where: 'order_id = ?', whereArgs: [id], orderBy: 'id ASC');
     po.lines = items.map(InvoiceLine.fromMap).toList();
     return po;
+  }
+
+  Future<List<SalesOrder>> salesOrders(int businessId) async {
+    final db = await _database;
+    final rows = await db.query('sales_orders',
+        where: 'business_id = ?', whereArgs: [businessId],
+        orderBy: 'date DESC, id DESC');
+    final orders = rows.map(SalesOrder.fromMap).toList();
+    for (final o in orders) {
+      if (o.id != null) {
+        final items = await db.query('sales_order_items',
+            where: 'order_id = ?', whereArgs: [o.id], orderBy: 'id ASC');
+        o.lines = items.map(InvoiceLine.fromMap).toList();
+      }
+    }
+    return orders;
+  }
+
+  Future<void> deleteSalesOrder(int businessId, int orderId) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      await txn.delete('sales_order_items', where: 'order_id = ?', whereArgs: [orderId]);
+      await txn.delete('sales_orders', where: 'business_id = ? AND id = ?', whereArgs: [businessId, orderId]);
+    });
+    await _audit(businessId, action: 'delete', entity: 'sales_order', entityId: orderId);
+  }
+
+  Future<List<PurchaseOrder>> purchaseOrders(int businessId) async {
+    final db = await _database;
+    final rows = await db.query('purchase_orders',
+        where: 'business_id = ?', whereArgs: [businessId],
+        orderBy: 'date DESC, id DESC');
+    final orders = rows.map(PurchaseOrder.fromMap).toList();
+    for (final o in orders) {
+      if (o.id != null) {
+        final items = await db.query('purchase_order_items',
+            where: 'order_id = ?', whereArgs: [o.id], orderBy: 'id ASC');
+        o.lines = items.map(InvoiceLine.fromMap).toList();
+      }
+    }
+    return orders;
+  }
+
+  Future<void> deletePurchaseOrder(int businessId, int orderId) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      await txn.delete('purchase_order_items', where: 'order_id = ?', whereArgs: [orderId]);
+      await txn.delete('purchase_orders', where: 'business_id = ? AND id = ?', whereArgs: [businessId, orderId]);
+    });
+    await _audit(businessId, action: 'delete', entity: 'purchase_order', entityId: orderId);
   }
 
   Future<DeliveryChallan?> deliveryChallan(int businessId, int id) async {
@@ -4536,6 +4696,7 @@ class Repository {
     int? limit = 50,
     String? fromDate,
     String? toDate,
+    bool includeOrders = false,
   }) async {
     final db = await _database;
     final List<TransactionRecord> list = [];
@@ -4652,6 +4813,70 @@ class Repository {
         notes: note,
         refId: r['invoice_id'] as int?,
       ));
+    }
+
+    if (includeOrders) {
+      final soWhere = <String>['business_id = ?'];
+      final soArgs = <Object?>[businessId];
+      if (fromDate != null && fromDate.isNotEmpty) {
+        soWhere.add('date >= ?');
+        soArgs.add(fromDate);
+      }
+      if (toDate != null && toDate.isNotEmpty) {
+        soWhere.add('date <= ?');
+        soArgs.add(toDate);
+      }
+      final soRows = await db.query('sales_orders',
+          where: soWhere.join(' AND '), whereArgs: soArgs,
+          orderBy: 'date DESC, id DESC', limit: limit);
+      for (final r in soRows) {
+        final amt = (r['total'] as num?)?.toInt() ?? 0;
+        list.add(TransactionRecord(
+          id: r['id'] as int,
+          type: TransactionType.salesOrder,
+          number: r['number'] as String? ?? 'SO-${r['id']}',
+          partyName: r['customer_name'] as String?,
+          date: (r['date'] as String?) ?? todayIso(),
+          amount: amt,
+          paidAmount: 0,
+          outstandingAmount: amt,
+          status: (r['status'] as String?) ?? 'Pending',
+          paymentMode: null,
+          notes: r['notes'] as String?,
+          refId: r['id'] as int,
+        ));
+      }
+
+      final poWhere = <String>['business_id = ?'];
+      final poArgs = <Object?>[businessId];
+      if (fromDate != null && fromDate.isNotEmpty) {
+        poWhere.add('date >= ?');
+        poArgs.add(fromDate);
+      }
+      if (toDate != null && toDate.isNotEmpty) {
+        poWhere.add('date <= ?');
+        poArgs.add(toDate);
+      }
+      final poRows = await db.query('purchase_orders',
+          where: poWhere.join(' AND '), whereArgs: poArgs,
+          orderBy: 'date DESC, id DESC', limit: limit);
+      for (final r in poRows) {
+        final amt = (r['total'] as num?)?.toInt() ?? 0;
+        list.add(TransactionRecord(
+          id: r['id'] as int,
+          type: TransactionType.purchaseOrder,
+          number: r['number'] as String? ?? 'PO-${r['id']}',
+          partyName: r['supplier_name'] as String?,
+          date: (r['date'] as String?) ?? todayIso(),
+          amount: amt,
+          paidAmount: 0,
+          outstandingAmount: amt,
+          status: (r['status'] as String?) ?? 'Draft',
+          paymentMode: null,
+          notes: r['notes'] as String?,
+          refId: r['id'] as int,
+        ));
+      }
     }
 
     list.sort((a, b) {

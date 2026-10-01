@@ -537,8 +537,16 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(biz.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                        if (biz.formattedAddress.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(biz.formattedAddress, style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+                          ),
                         if (biz.gstin?.isNotEmpty == true)
-                          Text('GSTIN ${biz.gstin}', style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 1),
+                            child: Text('GSTIN ${biz.gstin}', style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
+                          ),
                       ]),
                     ),
                     StitchStatusChip(inv.status),

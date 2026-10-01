@@ -11,7 +11,9 @@ import '../../utils/widgets.dart';
 import '../../l10n/app_localizations.dart';
 import 'invoice_builder_screen.dart';
 import 'invoice_detail_screen.dart';
+import 'sales_order_detail_screen.dart';
 import '../purchases/purchase_builder_screen.dart';
+import '../purchases/purchase_order_detail_screen.dart';
 
 /// Unified Transactions Hub displaying Sales, Purchases, Payments In/Out, and Expenses.
 class TransactionListTab extends StatefulWidget {
@@ -44,6 +46,8 @@ class _TransactionListTabState extends State<TransactionListTab> {
     'All',
     'Sales',
     'Purchases',
+    'Sell Orders',
+    'Purchase Orders',
     'Payment In',
     'Payment Out',
     'Expenses',
@@ -58,6 +62,7 @@ class _TransactionListTabState extends State<TransactionListTab> {
       limit: null,
       fromDate: range.startIso,
       toDate: range.endIso,
+      includeOrders: true,
     );
     if (!mounted) return;
     setState(() => _transactions = all);
@@ -82,6 +87,8 @@ class _TransactionListTabState extends State<TransactionListTab> {
       final matchType = switch (_activeFilter) {
         'Sales' => t.type == TransactionType.sale,
         'Purchases' => t.type == TransactionType.purchase,
+        'Sell Orders' => t.type == TransactionType.salesOrder,
+        'Purchase Orders' => t.type == TransactionType.purchaseOrder,
         'Payment In' => t.type == TransactionType.paymentIn,
         'Payment Out' => t.type == TransactionType.paymentOut,
         'Expenses' => t.type == TransactionType.expense,
@@ -104,6 +111,20 @@ class _TransactionListTabState extends State<TransactionListTab> {
       Navigator.of(context)
           .push(MaterialPageRoute(
               builder: (_) => InvoiceDetailScreen(invoiceId: tx.refId!)))
+          .then((_) => _load());
+      return;
+    }
+    if (tx.type == TransactionType.salesOrder && tx.refId != null) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(
+              builder: (_) => SalesOrderDetailScreen(orderId: tx.refId!)))
+          .then((_) => _load());
+      return;
+    }
+    if (tx.type == TransactionType.purchaseOrder && tx.refId != null) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(
+              builder: (_) => PurchaseOrderDetailScreen(orderId: tx.refId!)))
           .then((_) => _load());
       return;
     }
@@ -757,6 +778,8 @@ class _TransactionListTabState extends State<TransactionListTab> {
                           final (icon, bg, fg) = switch (item.type) {
                             TransactionType.sale => (Icons.shopping_cart_outlined, const Color(0xFFE8F5E9), const Color(0xFF2E7D32)),
                             TransactionType.purchase => (Icons.shopping_bag_outlined, const Color(0xFFE3F2FD), const Color(0xFF1565C0)),
+                            TransactionType.salesOrder => (Icons.assignment_outlined, const Color(0xFFEDE7F6), const Color(0xFF5E35B1)),
+                            TransactionType.purchaseOrder => (Icons.inventory_2_outlined, const Color(0xFFE0F7FA), const Color(0xFF00838F)),
                             TransactionType.paymentIn => (Icons.call_received_rounded, const Color(0xFFE0F2F1), const Color(0xFF00695C)),
                             TransactionType.paymentOut => (Icons.call_made_rounded, const Color(0xFFFFF3E0), const Color(0xFFE65100)),
                             TransactionType.expense => (Icons.receipt_long_outlined, const Color(0xFFF3E5F5), const Color(0xFF7B1FA2)),

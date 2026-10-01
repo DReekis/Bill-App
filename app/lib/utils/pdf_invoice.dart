@@ -201,15 +201,10 @@ Future<Uint8List> buildDocumentPdf({
                     children: [
                       pw.Text(business.name,
                           style: pw.TextStyle(font: bold, fontSize: 16, color: navy)),
-                      if (business.address != null && business.address!.isNotEmpty) ...[
+                      if (business.formattedAddress.isNotEmpty) ...[
                         pw.SizedBox(height: 2),
                         pw.Text(
-                          [
-                            business.address,
-                            if (business.city != null && business.city!.isNotEmpty) business.city,
-                            if (business.state != null && business.state!.isNotEmpty) business.state,
-                            if (business.pinCode != null && business.pinCode!.isNotEmpty) 'PIN: ${business.pinCode}',
-                          ].where((e) => e != null && e.isNotEmpty).join(', '),
+                          business.formattedAddress,
                           style: pw.TextStyle(font: mono, fontSize: 8.5, color: slateMuted),
                         ),
                       ],
@@ -860,9 +855,9 @@ Future<Uint8List> buildThermalReceiptPdf({
                   textAlign: pw.TextAlign.center,
                   style: pw.TextStyle(font: bold, fontSize: titleFontSize),
                 ),
-                if (business.address != null && business.address!.isNotEmpty) ...[
+                if (business.formattedAddress.isNotEmpty) ...[
                   pw.SizedBox(height: 1),
-                  pw.Text(business.address!, textAlign: pw.TextAlign.center, style: pw.TextStyle(font: mono, fontSize: smallFontSize)),
+                  pw.Text(business.formattedAddress, textAlign: pw.TextAlign.center, style: pw.TextStyle(font: mono, fontSize: smallFontSize)),
                 ],
                 if (business.displayInvoicePhone.isNotEmpty) ...[
                   pw.SizedBox(height: 1),
@@ -1169,6 +1164,135 @@ Future<void> shareQuotation({
 }) async {
   final bytes = await buildQuotationPdf(business: business, quotation: quotation);
   await Printing.sharePdf(bytes: bytes, filename: '${quotation.number}.pdf');
+}
+
+Future<Uint8List> buildSalesOrderPdf({
+  required Business business,
+  required SalesOrder order,
+  Customer? customer,
+  BankAccount? bankAccount,
+}) async {
+  customer ??= (order.customerId != null && business.id != null)
+      ? await Repository.instance.customer(business.id!, order.customerId!)
+      : null;
+
+  bankAccount ??= (business.bankAccountId != null)
+      ? await Repository.instance.getBankAccount(business.bankAccountId!)
+      : (business.id != null
+          ? (await Repository.instance.bankAccounts(business.id!)).where((b) => !b.inactive).firstOrNull
+          : null);
+
+  final subtotal = order.lines.fold<int>(0, (sum, l) => sum + (l.taxable > 0 ? l.taxable : (l.price * l.quantity).round()));
+  final totalTax = order.lines.fold<int>(0, (sum, l) => sum + l.tax);
+  final total = order.total > 0 ? order.total : (subtotal + totalTax);
+
+  return buildDocumentPdf(
+    business: business,
+    title: 'Sale Order',
+    number: order.number,
+    date: order.date,
+    dueDate: order.dueDate,
+    customer: customer,
+    partyName: order.customerName,
+    lines: order.lines,
+    subtotal: subtotal,
+    discount: 0,
+    taxable: subtotal,
+    igst: 0,
+    cgst: (totalTax / 2).round(),
+    sgst: totalTax - (totalTax / 2).round(),
+    roundOff: 0,
+    total: total,
+    outstandingPaise: total,
+    notes: order.notes,
+    termsText: business.termsSales,
+    bankAccount: bankAccount,
+  );
+}
+
+Future<void> printSalesOrder({
+  required Business business,
+  required SalesOrder order,
+}) async {
+  final bytes = await buildSalesOrderPdf(business: business, order: order);
+  await Printing.layoutPdf(
+    onLayout: (_) async => bytes,
+    name: '${order.number}.pdf',
+  );
+}
+
+Future<void> shareSalesOrder({
+  required Business business,
+  required SalesOrder order,
+}) async {
+  final bytes = await buildSalesOrderPdf(business: business, order: order);
+  await Printing.sharePdf(bytes: bytes, filename: '${order.number}.pdf');
+}
+
+Future<Uint8List> buildPurchaseOrderPdf({
+  required Business business,
+  required PurchaseOrder order,
+  Supplier? supplier,
+  BankAccount? bankAccount,
+}) async {
+  supplier ??= (order.supplierId != null && business.id != null)
+      ? await Repository.instance.supplier(business.id!, order.supplierId!)
+      : null;
+
+  bankAccount ??= (business.bankAccountId != null)
+      ? await Repository.instance.getBankAccount(business.bankAccountId!)
+      : (business.id != null
+          ? (await Repository.instance.bankAccounts(business.id!)).where((b) => !b.inactive).firstOrNull
+          : null);
+
+  final subtotal = order.lines.fold<int>(0, (sum, l) => sum + (l.taxable > 0 ? l.taxable : (l.price * l.quantity).round()));
+  final totalTax = order.lines.fold<int>(0, (sum, l) => sum + l.tax);
+  final total = order.total > 0 ? order.total : (subtotal + totalTax);
+
+  return buildDocumentPdf(
+    business: business,
+    title: 'Purchase Order',
+    number: order.number,
+    date: order.date,
+    dueDate: order.expectedDate,
+    partyName: order.supplierName,
+    partyPhone: supplier?.phone,
+    partyAddress: supplier?.address,
+    partyGstin: supplier?.gstin,
+    partyState: supplier?.state,
+    lines: order.lines,
+    subtotal: subtotal,
+    discount: 0,
+    taxable: subtotal,
+    igst: 0,
+    cgst: (totalTax / 2).round(),
+    sgst: totalTax - (totalTax / 2).round(),
+    roundOff: 0,
+    total: total,
+    outstandingPaise: total,
+    notes: order.notes,
+    termsText: business.termsPurchase,
+    bankAccount: bankAccount,
+  );
+}
+
+Future<void> printPurchaseOrder({
+  required Business business,
+  required PurchaseOrder order,
+}) async {
+  final bytes = await buildPurchaseOrderPdf(business: business, order: order);
+  await Printing.layoutPdf(
+    onLayout: (_) async => bytes,
+    name: '${order.number}.pdf',
+  );
+}
+
+Future<void> sharePurchaseOrder({
+  required Business business,
+  required PurchaseOrder order,
+}) async {
+  final bytes = await buildPurchaseOrderPdf(business: business, order: order);
+  await Printing.sharePdf(bytes: bytes, filename: '${order.number}.pdf');
 }
 
 String _qty(double q) =>

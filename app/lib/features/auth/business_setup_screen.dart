@@ -26,6 +26,8 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
   final name = TextEditingController();
   final owner = TextEditingController();
   final gstin = TextEditingController();
+  final address = TextEditingController();
+  final pinCode = TextEditingController();
   final stateController = TextEditingController();
   final city = TextEditingController();
   final prefix = TextEditingController(text: 'INV');
@@ -55,7 +57,7 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
 
   @override
   void dispose() {
-    for (final c in [name, owner, gstin, stateController, city, prefix]) {
+    for (final c in [name, owner, gstin, address, pinCode, stateController, city, prefix]) {
       c.dispose();
     }
     super.dispose();
@@ -77,7 +79,11 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
     try {
       final session = context.read<Session>();
       final client = session.token != null ? (ApiClient()..setToken(session.token!)) : null;
-      final info = await GstService.instance.lookup(target, apiClient: client);
+      final info = await GstService.instance.lookup(
+        target,
+        apiClient: client,
+        gstnApiKey: session.gstnApiKey.isNotEmpty ? session.gstnApiKey : null,
+      );
       if (!mounted) return;
 
       setState(() {
@@ -88,7 +94,7 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
         taxRegistered = true;
         gstValid = info.valid;
 
-        // Only fill name, owner, city, industry from real online-fetched data
+        // Only fill name, owner, city, address, pinCode, industry from real online-fetched data
         if (info.isOnlineFetched) {
           if (info.effectiveName.isNotEmpty) {
             name.text = info.effectiveName;
@@ -98,6 +104,12 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
           }
           if (info.city != null && info.city!.isNotEmpty) {
             city.text = info.city!;
+          }
+          if (info.address != null && info.address!.isNotEmpty) {
+            address.text = info.address!;
+          }
+          if (info.pinCode != null && info.pinCode!.isNotEmpty) {
+            pinCode.text = info.pinCode!;
           }
           if (info.industry != null && businessIndustries.contains(info.industry)) {
             industry = info.industry;
@@ -111,12 +123,12 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
       if (info.isOnlineFetched && info.effectiveName.isNotEmpty) {
         showAppMessage(
           context,
-          'Business details auto-filled for ${info.effectiveName}',
+          'Business details & address auto-filled for ${info.effectiveName}',
         );
       } else {
         showAppMessage(
           context,
-          'State auto-filled from GSTIN. Please enter your business name.',
+          'State auto-filled from GSTIN. Please enter your business name and address.',
         );
       }
     } catch (e) {
@@ -138,6 +150,8 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
         name: name.text.trim(),
         ownerName: owner.text.trim().isEmpty ? null : owner.text.trim(),
         gstin: gstin.text.trim().isEmpty ? null : gstin.text.trim().toUpperCase(),
+        address: address.text.trim().isEmpty ? null : address.text.trim(),
+        pinCode: pinCode.text.trim().isEmpty ? null : pinCode.text.trim(),
         state: stateController.text.trim().isEmpty ? null : stateController.text.trim(),
         city: city.text.trim().isEmpty ? null : city.text.trim(),
         industry: industry,
@@ -154,6 +168,7 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
             gstin: business.gstin,
             city: business.city,
             state: business.state,
+            address: business.address,
           ).timeout(const Duration(seconds: 4));
           await session.setCloudBusinessId(cloudBiz.id);
         } catch (_) {
@@ -307,16 +322,16 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
                 icon: Icons.person_outline_rounded,
               ),
               const SizedBox(height: 14),
+              AppTextField(
+                controller: address,
+                label: 'Business address',
+                hint: 'Shop / Building, Street, Area',
+                icon: Icons.location_on_outlined,
+                maxLines: 2,
+              ),
+              const SizedBox(height: 14),
               Row(
                 children: [
-                  Expanded(
-                    child: AppTextField(
-                      controller: stateController,
-                      label: 'State',
-                      hint: 'e.g. Karnataka',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
                     child: AppTextField(
                       controller: city,
@@ -324,7 +339,22 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
                       hint: 'e.g. Bengaluru',
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AppTextField(
+                      controller: pinCode,
+                      label: 'PIN Code',
+                      hint: 'e.g. 560001',
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
                 ],
+              ),
+              const SizedBox(height: 14),
+              AppTextField(
+                controller: stateController,
+                label: 'State',
+                hint: 'e.g. Karnataka',
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<String>(

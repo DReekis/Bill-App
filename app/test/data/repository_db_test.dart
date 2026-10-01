@@ -632,6 +632,48 @@ void main() {
     expect(items[0].name, equals('Greek Yogurt'));
     expect(items[1].name, equals('Organic Milk'));
   });
+
+  test('business address and PIN code persist, update, and format for invoices', () async {
+    final biz = Business(
+      name: 'Super Electronics',
+      ownerName: 'Rajesh Sharma',
+      gstin: '29AAAAA0000A1Z5',
+      address: '104, MG Road, Brigade Junction',
+      city: 'Bengaluru',
+      pinCode: '560001',
+      state: 'Karnataka',
+    );
+
+    expect(
+      biz.formattedAddress,
+      equals('104, MG Road, Brigade Junction, Bengaluru, Karnataka, PIN: 560001'),
+    );
+
+    final id = await repo.createBusiness(biz);
+    expect(id, greaterThan(0));
+
+    final fetched = await repo.getBusiness(id);
+    expect(fetched, isNotNull);
+    expect(fetched!.address, equals('104, MG Road, Brigade Junction'));
+    expect(fetched.city, equals('Bengaluru'));
+    expect(fetched.pinCode, equals('560001'));
+    expect(fetched.state, equals('Karnataka'));
+    expect(fetched.formattedAddress, equals('104, MG Road, Brigade Junction, Bengaluru, Karnataka, PIN: 560001'));
+
+    // Test updating address manually via copyWith
+    final updated = fetched.copyWith(
+      address: 'Shop 4B, Commercial Plaza',
+      city: 'Mysuru',
+      pinCode: '570001',
+    );
+    await repo.updateBusiness(updated, businessIdOverride: id);
+
+    final reFetched = await repo.getBusiness(id);
+    expect(reFetched!.address, equals('Shop 4B, Commercial Plaza'));
+    expect(reFetched.city, equals('Mysuru'));
+    expect(reFetched.pinCode, equals('570001'));
+    expect(reFetched.formattedAddress, equals('Shop 4B, Commercial Plaza, Mysuru, Karnataka, PIN: 570001'));
+  });
 }
 
 

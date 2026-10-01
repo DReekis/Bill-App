@@ -888,8 +888,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
                   _actionItem(ctx, Icons.shopping_bag_outlined, l10n.text('purchase'), 'Purchase', const Color(0xFF2E7D32)),
                   _actionItem(ctx, Icons.description_outlined, l10n.text('estimate'), 'Estimate', const Color(0xFF0288D1)),
-                  _actionItem(ctx, Icons.receipt_long_outlined, l10n.text('expense'), 'Expense', const Color(0xFFE53935)),
                   _actionItem(ctx, Icons.call_received_rounded, l10n.text('payment_in'), 'Payment In', const Color(0xFF3F51B5)),
+                  _actionItem(ctx, Icons.call_made_rounded, l10n.text('payment_out'), 'Payment Out', const Color(0xFFE65100)),
+                ]),
+                const SizedBox(height: 14),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                  _actionItem(ctx, Icons.assignment_outlined, l10n.text('sell_order'), 'Sales Order', const Color(0xFF5E35B1)),
+                  _actionItem(ctx, Icons.inventory_2_outlined, l10n.text('purchase_order'), 'Purchase Order', const Color(0xFF00838F)),
+                  _actionItem(ctx, Icons.local_shipping_outlined, l10n.text('challan'), 'Challan', const Color(0xFF0284C7)),
+                  _actionItem(ctx, Icons.receipt_long_outlined, l10n.text('expense'), 'Expense', const Color(0xFFE53935)),
                 ]),
                 const SizedBox(height: 18),
                 const Divider(height: 1),

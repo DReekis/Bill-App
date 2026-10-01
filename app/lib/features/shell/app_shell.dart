@@ -17,6 +17,9 @@ import '../reports/reports_menu_screen.dart';
 import '../reports/reports_screen.dart';
 import '../sales/invoice_builder_screen.dart';
 import '../sales/quotation_builder_screen.dart';
+import '../sales/sales_order_builder_screen.dart';
+import '../sales/delivery_challan_builder_screen.dart';
+import '../purchases/purchase_order_builder_screen.dart';
 import '../suppliers/supplier_form.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/stitch_theme.dart';
@@ -128,6 +131,21 @@ class _AppShellState extends State<AppShell> {
           businessId: session.businessId!,
           onSaved: _reloadTabs,
         );
+      case 'Sales Order':
+        Navigator.of(context)
+            .push(MaterialPageRoute(
+                builder: (_) => SalesOrderBuilderScreen(businessId: session.businessId!)))
+            .then((_) => _reloadTabs());
+      case 'Purchase Order':
+        Navigator.of(context)
+            .push(MaterialPageRoute(
+                builder: (_) => PurchaseOrderBuilderScreen(businessId: session.businessId!)))
+            .then((_) => _reloadTabs());
+      case 'Challan':
+        Navigator.of(context)
+            .push(MaterialPageRoute(
+                builder: (_) => const DeliveryChallanBuilderScreen()))
+            .then((_) => _reloadTabs());
       case 'Party':
       case 'Customer':
         showModalBottomSheet<void>(
@@ -277,7 +295,7 @@ class QuickActionSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final actions = [
+    final row1 = [
       {
         'icon': Icons.local_shipping_rounded,
         'label': l10n.text('purchase'),
@@ -291,16 +309,42 @@ class QuickActionSheet extends StatelessWidget {
         'c': const Color(0xFFD97706),
       },
       {
-        'icon': Icons.receipt_long_rounded,
-        'label': l10n.text('expense'),
-        'action': 'Expense',
-        'c': const Color(0xFFE53935),
-      },
-      {
         'icon': Icons.call_received_rounded,
         'label': l10n.text('payment_in'),
         'action': 'Payment In',
         'c': const Color(0xFF3F51B5),
+      },
+      {
+        'icon': Icons.call_made_rounded,
+        'label': l10n.text('payment_out'),
+        'action': 'Payment Out',
+        'c': const Color(0xFFE65100),
+      },
+    ];
+    final row2 = [
+      {
+        'icon': Icons.assignment_outlined,
+        'label': l10n.text('sell_order'),
+        'action': 'Sales Order',
+        'c': const Color(0xFF5E35B1),
+      },
+      {
+        'icon': Icons.inventory_2_outlined,
+        'label': l10n.text('purchase_order'),
+        'action': 'Purchase Order',
+        'c': const Color(0xFF00838F),
+      },
+      {
+        'icon': Icons.local_shipping_outlined,
+        'label': l10n.text('challan'),
+        'action': 'Challan',
+        'c': const Color(0xFF0284C7),
+      },
+      {
+        'icon': Icons.receipt_long_rounded,
+        'label': l10n.text('expense'),
+        'action': 'Expense',
+        'c': const Color(0xFFE53935),
       },
     ];
     return Padding(
@@ -311,7 +355,19 @@ class QuickActionSheet extends StatelessWidget {
         const SizedBox(height: 18),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: actions
+          children: row1
+              .map((a) => QuickAction(
+                    icon: a['icon'] as IconData,
+                    label: a['label'] as String,
+                    color: a['c'] as Color,
+                    onTap: () => onTap(a['action'] as String),
+                  ))
+              .toList(),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: row2
               .map((a) => QuickAction(
                     icon: a['icon'] as IconData,
                     label: a['label'] as String,
