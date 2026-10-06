@@ -81,7 +81,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify AppBar
-    expect(find.text('New Estimate'), findsOneWidget);
+    expect(find.text('New Quotation'), findsOneWidget);
 
     // Verify Client/Customer header and Inline Add Customer button
     expect(find.text('CLIENT / CUSTOMER'), findsOneWidget);
@@ -93,9 +93,9 @@ void main() {
     expect(find.text('Add Items'), findsOneWidget);
 
     // Verify Empty State
-    expect(find.text('No items added to estimate'), findsOneWidget);
+    expect(find.text('No items added to quotation'), findsOneWidget);
     expect(find.text('Check off multiple products at once with bulk addition.'), findsOneWidget);
-    expect(find.text('Save Estimate'), findsOneWidget);
+    expect(find.text('Save Quotation'), findsOneWidget);
   });
 
   testWidgets('Tapping inline Add Customer opens CustomerFormSheet without resetting draft', (tester) async {
@@ -116,8 +116,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pumpAndSettle();
 
-    // Back on estimate builder
-    expect(find.text('New Estimate'), findsOneWidget);
+    // Back on quotation builder
+    expect(find.text('New Quotation'), findsOneWidget);
   });
 
   Future<void> pumpUntilLoaded(WidgetTester tester) async {
@@ -141,7 +141,7 @@ void main() {
     await tester.pumpAndSettle();
 
 
-    expect(find.text('Select Estimate Items'), findsOneWidget);
+    expect(find.text('Select Quotation Items'), findsOneWidget);
     expect(find.text('Monitor 4K'), findsWidgets);
     expect(find.text('Wireless Mouse'), findsWidgets);
 
@@ -150,8 +150,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
 
-    // Tap "Add to Estimate" button in bottom bar
-    await tester.tap(find.textContaining('Add to Estimate'));
+    // Tap "Add to Quotation" button in bottom bar
+    await tester.tap(find.textContaining('Add to Quotation'));
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pumpAndSettle();
 
@@ -171,7 +171,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Submit selection
-    await tester.tap(find.textContaining('Add to Estimate'));
+    await tester.tap(find.textContaining('Add to Quotation'));
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pumpAndSettle();
 

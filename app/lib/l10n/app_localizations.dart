@@ -94,7 +94,7 @@ class AppLocalizations {
       'gst': 'GST',
       'cash_bank': 'Cash/Bank',
       'item': 'Item',
-      'estimate': 'Estimate',
+      'estimate': 'Quotation',
       'order': 'Order',
       'sell_order': 'Sell Order',
       'purchase_order': 'Purchase Order',

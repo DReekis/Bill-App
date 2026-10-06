@@ -113,20 +113,20 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
           children: [
             Icon(Icons.edit_note_rounded, color: Color(0xFFD97706)),
             SizedBox(width: 8),
-            Text('Edit Estimate Number', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            Text('Edit Quotation Number', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Enter a custom estimate number:', style: TextStyle(fontSize: 13, color: StitchColors.textSecondary)),
+            const Text('Enter a custom quotation number:', style: TextStyle(fontSize: 13, color: StitchColors.textSecondary)),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               autofocus: true,
               textCapitalization: TextCapitalization.characters,
-              decoration: inputDecoration('Estimate Number', hint: 'e.g. EST-0001'),
+              decoration: inputDecoration('Quotation Number', hint: 'e.g. EST-0001'),
             ),
           ],
         ),
@@ -248,8 +248,8 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => MultiProductPickerSheet(
         products: all,
-        title: 'Select Estimate Items',
-        actionLabel: 'Add to Estimate',
+        title: 'Select Quotation Items',
+        actionLabel: 'Add to Quotation',
         onScanBarcode: _scanBarcode,
         onItemsSelected: (selectedItems) {
           int addedCount = 0;
@@ -293,8 +293,8 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
             showAppMessage(
               context,
               addedCount == 1
-                  ? 'Added ${selectedItems.first.product.name} to estimate'
-                  : 'Added $addedCount items to estimate',
+                  ? 'Added ${selectedItems.first.product.name} to quotation'
+                  : 'Added $addedCount items to quotation',
             );
           }
         },
@@ -309,7 +309,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                 setState(() {
                   _addOrMergeProduct(p, quantity: 1, price: p.salePrice);
                 });
-                showAppMessage(context, 'Added ${p.name} to estimate');
+                showAppMessage(context, 'Added ${p.name} to quotation');
               },
               businessId: widget.businessId ?? context.read<Session>().businessId!,
             ),
@@ -329,7 +329,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
     setState(() {
       _addOrMergeProduct(product, quantity: 1);
     });
-    showAppMessage(context, 'Added ${product.name} to estimate');
+    showAppMessage(context, 'Added ${product.name} to quotation');
   }
 
   Future<void> _showCustomQtyDialog(int index) async {
@@ -392,7 +392,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
       return;
     }
     if (lines.isEmpty) {
-      showAppMessage(context, 'Add at least one item to the estimate', error: true);
+      showAppMessage(context, 'Add at least one item to the quotation', error: true);
       return;
     }
 
@@ -449,11 +449,11 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
       await Repository.instance.finalizeQuotation(quote);
 
       if (mounted) {
-        showAppMessage(context, 'Estimate $quoteNumber saved successfully');
+        showAppMessage(context, 'Quotation $quoteNumber saved successfully');
         Navigator.pop(context, true);
       }
     } catch (e) {
-      if (mounted) showAppMessage(context, 'Error saving estimate: $e', error: true);
+      if (mounted) showAppMessage(context, 'Error saving quotation: $e', error: true);
     } finally {
       if (mounted) setState(() => saving = false);
     }
@@ -468,7 +468,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
     return Scaffold(
       backgroundColor: StitchColors.surface,
       appBar: AppBar(
-        title: const Text('New Estimate', style: TextStyle(fontWeight: FontWeight.w700)),
+        title: const Text('New Quotation', style: TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           IconButton(
             tooltip: 'Scan Barcode',
@@ -504,7 +504,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Estimate No.', style: TextStyle(fontSize: 10, color: Color(0xFF92400E), fontWeight: FontWeight.w600)),
+                                const Text('Quotation No.', style: TextStyle(fontSize: 10, color: Color(0xFF92400E), fontWeight: FontWeight.w600)),
                                 Text(
                                   quotationNumber ?? 'EST-0001',
                                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFFB45309)),
@@ -548,7 +548,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Estimate Date', style: TextStyle(fontSize: 10, color: StitchColors.textSecondary, fontWeight: FontWeight.w600)),
+                                const Text('Quotation Date', style: TextStyle(fontSize: 10, color: StitchColors.textSecondary, fontWeight: FontWeight.w600)),
                                 Text(
                                   displayDate(quotationDate),
                                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
@@ -696,7 +696,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                             ),
                             const SizedBox(height: 10),
                             const Text(
-                              'No items added to estimate',
+                              'No items added to quotation',
                               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 4),
@@ -880,7 +880,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                     SizedBox(
                       height: 44,
                       child: AsyncButton(
-                        label: 'Save Estimate',
+                        label: 'Save Quotation',
                         expand: false,
                         loading: saving,
                         onPressed: _save,

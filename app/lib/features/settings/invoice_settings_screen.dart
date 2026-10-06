@@ -10,6 +10,7 @@ import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
+import 'invoice_customization_screen.dart';
 
 class InvoiceSettingsScreen extends StatefulWidget {
   const InvoiceSettingsScreen({super.key, this.businessId});
@@ -30,7 +31,11 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
   final _purchasePrefix = TextEditingController(text: 'PUR');
   final _purchaseSequence = TextEditingController(text: '0');
 
-  // Contact on invoices
+  // Contact & Address on invoices
+  final _address = TextEditingController();
+  final _city = TextEditingController();
+  final _state = TextEditingController();
+  final _pinCode = TextEditingController();
   final _invoicePhone = TextEditingController();
   final _invoiceEmail = TextEditingController();
 
@@ -70,6 +75,10 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
     _quoteSequence.dispose();
     _purchasePrefix.dispose();
     _purchaseSequence.dispose();
+    _address.dispose();
+    _city.dispose();
+    _state.dispose();
+    _pinCode.dispose();
     _invoicePhone.dispose();
     _invoiceEmail.dispose();
     _termsSales.dispose();
@@ -102,6 +111,10 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
         _purchasePrefix.text = b.purchasePrefix;
         _purchaseSequence.text = b.purchaseSequence.toString();
 
+        _address.text = b.address ?? '';
+        _city.text = b.city ?? '';
+        _state.text = b.state ?? '';
+        _pinCode.text = b.pinCode ?? '';
         _invoicePhone.text = b.invoicePhone ?? b.phone ?? '';
         _invoiceEmail.text = b.invoiceEmail ?? b.email ?? '';
 
@@ -129,7 +142,7 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
       '4. Any dispute is subject to local jurisdiction.';
 
   String _defaultQuotationTerms() =>
-      '1. Estimate is valid for 15 days from the date of issue.\n'
+      '1. Quotation is valid for 15 days from the date of issue.\n'
       '2. 50% advance payment required upon order confirmation.\n'
       '3. Delivery schedule commences after advance payment.\n'
       '4. Prices are subject to prevailing GST rates and material costs.';
@@ -196,10 +209,10 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
         ownerName: _business!.ownerName,
         phone: _business!.phone,
         email: _business!.email,
-        address: _business!.address,
-        state: _business!.state,
-        city: _business!.city,
-        pinCode: _business!.pinCode,
+        address: _address.text.trim().isEmpty ? null : _address.text.trim(),
+        state: _state.text.trim().isEmpty ? null : _state.text.trim(),
+        city: _city.text.trim().isEmpty ? null : _city.text.trim(),
+        pinCode: _pinCode.text.trim().isEmpty ? null : _pinCode.text.trim(),
         country: _business!.country,
         logoPath: _business!.logoPath,
         signaturePath: _signaturePath,
@@ -247,60 +260,232 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
     }
   }
 
-  Future<void> _previewInvoice() async {
-    if (_business == null) return;
-    final sampleBusiness = Business(
-      id: _business!.id,
-      name: _business!.name,
-      ownerName: _business!.ownerName,
-      phone: _business!.phone,
-      email: _business!.email,
-      address: _business!.address ?? 'Plot No. 12, Industrial Area, Phase 2',
-      state: _business!.state ?? 'Maharashtra',
-      city: _business!.city ?? 'Mumbai',
-      pinCode: _business!.pinCode ?? '400001',
-      gstin: _business!.gstin ?? '27AABCU9603R1ZM',
-      pan: _business!.pan ?? 'AABCU9603R',
-      upiId: _upiId.text.trim().isNotEmpty ? _upiId.text.trim() : 'merchant@upi',
-      taxRegistered: _business!.taxRegistered,
-      invoicePrefix: _invPrefix.text.trim().toUpperCase(),
-      invoicePhone: _invoicePhone.text.trim().isNotEmpty ? _invoicePhone.text.trim() : _business!.phone,
-      invoiceEmail: _invoiceEmail.text.trim().isNotEmpty ? _invoiceEmail.text.trim() : _business!.email,
-      termsSales: _termsSales.text.trim(),
-      signatureText: _signatureText.text.trim(),
+  Business _buildCurrentBusiness() {
+    return Business(
+      id: _business?.id ?? _bizId,
+      name: _business?.name ?? 'My Business',
+      ownerName: _business?.ownerName,
+      phone: _business?.phone,
+      email: _business?.email,
+      address: _address.text.trim().isEmpty ? null : _address.text.trim(),
+      state: _state.text.trim().isEmpty ? null : _state.text.trim(),
+      city: _city.text.trim().isEmpty ? null : _city.text.trim(),
+      pinCode: _pinCode.text.trim().isEmpty ? null : _pinCode.text.trim(),
+      country: _business?.country ?? 'India',
+      logoPath: _business?.logoPath,
       signaturePath: _signaturePath,
+      website: _business?.website,
+      gstin: _business?.gstin,
+      pan: _business?.pan,
+      industry: _business?.industry,
+      upiId: _upiId.text.trim().isEmpty ? null : _upiId.text.trim(),
+      taxRegistered: _business?.taxRegistered ?? true,
+      isComposition: _business?.isComposition ?? false,
+      invoicePrefix: _invPrefix.text.trim().toUpperCase(),
+      invoiceSequence: int.tryParse(_invSequence.text.trim()) ?? (_business?.invoiceSequence ?? 0),
+      allowNegativeStock: _business?.allowNegativeStock ?? true,
+      fyStart: _business?.fyStart ?? '2026-04-01',
+      currency: _business?.currency ?? 'INR',
+      invoicePhone: _invoicePhone.text.trim().isEmpty ? null : _invoicePhone.text.trim(),
+      invoiceEmail: _invoiceEmail.text.trim().isEmpty ? null : _invoiceEmail.text.trim(),
+      termsSales: _termsSales.text.trim().isEmpty ? null : _termsSales.text.trim(),
+      termsQuotation: _termsQuotation.text.trim().isEmpty ? null : _termsQuotation.text.trim(),
+      termsPurchase: _termsPurchase.text.trim().isEmpty ? null : _termsPurchase.text.trim(),
+      termsChallan: _termsChallan.text.trim().isEmpty ? null : _termsChallan.text.trim(),
+      signatureText: _signatureText.text.trim().isEmpty ? 'Authorised Signatory' : _signatureText.text.trim(),
       showEmptySignatureBox: _showEmptySignatureBox,
       showPaymentQr: _showPaymentQr,
       bankAccountId: _selectedBankAccountId,
+      quotationPrefix: _quotePrefix.text.trim().toUpperCase(),
+      quotationSequence: int.tryParse(_quoteSequence.text.trim()) ?? (_business?.quotationSequence ?? 0),
+      purchasePrefix: _purchasePrefix.text.trim().toUpperCase(),
+      purchaseSequence: int.tryParse(_purchaseSequence.text.trim()) ?? (_business?.purchaseSequence ?? 0),
     );
+  }
 
-    final sampleInvoice = Invoice(
-      number: '${sampleBusiness.invoicePrefix}-0001',
-      customerName: 'Shree Radhey Trading Co.',
-      date: '2026-09-24',
-      dueDate: '2026-10-09',
-      subtotal: 1000000,
-      taxable: 1000000,
-      cgst: 90000,
-      sgst: 90000,
-      total: 1180000,
-      amountPaid: 0,
-      lines: [
-        InvoiceLine(
-          name: 'Premium TMT Steel Rods (Fe-550D)',
-          hsn: '7214',
-          quantity: 200,
-          unit: 'kg',
-          price: 5000,
-          gstRate: 18,
-          taxable: 1000000,
-          tax: 180000,
+  Future<void> _showAddEditBankAccountModal([BankAccount? account]) async {
+    final nameCtrl = TextEditingController(text: account?.bankName ?? '');
+    final acctNameCtrl = TextEditingController(text: account?.accountName ?? _business?.name ?? '');
+    final numCtrl = TextEditingController(text: account?.accountNumber ?? '');
+    final ifscCtrl = TextEditingController(text: account?.ifsc ?? '');
+    String acctType = account?.accountType ?? 'Current';
+
+    final isNew = account == null;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.account_balance_rounded, color: StitchColors.primary, size: 22),
+                      const SizedBox(width: 8),
+                      Text(
+                        isNew ? 'Add Bank Account' : 'Edit Bank Account',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Bank details will be printed on your invoices for NEFT/RTGS/IMPS payments.',
+                  style: TextStyle(fontSize: 11.5, color: StitchColors.textSecondary),
+                ),
+              ),
+              const Divider(height: 16),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      TextFormField(
+                        controller: nameCtrl,
+                        decoration: inputDecoration('Bank Name *', hint: 'e.g. HDFC Bank, SBI, ICICI Bank'),
+                        textCapitalization: TextCapitalization.words,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: acctNameCtrl,
+                        decoration: inputDecoration('Beneficiary / Account Holder Name', hint: 'e.g. Apex Enterprises'),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: numCtrl,
+                        decoration: inputDecoration('Account Number', hint: 'e.g. 50200012345678'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextFormField(
+                              controller: ifscCtrl,
+                              textCapitalization: TextCapitalization.characters,
+                              decoration: inputDecoration('IFSC Code', hint: 'HDFC0001234'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 2,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: acctType,
+                              decoration: inputDecoration('Type'),
+                              items: const [
+                                DropdownMenuItem(value: 'Current', child: Text('Current')),
+                                DropdownMenuItem(value: 'Savings', child: Text('Savings')),
+                                DropdownMenuItem(value: 'Overdraft', child: Text('OD / CC')),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) setSheetState(() => acctType = val);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: FilledButton.icon(
+                          onPressed: () async {
+                            final bName = nameCtrl.text.trim();
+                            if (bName.isEmpty) {
+                              showAppMessage(context, 'Bank Name is required', error: true);
+                              return;
+                            }
+                            final bank = BankAccount(
+                              id: account?.id,
+                              businessId: _bizId,
+                              bankName: bName,
+                              accountName: acctNameCtrl.text.trim().isNotEmpty ? acctNameCtrl.text.trim() : null,
+                              accountNumber: numCtrl.text.trim().isNotEmpty ? numCtrl.text.trim() : null,
+                              ifsc: ifscCtrl.text.trim().isNotEmpty ? ifscCtrl.text.trim().toUpperCase() : null,
+                              accountType: acctType,
+                              openingBalance: account?.openingBalance ?? 0,
+                            );
+                            final savedId = await Repository.instance.upsertBankAccount(bank);
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            final updatedBanks = await Repository.instance.bankAccounts(_bizId);
+                            if (mounted) {
+                              setState(() {
+                                _bankAccounts = updatedBanks;
+                                _selectedBankAccountId ??= savedId;
+                              });
+                              showAppMessage(context, 'Bank account saved successfully');
+                            }
+                          },
+                          icon: const Icon(Icons.check_circle_rounded),
+                          label: Text(isNew ? 'Save & Add Bank Account' : 'Update Bank Account', style: const TextStyle(fontWeight: FontWeight.w700)),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: StitchColors.primary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ],
-      notes: _termsSales.text.trim(),
+      ),
     );
+  }
 
-    await printInvoice(business: sampleBusiness, invoice: sampleInvoice);
+  Future<void> _previewInvoice() async {
+    if (_business == null) return;
+    final currentBiz = _buildCurrentBusiness();
+    final settings = await Repository.instance.getInvoiceCustomizationSettings(_bizId);
+    final bank = _selectedBankAccountId != null
+        ? _bankAccounts.where((b) => b.id == _selectedBankAccountId).firstOrNull
+        : (_bankAccounts.isNotEmpty ? _bankAccounts.first : null);
+
+    if (!mounted) return;
+    await showInvoicePreviewModal(
+      context,
+      business: currentBiz,
+      settings: settings,
+      bankAccount: bank,
+      title: 'Invoice Preview (${currentBiz.invoicePrefix})',
+    );
   }
 
   @override
@@ -328,10 +513,52 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
           children: [
+            // Commercial Invoice Customization Banner
+            AppCard(
+              padding: const EdgeInsets.all(14),
+              child: InkWell(
+                onTap: () async {
+                  final res = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const InvoiceCustomizationScreen()),
+                  );
+                  if (res == true && mounted) {
+                    _load();
+                  }
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: StitchColors.primaryContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.auto_awesome_rounded, color: StitchColors.primary, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Customize Commercial Invoice Theme', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: StitchColors.primary)),
+                          SizedBox(height: 2),
+                          Text('Live split-screen preview, column toggles, HSN matrix, and branding', style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: StitchColors.primary),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
             // 1. Voucher & Numbering Card
             _buildSectionCard(
               title: 'Voucher Prefixes & Sequences',
-              subtitle: 'Customize starting numbers for sales bills, estimates, and purchases.',
+              subtitle: 'Customize starting numbers for sales bills, quotations, and purchases.',
               icon: Icons.tag_rounded,
               children: [
                 Row(
@@ -369,7 +596,7 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
                       flex: 2,
                       child: TextFormField(
                         controller: _quotePrefix,
-                        decoration: inputDecoration('Estimate Prefix'),
+                        decoration: inputDecoration('Quotation Prefix'),
                         textCapitalization: TextCapitalization.characters,
                       ),
                     ),
@@ -378,7 +605,7 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
                       flex: 3,
                       child: TextFormField(
                         controller: _quoteSequence,
-                        decoration: inputDecoration('Next Estimate No.'),
+                        decoration: inputDecoration('Next Quotation No.'),
                         keyboardType: TextInputType.number,
                       ),
                     ),
@@ -410,15 +637,50 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
             ),
             const SizedBox(height: 16),
 
-            // 2. Contact Details on Invoices
+            // 2. Address & Contact Details on Invoices
             _buildSectionCard(
-              title: 'Contact Details on Invoices',
-              subtitle: 'Control which phone number and email are printed on your invoices.',
+              title: 'Address & Contact Details on Invoices',
+              subtitle: 'Control which address, phone number, and email are printed on your invoices.',
               icon: Icons.contact_phone_outlined,
               children: [
                 TextFormField(
+                  controller: _address,
+                  decoration: inputDecoration('Business / Store Address', hint: 'Shop / Building, Street, Area'),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        controller: _city,
+                        decoration: inputDecoration('City', hint: 'e.g. Mumbai'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        controller: _state,
+                        decoration: inputDecoration('State', hint: 'e.g. Maharashtra'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: TextFormField(
+                        controller: _pinCode,
+                        decoration: inputDecoration('PIN Code', hint: '400001'),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
                   controller: _invoicePhone,
-                  decoration: inputDecoration('Invoice Phone Number', hint: 'Leave blank to use business phone'),
+                  decoration: inputDecoration('Invoice Phone / Mobile Number', hint: 'Leave blank to use business phone'),
                   keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 12),
@@ -446,7 +708,7 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
                   showSelectedIcon: false,
                   segments: const [
                     ButtonSegment(value: 'sales', label: Text('Sales')),
-                    ButtonSegment(value: 'quotation', label: Text('Estimate')),
+                    ButtonSegment(value: 'quotation', label: Text('Quotation')),
                     ButtonSegment(value: 'purchase', label: Text('Purchase')),
                     ButtonSegment(value: 'challan', label: Text('Challan')),
                   ],
@@ -463,7 +725,7 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
                 else if (_selectedDocType == 'quotation')
                   TextFormField(
                     controller: _termsQuotation,
-                    decoration: inputDecoration('Estimate / Quotation Terms', hint: 'Enter estimate validity, advance %...'),
+                    decoration: inputDecoration('Quotation Terms & Conditions', hint: 'Enter quotation validity, advance %...'),
                     maxLines: 5,
                   )
                 else if (_selectedDocType == 'purchase')
@@ -587,6 +849,15 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
               title: 'Payment QR & Bank Details',
               subtitle: 'Allow clients to scan and pay instantly via UPI apps or NEFT/RTGS/IMPS.',
               icon: Icons.qr_code_2_rounded,
+              trailing: TextButton.icon(
+                onPressed: () => _showAddEditBankAccountModal(),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add Bank', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: StitchColors.primary,
+                ),
+              ),
               children: [
                 TextFormField(
                   controller: _upiId,
@@ -601,6 +872,22 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
                   onChanged: (v) => setState(() => _showPaymentQr = v),
                 ),
                 const Divider(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Bank Account Configuration', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                    OutlinedButton.icon(
+                      onPressed: () => _showAddEditBankAccountModal(),
+                      icon: const Icon(Icons.add_rounded, size: 16),
+                      label: const Text('Add Account', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 if (_bankAccounts.isNotEmpty) ...[
                   DropdownButtonFormField<int?>(
                     initialValue: _selectedBankAccountId,
@@ -612,27 +899,91 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
                       ),
                       ..._bankAccounts.map((b) => DropdownMenuItem<int?>(
                             value: b.id,
-                            child: Text('${b.bankName} • ${b.accountNumber ?? ''}'),
+                            child: Text('${b.bankName} • ${b.accountNumber ?? ''} (${b.accountType})'),
                           )),
                     ],
                     onChanged: (v) => setState(() => _selectedBankAccountId = v),
                   ),
+                  if (_selectedBankAccountId != null) ...[
+                    const SizedBox(height: 10),
+                    Builder(
+                      builder: (ctx) {
+                        final selBank = _bankAccounts.firstWhere(
+                          (b) => b.id == _selectedBankAccountId,
+                          orElse: () => _bankAccounts.first,
+                        );
+                        return Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: StitchColors.surfaceVariant,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: StitchColors.outline),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: StitchColors.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.account_balance_rounded, color: StitchColors.primary, size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(selBank.bankName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                                    if (selBank.accountNumber != null && selBank.accountNumber!.isNotEmpty)
+                                      Text('A/C: ${selBank.accountNumber} • IFSC: ${selBank.ifsc ?? 'N/A'}',
+                                          style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+                                    if (selBank.accountName != null && selBank.accountName!.isNotEmpty)
+                                      Text('Beneficiary: ${selBank.accountName}',
+                                          style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined, size: 18),
+                                tooltip: 'Edit Bank Details',
+                                onPressed: () => _showAddEditBankAccountModal(selBank),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ] else ...[
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: StitchColors.outline),
                     ),
-                    child: const Row(
+                    child: Column(
                       children: [
-                        Icon(Icons.info_outline_rounded, size: 20, color: StitchColors.textSecondary),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'No bank accounts configured yet. Add bank details from More > Bank Accounts.',
-                            style: TextStyle(fontSize: 12, color: StitchColors.textSecondary),
+                        const Row(
+                          children: [
+                            Icon(Icons.account_balance_outlined, size: 20, color: StitchColors.textSecondary),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'No bank accounts configured yet. Add your bank details to print them on invoices and collect payments via NEFT/RTGS/IMPS.',
+                                style: TextStyle(fontSize: 12, color: StitchColors.textSecondary),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showAddEditBankAccountModal(),
+                            icon: const Icon(Icons.add_rounded, size: 18),
+                            label: const Text('Add Bank Account Details'),
                           ),
                         ),
                       ],

@@ -725,6 +725,18 @@ class Invoice {
     this.irn,
     this.isRecurring = false,
     this.lines = const [],
+    this.shipToName,
+    this.shipToAddress,
+    this.shipToState,
+    this.shipToPincode,
+    this.placeOfSupply,
+    this.poNumber,
+    this.poDate,
+    this.vehicleNumber,
+    this.ewayBillNumber,
+    this.lrRrNumber,
+    this.reverseCharge = false,
+    this.customFieldsJson = '{}',
   });
   final int? id;
   final int? businessId;
@@ -752,6 +764,18 @@ class Invoice {
   String? irn;
   bool isRecurring = false;
   List<InvoiceLine> lines;
+  String? shipToName;
+  String? shipToAddress;
+  String? shipToState;
+  String? shipToPincode;
+  String? placeOfSupply;
+  String? poNumber;
+  String? poDate;
+  String? vehicleNumber;
+  String? ewayBillNumber;
+  String? lrRrNumber;
+  bool reverseCharge = false;
+  String customFieldsJson = '{}';
 
   Money get outstanding => Money(total - amountPaid);
 
@@ -782,6 +806,18 @@ class Invoice {
         'notes': notes,
         'irn': irn,
         'is_recurring': isRecurring ? 1 : 0,
+        'ship_to_name': shipToName,
+        'ship_to_address': shipToAddress,
+        'ship_to_state': shipToState,
+        'ship_to_pincode': shipToPincode,
+        'place_of_supply': placeOfSupply,
+        'po_number': poNumber,
+        'po_date': poDate,
+        'vehicle_number': vehicleNumber,
+        'eway_bill_number': ewayBillNumber,
+        'lr_rr_number': lrRrNumber,
+        'reverse_charge': reverseCharge ? 1 : 0,
+        'custom_fields_json': customFieldsJson,
       };
 
   static Invoice fromMap(Map<String, Object?> map) => Invoice(
@@ -810,6 +846,211 @@ class Invoice {
         notes: map['notes'] as String?,
         irn: map['irn'] as String?,
         isRecurring: (map['is_recurring'] as int? ?? 0) == 1,
+        shipToName: map['ship_to_name'] as String?,
+        shipToAddress: map['ship_to_address'] as String?,
+        shipToState: map['ship_to_state'] as String?,
+        shipToPincode: map['ship_to_pincode'] as String?,
+        placeOfSupply: map['place_of_supply'] as String?,
+        poNumber: map['po_number'] as String?,
+        poDate: map['po_date'] as String?,
+        vehicleNumber: map['vehicle_number'] as String?,
+        ewayBillNumber: map['eway_bill_number'] as String?,
+        lrRrNumber: map['lr_rr_number'] as String?,
+        reverseCharge: (map['reverse_charge'] as int? ?? 0) == 1,
+        customFieldsJson: map['custom_fields_json'] as String? ?? '{}',
+      );
+}
+
+class InvoiceCustomizationSettings {
+  InvoiceCustomizationSettings({
+    this.id = 'default',
+    this.businessId = 0,
+    this.themeStyle = 'classic_grid',
+    this.primaryColorHex = '#1E3A8A',
+    this.showHsnColumn = true,
+    this.showUnitColumn = true,
+    this.showDiscountColumn = true,
+    this.showTaxColumn = true,
+    this.showHsnSummaryTable = true,
+    this.showBankDetails = true,
+    this.showUpiQr = true,
+    this.showSignatureBox = true,
+    this.showShipTo = true,
+    this.showPoDetails = false,
+    this.showVehicleDetails = false,
+    this.showPan = true,
+    this.showPhone = true,
+    this.showEmail = true,
+    this.showAddress = true,
+    this.showGstin = true,
+    this.showTerms = true,
+    this.showDeclaration = true,
+    this.bankQrPlacement = 'left',
+    this.signaturePlacement = 'right',
+    this.logoPlacement = 'left',
+    this.signatureImagePath,
+    this.declarationText =
+        'We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct.',
+    this.customTitleOverride,
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? DateTime.now();
+
+  final String id;
+  final int businessId;
+  String themeStyle; // 'classic_grid', 'modern_band', 'minimal_clean', 'retail_pos'
+  String primaryColorHex;
+  bool showHsnColumn;
+  bool showUnitColumn;
+  bool showDiscountColumn;
+  bool showTaxColumn;
+  bool showHsnSummaryTable;
+  bool showBankDetails;
+  bool showUpiQr;
+  bool showSignatureBox;
+  bool showShipTo;
+  bool showPoDetails;
+  bool showVehicleDetails;
+  bool showPan;
+  bool showPhone;
+  bool showEmail;
+  bool showAddress;
+  bool showGstin;
+  bool showTerms;
+  bool showDeclaration;
+  String bankQrPlacement; // 'left', 'right', 'bottom'
+  String signaturePlacement; // 'right', 'left'
+  String logoPlacement; // 'left', 'center', 'right', 'hidden'
+  String? signatureImagePath;
+  String declarationText;
+  String? customTitleOverride;
+  DateTime updatedAt;
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'business_id': businessId,
+        'theme_style': themeStyle,
+        'primary_color_hex': primaryColorHex,
+        'show_hsn_column': showHsnColumn ? 1 : 0,
+        'show_unit_column': showUnitColumn ? 1 : 0,
+        'show_discount_column': showDiscountColumn ? 1 : 0,
+        'show_tax_column': showTaxColumn ? 1 : 0,
+        'show_hsn_summary_table': showHsnSummaryTable ? 1 : 0,
+        'show_bank_details': showBankDetails ? 1 : 0,
+        'show_upi_qr': showUpiQr ? 1 : 0,
+        'show_signature_box': showSignatureBox ? 1 : 0,
+        'show_ship_to': showShipTo ? 1 : 0,
+        'show_po_details': showPoDetails ? 1 : 0,
+        'show_vehicle_details': showVehicleDetails ? 1 : 0,
+        'show_pan': showPan ? 1 : 0,
+        'show_phone': showPhone ? 1 : 0,
+        'show_email': showEmail ? 1 : 0,
+        'show_address': showAddress ? 1 : 0,
+        'show_gstin': showGstin ? 1 : 0,
+        'show_terms': showTerms ? 1 : 0,
+        'show_declaration': showDeclaration ? 1 : 0,
+        'bank_qr_placement': bankQrPlacement,
+        'signature_placement': signaturePlacement,
+        'logo_placement': logoPlacement,
+        'signature_image_path': signatureImagePath,
+        'declaration_text': declarationText,
+        'custom_title_override': customTitleOverride,
+        'updated_at': updatedAt.toIso8601String(),
+      };
+
+  static InvoiceCustomizationSettings fromMap(Map<String, Object?> map) =>
+      InvoiceCustomizationSettings(
+        id: map['id'] as String? ?? 'default',
+        businessId: (map['business_id'] as num?)?.toInt() ?? 0,
+        themeStyle: map['theme_style'] as String? ?? 'classic_grid',
+        primaryColorHex: map['primary_color_hex'] as String? ?? '#1E3A8A',
+        showHsnColumn: (map['show_hsn_column'] as int? ?? 1) == 1,
+        showUnitColumn: (map['show_unit_column'] as int? ?? 1) == 1,
+        showDiscountColumn: (map['show_discount_column'] as int? ?? 1) == 1,
+        showTaxColumn: (map['show_tax_column'] as int? ?? 1) == 1,
+        showHsnSummaryTable: (map['show_hsn_summary_table'] as int? ?? 1) == 1,
+        showBankDetails: (map['show_bank_details'] as int? ?? 1) == 1,
+        showUpiQr: (map['show_upi_qr'] as int? ?? 1) == 1,
+        showSignatureBox: (map['show_signature_box'] as int? ?? 1) == 1,
+        showShipTo: (map['show_ship_to'] as int? ?? 1) == 1,
+        showPoDetails: (map['show_po_details'] as int? ?? 0) == 1,
+        showVehicleDetails: (map['show_vehicle_details'] as int? ?? 0) == 1,
+        showPan: (map['show_pan'] as int? ?? 1) == 1,
+        showPhone: (map['show_phone'] as int? ?? 1) == 1,
+        showEmail: (map['show_email'] as int? ?? 1) == 1,
+        showAddress: (map['show_address'] as int? ?? 1) == 1,
+        showGstin: (map['show_gstin'] as int? ?? 1) == 1,
+        showTerms: (map['show_terms'] as int? ?? 1) == 1,
+        showDeclaration: (map['show_declaration'] as int? ?? 1) == 1,
+        bankQrPlacement: map['bank_qr_placement'] as String? ?? 'left',
+        signaturePlacement: map['signature_placement'] as String? ?? 'right',
+        logoPlacement: map['logo_placement'] as String? ?? 'left',
+        signatureImagePath: map['signature_image_path'] as String?,
+        declarationText: map['declaration_text'] as String? ??
+            'We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct.',
+        customTitleOverride: map['custom_title_override'] as String?,
+        updatedAt: map['updated_at'] != null
+            ? DateTime.tryParse(map['updated_at'] as String) ?? DateTime.now()
+            : DateTime.now(),
+      );
+
+  InvoiceCustomizationSettings copyWith({
+    String? themeStyle,
+    String? primaryColorHex,
+    bool? showHsnColumn,
+    bool? showUnitColumn,
+    bool? showDiscountColumn,
+    bool? showTaxColumn,
+    bool? showHsnSummaryTable,
+    bool? showBankDetails,
+    bool? showUpiQr,
+    bool? showSignatureBox,
+    bool? showShipTo,
+    bool? showPoDetails,
+    bool? showVehicleDetails,
+    bool? showPan,
+    bool? showPhone,
+    bool? showEmail,
+    bool? showAddress,
+    bool? showGstin,
+    bool? showTerms,
+    bool? showDeclaration,
+    String? bankQrPlacement,
+    String? signaturePlacement,
+    String? logoPlacement,
+    String? signatureImagePath,
+    String? declarationText,
+    String? customTitleOverride,
+  }) =>
+      InvoiceCustomizationSettings(
+        id: id,
+        businessId: businessId,
+        themeStyle: themeStyle ?? this.themeStyle,
+        primaryColorHex: primaryColorHex ?? this.primaryColorHex,
+        showHsnColumn: showHsnColumn ?? this.showHsnColumn,
+        showUnitColumn: showUnitColumn ?? this.showUnitColumn,
+        showDiscountColumn: showDiscountColumn ?? this.showDiscountColumn,
+        showTaxColumn: showTaxColumn ?? this.showTaxColumn,
+        showHsnSummaryTable: showHsnSummaryTable ?? this.showHsnSummaryTable,
+        showBankDetails: showBankDetails ?? this.showBankDetails,
+        showUpiQr: showUpiQr ?? this.showUpiQr,
+        showSignatureBox: showSignatureBox ?? this.showSignatureBox,
+        showShipTo: showShipTo ?? this.showShipTo,
+        showPoDetails: showPoDetails ?? this.showPoDetails,
+        showVehicleDetails: showVehicleDetails ?? this.showVehicleDetails,
+        showPan: showPan ?? this.showPan,
+        showPhone: showPhone ?? this.showPhone,
+        showEmail: showEmail ?? this.showEmail,
+        showAddress: showAddress ?? this.showAddress,
+        showGstin: showGstin ?? this.showGstin,
+        showTerms: showTerms ?? this.showTerms,
+        showDeclaration: showDeclaration ?? this.showDeclaration,
+        bankQrPlacement: bankQrPlacement ?? this.bankQrPlacement,
+        signaturePlacement: signaturePlacement ?? this.signaturePlacement,
+        logoPlacement: logoPlacement ?? this.logoPlacement,
+        signatureImagePath: signatureImagePath ?? this.signatureImagePath,
+        declarationText: declarationText ?? this.declarationText,
+        customTitleOverride: customTitleOverride ?? this.customTitleOverride,
+        updatedAt: DateTime.now(),
       );
 }
 
@@ -1910,7 +2151,7 @@ class TransactionRecord {
         TransactionType.paymentIn => 'Payment In',
         TransactionType.paymentOut => 'Payment Out',
         TransactionType.expense => 'Expense',
-        TransactionType.quotation => 'Estimate',
+        TransactionType.quotation => 'Quotation',
         TransactionType.salesOrder => 'Sales Order',
         TransactionType.purchaseOrder => 'Purchase Order',
         TransactionType.deliveryChallan => 'Challan',

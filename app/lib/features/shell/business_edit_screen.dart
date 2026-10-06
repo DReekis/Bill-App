@@ -28,6 +28,8 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
   final _state = TextEditingController();
   final _prefix = TextEditingController(text: 'INV');
   final _upiId = TextEditingController();
+  final _phone = TextEditingController();
+  final _email = TextEditingController();
   Business? business;
   bool saving = false;
   bool taxRegistered = true;
@@ -64,6 +66,8 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
         _state.text = b.state ?? '';
         _prefix.text = b.invoicePrefix;
         _upiId.text = b.upiId ?? '';
+        _phone.text = b.phone ?? b.invoicePhone ?? '';
+        _email.text = b.email ?? b.invoiceEmail ?? '';
         taxRegistered = b.taxRegistered;
       }
     });
@@ -77,7 +81,7 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
 
   @override
   void dispose() {
-    for (final c in [_name, _owner, _gstin, _address, _city, _pinCode, _state, _prefix, _upiId]) {
+    for (final c in [_name, _owner, _gstin, _address, _city, _pinCode, _state, _prefix, _upiId, _phone, _email]) {
       c.dispose();
     }
     super.dispose();
@@ -167,6 +171,10 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
         final newBiz = Business(
           name: _name.text.trim(),
           ownerName: _owner.text.trim().isEmpty ? null : _owner.text.trim(),
+          phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+          email: _email.text.trim().isEmpty ? null : _email.text.trim(),
+          invoicePhone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+          invoiceEmail: _email.text.trim().isEmpty ? null : _email.text.trim(),
           gstin: _gstin.text.trim().isEmpty ? null : _gstin.text.trim().toUpperCase(),
           address: _address.text.trim().isEmpty ? null : _address.text.trim(),
           city: _city.text.trim().isEmpty ? null : _city.text.trim(),
@@ -193,6 +201,10 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
         final updated = b.copyWith(
           name: _name.text.trim(),
           ownerName: _owner.text.trim().isEmpty ? null : _owner.text.trim(),
+          phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+          email: _email.text.trim().isEmpty ? null : _email.text.trim(),
+          invoicePhone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+          invoiceEmail: _email.text.trim().isEmpty ? null : _email.text.trim(),
           gstin: _gstin.text.trim().isEmpty ? null : _gstin.text.trim().toUpperCase(),
           address: _address.text.trim().isEmpty ? null : _address.text.trim(),
           city: _city.text.trim().isEmpty ? null : _city.text.trim(),
@@ -277,6 +289,28 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
                 AppTextField(controller: _name, label: 'Business name *'),
                 const SizedBox(height: 12),
                 AppTextField(controller: _owner, label: 'Owner name'),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                    child: AppTextField(
+                      controller: _phone,
+                      label: 'Phone / Mobile',
+                      hint: 'e.g. +91 98765 43210',
+                      icon: Icons.phone_outlined,
+                      keyboardType: TextInputType.phone,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AppTextField(
+                      controller: _email,
+                      label: 'Email',
+                      hint: 'e.g. contact@business.com',
+                      icon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                  ),
+                ]),
                 const SizedBox(height: 12),
                 AppTextField(
                   controller: _address,

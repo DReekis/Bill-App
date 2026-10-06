@@ -193,7 +193,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                             .push(MaterialPageRoute(builder: (_) => QuotationBuilderScreen(customerId: c.id)))
                             .then((_) => _load()),
                         icon: const Icon(Icons.request_quote_outlined, size: 16),
-                        label: const Text('+ Estimate', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                        label: const Text('+ Quotation', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -224,7 +224,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                   segments: [
                     const ButtonSegment(value: 0, label: Text('Statement')),
                     ButtonSegment(value: 1, label: Text('Invoices ($invCount)')),
-                    ButtonSegment(value: 2, label: Text('Estimates ($quoteCount)')),
+                    ButtonSegment(value: 2, label: Text('Quotations ($quoteCount)')),
                   ],
                   selected: {segment},
                   onSelectionChanged: (s) => setState(() => segment = s.first),
@@ -282,7 +282,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                     try {
                       final invId = await Repository.instance.convertQuotationToInvoice(q.id!);
                       if (!mounted) return;
-                      showAppMessage(context, 'Estimate converted to Invoice ✓');
+                      showAppMessage(context, 'Quotation converted to Invoice ✓');
                       _load();
                       Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => InvoiceDetailScreen(invoiceId: invId)),
@@ -331,7 +331,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
         AppEmptyState(
           icon: Icons.receipt_long_rounded,
           title: 'No transactions yet',
-          subtitle: 'Estimates, sales, and payments for this contact will show here.',
+          subtitle: 'Quotations, sales, and payments for this contact will show here.',
         ),
       ];
     }
@@ -394,11 +394,11 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       return [
         AppEmptyState(
           icon: Icons.request_quote_outlined,
-          title: 'No estimates yet',
-          subtitle: 'Create quotations / estimates to share draft pricing before invoicing.',
+          title: 'No quotations yet',
+          subtitle: 'Create quotations to share draft pricing before invoicing.',
           action: FilledButton.icon(
             icon: const Icon(Icons.add, size: 16),
-            label: const Text('Create Estimate'),
+            label: const Text('Create Quotation'),
             onPressed: () => Navigator.of(context)
                 .push(MaterialPageRoute(builder: (_) => QuotationBuilderScreen(customerId: widget.customerId)))
                 .then((_) => _load()),
@@ -424,7 +424,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                         try {
                           final invId = await Repository.instance.convertQuotationToInvoice(q.id!);
                           if (!mounted) return;
-                          showAppMessage(context, 'Estimate converted to Invoice ✓');
+                          showAppMessage(context, 'Quotation converted to Invoice ✓');
                           _load();
                           Navigator.of(context).push(
                             MaterialPageRoute(builder: (_) => InvoiceDetailScreen(invoiceId: invId)),

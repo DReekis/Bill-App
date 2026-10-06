@@ -68,7 +68,7 @@ class SimpleQuotationRow extends StatelessWidget {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              isConverted ? 'Converted' : 'Estimate',
+                              isConverted ? 'Converted' : 'Quotation',
                               style: TextStyle(
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w800,

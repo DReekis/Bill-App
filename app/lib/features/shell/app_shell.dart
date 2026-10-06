@@ -110,6 +110,7 @@ class _AppShellState extends State<AppShell> {
             .push(MaterialPageRoute(
                 builder: (_) => const PurchaseBuilderScreen()))
             .then((_) => _reloadTabs());
+      case 'Quotation':
       case 'Estimate':
         Navigator.of(context)
             .push(MaterialPageRoute(

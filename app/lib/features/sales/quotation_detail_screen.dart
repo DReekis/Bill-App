@@ -55,7 +55,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Convert to Sale Invoice?'),
         content: Text(
-          'This will generate an official sales invoice from Estimate ${q.number} for ₹${(q.total / 100).toStringAsFixed(2)}.',
+          'This will generate an official sales invoice from Quotation ${q.number} for ₹${(q.total / 100).toStringAsFixed(2)}.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -74,7 +74,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
       final repo = Repository.instance;
       final invoiceId = await repo.convertQuotationToInvoice(q.id!);
       if (!mounted) return;
-      showAppMessage(context, 'Estimate converted to Invoice successfully ✓');
+      showAppMessage(context, 'Quotation converted to Invoice successfully ✓');
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => InvoiceDetailScreen(invoiceId: invoiceId),
@@ -123,8 +123,8 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Estimate?'),
-        content: Text('Are you sure you want to delete Estimate ${q.number}? This cannot be undone.'),
+        title: const Text('Delete Quotation?'),
+        content: Text('Are you sure you want to delete Quotation ${q.number}? This cannot be undone.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(
@@ -143,7 +143,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
       final bizId = context.read<Session>().businessId!;
       await Repository.instance.deleteQuotation(bizId, q.id!);
       if (!mounted) return;
-      showAppMessage(context, 'Estimate deleted');
+      showAppMessage(context, 'Quotation deleted');
       Navigator.pop(context, true);
     } catch (e) {
       if (mounted) showAppMessage(context, 'Delete failed: $e', error: true);
@@ -160,7 +160,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
       backgroundColor: StitchColors.surface,
       appBar: AppBar(
         title: Text(
-          q != null ? q.number : 'Estimate Details',
+          q != null ? q.number : 'Quotation Details',
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         actions: [
@@ -230,7 +230,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Text(
-                                          q.status.toLowerCase() == 'converted' ? 'Converted' : 'Estimate',
+                                          q.status.toLowerCase() == 'converted' ? 'Converted' : 'Quotation',
                                           style: TextStyle(
                                             fontSize: 10.5,
                                             fontWeight: FontWeight.w800,
@@ -363,7 +363,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Text(
-                                  'Total Estimate',
+                                  'Total Quotation',
                                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
                                 ),
                                 Text(

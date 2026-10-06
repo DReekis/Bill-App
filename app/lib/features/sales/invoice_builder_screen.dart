@@ -5,9 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/billing_engine.dart';
 import '../../core/dates.dart';
+import '../../core/gst_service.dart';
 import '../../core/money.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
+import '../../core/units.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
@@ -32,6 +34,7 @@ class _LineEdit {
     required this.discountPercent,
     required this.gstRate,
     required this.taxIncluded,
+    this.unit,
     this.batch,
     this.serial,
   });
@@ -41,6 +44,7 @@ class _LineEdit {
   double discountPercent;
   int gstRate;
   bool taxIncluded;
+  String? unit;
   String? batch;
   String? serial;
 }
@@ -64,6 +68,38 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   String? initialPaymentMode;
   String? existingNotes;
 
+  // Shipping Address ("Ship To")
+  bool shipToDifferent = false;
+  final shipToNameController = TextEditingController();
+  final shipToAddressController = TextEditingController();
+  String? shipToState;
+  final shipToPincodeController = TextEditingController();
+
+  // Transport & Statutory Metadata
+  String? placeOfSupply;
+  bool manualPosOverride = false;
+  final vehicleNoController = TextEditingController();
+  final ewayBillNoController = TextEditingController();
+  final lrRrNoController = TextEditingController();
+  final poNumberController = TextEditingController();
+  String? poDate;
+
+  // Tax Mode & Reverse Charge
+  bool reverseCharge = false;
+  bool? manualIntraStateOverride;
+
+  @override
+  void dispose() {
+    shipToNameController.dispose();
+    shipToAddressController.dispose();
+    shipToPincodeController.dispose();
+    vehicleNoController.dispose();
+    ewayBillNoController.dispose();
+    lrRrNoController.dispose();
+    poNumberController.dispose();
+    super.dispose();
+  }
+
   QuoteResult? get quote => _quoteFor();
 
   QuoteResult? _quoteFor({bool? intraStateOverride}) =>
@@ -83,8 +119,8 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             gstEnabled: business?.taxRegistered ?? false,
             businessTaxRegistered: business?.taxRegistered ?? false,
             businessState: _clean(business?.state),
-            customerState: _clean(customerState),
-            intraStateOverride: intraStateOverride,
+            customerState: _clean(placeOfSupply ?? (shipToDifferent ? shipToState : customerState)),
+            intraStateOverride: manualIntraStateOverride ?? intraStateOverride,
           );
 
   Future<void> _load() async {
@@ -141,6 +177,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             discountPercent: l.discountPercent,
             gstRate: l.gstRate,
             taxIncluded: false,
+            unit: l.unit ?? prod.unit,
             batch: l.batchNumber,
             serial: l.serialNumber,
           ));
@@ -153,6 +190,20 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           customerId = inv.customerId;
           customerName = inv.customerName;
           customerState = _clean(matchedCust?.state);
+          shipToNameController.text = inv.shipToName ?? '';
+          shipToAddressController.text = inv.shipToAddress ?? '';
+          shipToState = inv.shipToState;
+          shipToPincodeController.text = inv.shipToPincode ?? '';
+          shipToDifferent = (inv.shipToName != null && inv.shipToName!.isNotEmpty) ||
+              (inv.shipToAddress != null && inv.shipToAddress!.isNotEmpty);
+          placeOfSupply = inv.placeOfSupply;
+          manualPosOverride = inv.placeOfSupply != null;
+          vehicleNoController.text = inv.vehicleNumber ?? '';
+          ewayBillNoController.text = inv.ewayBillNumber ?? '';
+          lrRrNoController.text = inv.lrRrNumber ?? '';
+          poNumberController.text = inv.poNumber ?? '';
+          poDate = inv.poDate;
+          reverseCharge = inv.reverseCharge;
           invoiceDiscountType = inv.discountType ?? (inv.discountRate > 0 ? 'percent' : 'flat');
           invoiceDiscountValue = inv.discountRate > 0 ? inv.discountRate : (inv.discount / 100.0);
           initialAmountPaid = inv.amountPaid;
@@ -278,6 +329,19 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
       'invoiceDiscountValue': invoiceDiscountValue,
       'invoiceNumber': invoiceNumber,
       'invoiceDate': invoiceDate,
+      'shipToDifferent': shipToDifferent,
+      'shipToName': shipToNameController.text,
+      'shipToAddress': shipToAddressController.text,
+      'shipToState': shipToState,
+      'shipToPincode': shipToPincodeController.text,
+      'placeOfSupply': placeOfSupply,
+      'manualPosOverride': manualPosOverride,
+      'vehicleNumber': vehicleNoController.text,
+      'ewayBillNumber': ewayBillNoController.text,
+      'lrRrNumber': lrRrNoController.text,
+      'poNumber': poNumberController.text,
+      'poDate': poDate,
+      'reverseCharge': reverseCharge,
       'lines': lines.map((l) => {
         'productId': l.product.id,
         'productName': l.product.name,
@@ -286,6 +350,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
         'discountPercent': l.discountPercent,
         'gstRate': l.gstRate,
         'taxIncluded': l.taxIncluded,
+        'unit': l.unit ?? l.product.unit,
         'batch': l.batch,
         'serial': l.serial,
       }).toList(),
@@ -394,6 +459,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             discountPercent: (item['discountPercent'] as num?)?.toDouble() ?? 0.0,
             gstRate: (item['gstRate'] as num?)?.toInt() ?? 0,
             taxIncluded: item['taxIncluded'] == true,
+            unit: item['unit'] as String?,
             batch: item['batch'] as String?,
             serial: item['serial'] as String?,
           ));
@@ -424,6 +490,19 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           if (decoded['invoiceDate'] != null) {
             invoiceDate = decoded['invoiceDate'] as String;
           }
+          shipToDifferent = decoded['shipToDifferent'] == true;
+          shipToNameController.text = (decoded['shipToName'] as String?) ?? '';
+          shipToAddressController.text = (decoded['shipToAddress'] as String?) ?? '';
+          shipToState = decoded['shipToState'] as String?;
+          shipToPincodeController.text = (decoded['shipToPincode'] as String?) ?? '';
+          placeOfSupply = decoded['placeOfSupply'] as String?;
+          manualPosOverride = decoded['manualPosOverride'] == true;
+          vehicleNoController.text = (decoded['vehicleNumber'] as String?) ?? '';
+          ewayBillNoController.text = (decoded['ewayBillNumber'] as String?) ?? '';
+          lrRrNoController.text = (decoded['lrRrNumber'] as String?) ?? '';
+          poNumberController.text = (decoded['poNumber'] as String?) ?? '';
+          poDate = decoded['poDate'] as String?;
+          reverseCharge = decoded['reverseCharge'] == true;
         });
       }
     } catch (_) {
@@ -469,12 +548,58 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
       customerId = c.id;
       customerName = c.name;
       customerState = _clean(c.state);
+      if (!manualPosOverride) {
+        placeOfSupply = shipToDifferent ? (shipToState ?? customerState) : customerState;
+      }
       if (c.paymentTermsDays > 0) {
         dueDate = isoDate(DateTime.now().add(Duration(days: c.paymentTermsDays)));
       } else {
         dueDate = null;
       }
     });
+    _saveDraft();
+  }
+
+  void _onToggleShipTo(bool val) {
+    setState(() {
+      shipToDifferent = val;
+      if (!manualPosOverride) {
+        placeOfSupply = shipToDifferent ? (shipToState ?? customerState) : customerState;
+      }
+    });
+    _saveDraft();
+  }
+
+  void _onShipToStateChanged(String? newState) {
+    setState(() {
+      shipToState = newState;
+      if (shipToDifferent && !manualPosOverride && newState != null) {
+        placeOfSupply = newState;
+      }
+    });
+    _saveDraft();
+  }
+
+  void _copyFromBillTo() {
+    Customer? c;
+    if (customerId != null && customers != null) {
+      for (final cust in customers!) {
+        if (cust.id == customerId) {
+          c = cust;
+          break;
+        }
+      }
+    }
+    setState(() {
+      shipToNameController.text = customerName ?? '';
+      shipToAddressController.text = c?.billingAddress ?? '';
+      shipToState = c?.state ?? customerState;
+      shipToPincodeController.text = c?.pin ?? '';
+      if (!manualPosOverride && shipToState != null) {
+        placeOfSupply = shipToState;
+      }
+    });
+    showAppMessage(context, 'Copied billing details to Ship To');
     _saveDraft();
   }
 
@@ -1320,11 +1445,13 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           discountPercent: l.discountPercent,
           taxable: calc.taxable.paise,
           tax: calc.tax.paise,
+          unit: l.unit ?? l.product.unit,
           batchNumber: l.batch,
           serialNumber: l.serial,
         ));
       }
       final amountPaid = _toPaise(paidController.text);
+      final effectivePos = placeOfSupply ?? (shipToDifferent ? shipToState : customerState);
 
       if (widget.existingInvoiceId != null) {
         await Repository.instance.updateSale(
@@ -1341,6 +1468,17 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           paymentMode: amountPaid > 0 ? (mode ?? 'Cash') : null,
           notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
           amountPaid: amountPaid,
+          shipToName: shipToDifferent ? shipToNameController.text.trim() : null,
+          shipToAddress: shipToDifferent ? shipToAddressController.text.trim() : null,
+          shipToState: shipToDifferent ? shipToState : null,
+          shipToPincode: shipToDifferent ? shipToPincodeController.text.trim() : null,
+          placeOfSupply: effectivePos,
+          poNumber: poNumberController.text.trim().isEmpty ? null : poNumberController.text.trim(),
+          poDate: poDate,
+          vehicleNumber: vehicleNoController.text.trim().isEmpty ? null : vehicleNoController.text.trim(),
+          ewayBillNumber: ewayBillNoController.text.trim().isEmpty ? null : ewayBillNoController.text.trim(),
+          lrRrNumber: lrRrNoController.text.trim().isEmpty ? null : lrRrNoController.text.trim(),
+          reverseCharge: reverseCharge,
         );
 
         if (mounted) {
@@ -1361,6 +1499,17 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           paymentMode: amountPaid > 0 ? (mode ?? 'Cash') : null,
           notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
           amountPaid: amountPaid,
+          shipToName: shipToDifferent ? shipToNameController.text.trim() : null,
+          shipToAddress: shipToDifferent ? shipToAddressController.text.trim() : null,
+          shipToState: shipToDifferent ? shipToState : null,
+          shipToPincode: shipToDifferent ? shipToPincodeController.text.trim() : null,
+          placeOfSupply: effectivePos,
+          poNumber: poNumberController.text.trim().isEmpty ? null : poNumberController.text.trim(),
+          poDate: poDate,
+          vehicleNumber: vehicleNoController.text.trim().isEmpty ? null : vehicleNoController.text.trim(),
+          ewayBillNumber: ewayBillNoController.text.trim().isEmpty ? null : ewayBillNoController.text.trim(),
+          lrRrNumber: lrRrNoController.text.trim().isEmpty ? null : lrRrNoController.text.trim(),
+          reverseCharge: reverseCharge,
         );
 
         final prefs = await SharedPreferences.getInstance();
@@ -1393,6 +1542,353 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
 
   static String _trimNum(double v) =>
       v == v.roundToDouble() ? v.round().toString() : v.toString();
+
+  Widget _buildShipToCard() {
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: StitchColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.local_shipping_outlined, size: 18, color: StitchColors.primary),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Ship to different address', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                    Text('Deliver goods to separate address/consignee', style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: shipToDifferent,
+                onChanged: _onToggleShipTo,
+              ),
+            ],
+          ),
+          if (shipToDifferent) ...[
+            const Divider(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Shipping Details', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
+                TextButton.icon(
+                  onPressed: _copyFromBillTo,
+                  icon: const Icon(Icons.copy_rounded, size: 14),
+                  label: const Text('Copy from Bill To', style: TextStyle(fontSize: 11.5)),
+                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: shipToNameController,
+              decoration: inputDecoration('Ship-to Recipient / Firm Name'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: shipToAddressController,
+              maxLines: 2,
+              decoration: inputDecoration('Shipping Address'),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey('ship-to-state-$shipToState'),
+                    initialValue: shipToState,
+                    decoration: inputDecoration('State'),
+                    isDense: true,
+                    items: GstService.stateCodes.keys
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))))
+                        .toList(),
+                    onChanged: _onShipToStateChanged,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: shipToPincodeController,
+                    keyboardType: TextInputType.number,
+                    decoration: inputDecoration('PIN Code'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransportAndStatutoryCard() {
+    final effectivePos = placeOfSupply ?? (shipToDifferent ? (shipToState ?? customerState) : customerState);
+    final hasDetails = vehicleNoController.text.isNotEmpty ||
+        ewayBillNoController.text.isNotEmpty ||
+        lrRrNoController.text.isNotEmpty ||
+        poNumberController.text.isNotEmpty ||
+        manualPosOverride;
+
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          leading: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: StitchColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Icon(Icons.receipt_long_outlined, size: 18, color: StitchColors.primary),
+          ),
+          title: const Text('Transport & PO Details', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+          subtitle: Text(
+            hasDetails
+                ? 'POS: ${effectivePos ?? "Default"}${vehicleNoController.text.isNotEmpty ? " • Veh: ${vehicleNoController.text}" : ""}'
+                : 'POS, Vehicle No, E-Way Bill, PO Ref',
+            style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary),
+            overflow: TextOverflow.ellipsis,
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Place of Supply (POS)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Override', style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                          Switch.adaptive(
+                            value: manualPosOverride,
+                            onChanged: (v) {
+                              setState(() {
+                                manualPosOverride = v;
+                                if (!v) {
+                                  placeOfSupply = shipToDifferent ? (shipToState ?? customerState) : customerState;
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('pos-$effectivePos-$manualPosOverride'),
+                    initialValue: GstService.stateCodes.containsKey(effectivePos) ? effectivePos : null,
+                    decoration: inputDecoration(manualPosOverride ? 'Manual Place of Supply' : 'Auto POS (Sec 10 IGST Act)'),
+                    isDense: true,
+                    items: GstService.stateCodes.keys
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))))
+                        .toList(),
+                    onChanged: manualPosOverride
+                        ? (v) {
+                            setState(() => placeOfSupply = v);
+                            _saveDraft();
+                          }
+                        : null,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: vehicleNoController,
+                          decoration: inputDecoration('Vehicle No.', hint: 'e.g. MH12AB1234'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: ewayBillNoController,
+                          keyboardType: TextInputType.number,
+                          decoration: inputDecoration('E-Way Bill No.', hint: '12-digit number'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: lrRrNoController,
+                          decoration: inputDecoration('LR / RR / B/L No.', hint: 'Transport doc #'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: poNumberController,
+                          decoration: inputDecoration('PO Number', hint: 'Buyer PO #'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: () async {
+                      final dt = poDate != null ? dateTimeFor(poDate!) : DateTime.now();
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: dt,
+                        firstDate: DateTime(dt.year - 2),
+                        lastDate: DateTime(dt.year + 2),
+                      );
+                      if (picked != null) {
+                        setState(() => poDate = isoDate(picked));
+                        _saveDraft();
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: StitchColors.outline.withValues(alpha: 0.5)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.event_note_outlined, size: 18, color: StitchColors.textSecondary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              poDate != null ? 'PO Date: ${displayDate(poDate!)}' : 'Set Purchase Order Date (Optional)',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: poDate != null ? StitchColors.textPrimary : StitchColors.textSecondary,
+                                fontWeight: poDate != null ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                          if (poDate != null)
+                            IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 16),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              onPressed: () {
+                                setState(() => poDate = null);
+                                _saveDraft();
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTaxModeAndRcmCard() {
+    final q = quote;
+    final isTaxReg = business?.taxRegistered ?? false;
+    final isInterState = (q?.igst.paise ?? 0) > 0;
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: StitchColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.account_balance_outlined, size: 18, color: StitchColors.primary),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Reverse Charge (RCM)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                    Text('Tax payable by recipient under Sec 9(3)/9(4)', style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: reverseCharge,
+                onChanged: (v) {
+                  setState(() => reverseCharge = v);
+                  _saveDraft();
+                },
+              ),
+            ],
+          ),
+          if (isTaxReg) ...[
+            const Divider(height: 12),
+            Row(
+              children: [
+                const Text('GST Mode: ', style: TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (isInterState ? const Color(0xFF6366F1) : StitchColors.primary).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    isInterState ? 'Inter-state (IGST)' : 'Intra-state (CGST + SGST)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: isInterState ? const Color(0xFF4338CA) : StitchColors.primary,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      manualIntraStateOverride = !(manualIntraStateOverride ?? !isInterState);
+                    });
+                  },
+                  child: Text(
+                    manualIntraStateOverride == null
+                        ? 'Override Mode'
+                        : (manualIntraStateOverride! ? 'Mode: Intra (Forced)' : 'Mode: Inter (Forced)'),
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1526,6 +2022,12 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             ]),
           ),
         ),
+        const SizedBox(height: 10),
+        _buildShipToCard(),
+        const SizedBox(height: 10),
+        _buildTransportAndStatutoryCard(),
+        const SizedBox(height: 10),
+        _buildTaxModeAndRcmCard(),
         const SizedBox(height: 12),
         Row(children: [
           const Expanded(child: Text('Items & Charges', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
@@ -1815,8 +2317,14 @@ class _LineTile extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 3),
-              Text('${_qty(line.qty)} × ${formatPaise(line.price)}  ${line.discountPercent > 0 ? '· ${_qty(line.discountPercent)}% off  ' : ''}${line.gstRate > 0 ? '· GST ${line.gstRate}%' : '· GST 0%'}',
-                  style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+              Builder(builder: (context) {
+                final unitStr = line.unit ?? line.product.unit;
+                final qtyWithUnit = unitStr.isNotEmpty
+                    ? '${_qty(line.qty)} $unitStr'
+                    : _qty(line.qty);
+                return Text('$qtyWithUnit × ${formatPaise(line.price)}  ${line.discountPercent > 0 ? '· ${_qty(line.discountPercent)}% off  ' : ''}${line.gstRate > 0 ? '· GST ${line.gstRate}%' : '· GST 0%'}',
+                    style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary));
+              }),
             ]),
           ),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -1847,6 +2355,7 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
   late final TextEditingController batchController;
   late final TextEditingController serialController;
   late int gstRate;
+  String? unit;
   String? qtyError;
   String? priceError;
 
@@ -1861,6 +2370,7 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
     batchController = TextEditingController(text: line.batch ?? '');
     serialController = TextEditingController(text: line.serial ?? '');
     gstRate = line.gstRate;
+    unit = line.unit ?? line.product.unit;
   }
 
   @override
@@ -1906,6 +2416,7 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
       discountPercent: double.tryParse(discountController.text.replaceAll('%', '').trim()) ?? 0,
       gstRate: gstRate,
       taxIncluded: widget.line.taxIncluded,
+      unit: unit,
       batch: batchController.text.trim().isEmpty ? null : batchController.text.trim(),
       serial: serialController.text.trim().isEmpty ? null : serialController.text.trim(),
     );
@@ -1953,6 +2464,7 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
             ],
             Row(children: [
               Expanded(
+                flex: 3,
                 child: TextField(
                   controller: qtyController,
                   keyboardType: TextInputType.number,
@@ -1962,8 +2474,27 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
                   decoration: inputDecoration('Quantity').copyWith(errorText: qtyError),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('unit-$unit'),
+                  initialValue: (unit != null && kStandardUnits.any((u) => u.code == unit)) ? unit : null,
+                  decoration: inputDecoration('Unit'),
+                  isDense: true,
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('None', style: TextStyle(fontSize: 12))),
+                    ...kStandardUnits.map((u) => DropdownMenuItem(
+                          value: u.code,
+                          child: Text('${u.code} (${u.name})', style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                        )),
+                  ],
+                  onChanged: (val) => setState(() => unit = val),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
                 child: TextField(
                   controller: priceController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),

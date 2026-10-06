@@ -665,7 +665,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       showAppMessage(context, 'Access Restricted: You do not have permission to edit catalog.', error: true);
       return;
     }
-    if ((action == 'New Sale' || action == 'Estimate' || action == 'Sales Order') && !session.canCreateSales) {
+    if ((action == 'New Sale' || action == 'Quotation' || action == 'Estimate' || action == 'Sales Order') && !session.canCreateSales) {
       showAppMessage(context, 'Access Restricted: You do not have permission to create sales.', error: true);
       return;
     }
@@ -711,6 +711,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .push(MaterialPageRoute(
                 builder: (_) => const PurchaseBuilderScreen()))
             .then((_) => onDone());
+      case 'Quotation':
       case 'Estimate':
         nav
             .push(MaterialPageRoute(

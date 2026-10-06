@@ -61,6 +61,39 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     }
   }
 
+  Future<void> _previewPdf() async {
+    final inv = invoice;
+    final biz = business;
+    if (inv == null || biz == null) return;
+    setState(() => busy = true);
+    try {
+      final session = context.read<Session>();
+      final repo = Repository.instance;
+      final settings = await repo.getInvoiceCustomizationSettings(session.businessId ?? biz.id ?? 1);
+      final banks = await repo.bankAccounts(session.businessId ?? biz.id ?? 1);
+      final bank = banks.where((b) => !b.inactive).firstOrNull;
+
+      if (!mounted) return;
+      await showInvoicePreviewModal(
+        context,
+        business: biz,
+        settings: settings,
+        bankAccount: bank,
+        title: '${inv.number} - Preview',
+        pdfBuilder: () => buildInvoicePdf(
+          business: biz,
+          invoice: inv,
+          bankAccount: bank,
+          settings: settings,
+        ),
+      );
+    } catch (e) {
+      if (mounted) showAppMessage(context, 'Preview failed: $e', error: true);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> _showPrintPicker() async {
     final inv = invoice;
     final biz = business;
@@ -460,8 +493,13 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               icon: const Icon(Icons.qr_code_rounded),
             ),
           IconButton(
+            tooltip: 'Preview PDF',
+            onPressed: busy ? null : _previewPdf,
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+          ),
+          IconButton(
             tooltip: 'Share',
-            onPressed: _share,
+            onPressed: busy ? null : _share,
             icon: busy
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.share_rounded),
@@ -642,17 +680,25 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
               Row(children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _showPrintPicker,
+                    onPressed: busy ? null : _previewPdf,
+                    icon: const Icon(Icons.visibility_outlined, size: 18),
+                    label: const Text('Preview'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: busy ? null : _showPrintPicker,
                     icon: const Icon(Icons.print_outlined, size: 18),
                     label: const Text('Print'),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: _share,
-                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                    label: const Text('Share PDF'),
+                    onPressed: busy ? null : _share,
+                    icon: const Icon(Icons.share_rounded, size: 18),
+                    label: const Text('Share'),
                   ),
                 ),
               ]),

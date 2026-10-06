@@ -46,11 +46,11 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> wit
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Orders & Estimates', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const Text('Orders & Quotations', style: TextStyle(fontWeight: FontWeight.w800)),
         bottom: TabBar(
           controller: _tab,
           tabs: const [
-            Tab(text: 'Estimates'),
+            Tab(text: 'Quotations'),
             Tab(text: 'Sales Orders'),
             Tab(text: 'Purchase Orders'),
             Tab(text: 'Challans'),

@@ -11,7 +11,7 @@ void main() {
       expect(l10nEn.text('gst'), 'GST');
       expect(l10nEn.text('cash_bank'), 'Cash/Bank');
       expect(l10nEn.text('item'), 'Item');
-      expect(l10nEn.text('estimate'), 'Estimate');
+      expect(l10nEn.text('estimate'), 'Quotation');
       expect(l10nEn.text('order'), 'Order');
       expect(l10nEn.text('reports'), 'Reports');
     });

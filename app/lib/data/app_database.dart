@@ -52,6 +52,21 @@ class AppDatabase {
     return _db!;
   }
 
+  static Future<void> _addColumnIfNotExists(
+    Database db,
+    String table,
+    String column,
+    String typeDefinition,
+  ) async {
+    try {
+      final info = await db.rawQuery('PRAGMA table_info($table)');
+      final exists = info.any((col) => col['name'] == column);
+      if (!exists) {
+        await db.execute('ALTER TABLE $table ADD COLUMN $column $typeDefinition;');
+      }
+    } catch (_) {}
+  }
+
   static Future<void> _migrate(Database db) async {
     try {
       await db.execute('ALTER TABLE businesses ADD COLUMN upi_id TEXT;');
@@ -155,11 +170,72 @@ class AppDatabase {
     try {
       await db.execute('UPDATE businesses SET allow_negative_stock = 1 WHERE allow_negative_stock = 0 OR allow_negative_stock IS NULL;');
     } catch (_) {}
+
+    // Commercial Invoice Overhaul Migration (Idempotent)
+    await _addColumnIfNotExists(db, 'invoices', 'ship_to_name', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'ship_to_address', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'ship_to_state', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'ship_to_pincode', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'place_of_supply', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'po_number', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'po_date', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'vehicle_number', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'eway_bill_number', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'lr_rr_number', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'reverse_charge', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'invoices', 'custom_fields_json', "TEXT DEFAULT '{}'");
+    await _addColumnIfNotExists(db, 'invoice_items', 'unit', 'TEXT');
+
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS invoice_customization_settings (
+          id TEXT PRIMARY KEY,
+          business_id INTEGER NOT NULL,
+          theme_style TEXT NOT NULL DEFAULT 'classic_grid',
+          primary_color_hex TEXT NOT NULL DEFAULT '#1E3A8A',
+          show_hsn_column INTEGER NOT NULL DEFAULT 1,
+          show_unit_column INTEGER NOT NULL DEFAULT 1,
+          show_discount_column INTEGER NOT NULL DEFAULT 1,
+          show_tax_column INTEGER NOT NULL DEFAULT 1,
+          show_hsn_summary_table INTEGER NOT NULL DEFAULT 1,
+          show_bank_details INTEGER NOT NULL DEFAULT 1,
+          show_upi_qr INTEGER NOT NULL DEFAULT 1,
+          show_signature_box INTEGER NOT NULL DEFAULT 1,
+          show_ship_to INTEGER NOT NULL DEFAULT 1,
+          show_po_details INTEGER NOT NULL DEFAULT 0,
+          show_vehicle_details INTEGER NOT NULL DEFAULT 0,
+          show_pan INTEGER NOT NULL DEFAULT 1,
+          show_phone INTEGER NOT NULL DEFAULT 1,
+          show_email INTEGER NOT NULL DEFAULT 1,
+          show_address INTEGER NOT NULL DEFAULT 1,
+          show_gstin INTEGER NOT NULL DEFAULT 1,
+          show_terms INTEGER NOT NULL DEFAULT 1,
+          show_declaration INTEGER NOT NULL DEFAULT 1,
+          bank_qr_placement TEXT NOT NULL DEFAULT 'left',
+          signature_placement TEXT NOT NULL DEFAULT 'right',
+          logo_placement TEXT NOT NULL DEFAULT 'left',
+          signature_image_path TEXT,
+          declaration_text TEXT NOT NULL DEFAULT 'We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct.',
+          custom_title_override TEXT,
+          updated_at TEXT NOT NULL
+        );
+      ''');
+    } catch (_) {}
+    await _addColumnIfNotExists(db, 'invoice_customization_settings', 'show_email', 'INTEGER NOT NULL DEFAULT 1');
+    await _addColumnIfNotExists(db, 'invoice_customization_settings', 'show_address', 'INTEGER NOT NULL DEFAULT 1');
+    await _addColumnIfNotExists(db, 'invoice_customization_settings', 'show_gstin', 'INTEGER NOT NULL DEFAULT 1');
+    await _addColumnIfNotExists(db, 'invoice_customization_settings', 'show_terms', 'INTEGER NOT NULL DEFAULT 1');
+    await _addColumnIfNotExists(db, 'invoice_customization_settings', 'show_declaration', 'INTEGER NOT NULL DEFAULT 1');
+    await _addColumnIfNotExists(db, 'invoice_customization_settings', 'bank_qr_placement', "TEXT NOT NULL DEFAULT 'left'");
+    await _addColumnIfNotExists(db, 'invoice_customization_settings', 'signature_placement', "TEXT NOT NULL DEFAULT 'right'");
   }
 
   /// Lets tests drive the real repository against an in-memory database.
   @visibleForTesting
   void useDatabaseForTesting(Database db) => _db = db;
+
+  @visibleForTesting
+  Future<void> migrateForTesting(Database db) => _migrate(db);
 
   Future<void> createSchema(Database db, int version) async {
     await db.execute('''
@@ -307,7 +383,19 @@ class AppDatabase {
         amount_paid INTEGER DEFAULT 0,
         payment_mode TEXT,
         status TEXT DEFAULT 'Finalized',
-        notes TEXT
+        notes TEXT,
+        ship_to_name TEXT,
+        ship_to_address TEXT,
+        ship_to_state TEXT,
+        ship_to_pincode TEXT,
+        place_of_supply TEXT,
+        po_number TEXT,
+        po_date TEXT,
+        vehicle_number TEXT,
+        eway_bill_number TEXT,
+        lr_rr_number TEXT,
+        reverse_charge INTEGER DEFAULT 0,
+        custom_fields_json TEXT DEFAULT '{}'
       )
     ''');
 
@@ -327,7 +415,8 @@ class AppDatabase {
         discount INTEGER DEFAULT 0,
         discount_percent REAL DEFAULT 0,
         taxable INTEGER DEFAULT 0,
-        tax INTEGER DEFAULT 0
+        tax INTEGER DEFAULT 0,
+        unit TEXT
       )
     ''');
 
@@ -659,6 +748,40 @@ class AppDatabase {
         created_at TEXT NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS invoice_customization_settings (
+        id TEXT PRIMARY KEY,
+        business_id INTEGER NOT NULL,
+        theme_style TEXT NOT NULL DEFAULT 'classic_grid',
+        primary_color_hex TEXT NOT NULL DEFAULT '#1E3A8A',
+        show_hsn_column INTEGER NOT NULL DEFAULT 1,
+        show_unit_column INTEGER NOT NULL DEFAULT 1,
+        show_discount_column INTEGER NOT NULL DEFAULT 1,
+        show_tax_column INTEGER NOT NULL DEFAULT 1,
+        show_hsn_summary_table INTEGER NOT NULL DEFAULT 1,
+        show_bank_details INTEGER NOT NULL DEFAULT 1,
+        show_upi_qr INTEGER NOT NULL DEFAULT 1,
+        show_signature_box INTEGER NOT NULL DEFAULT 1,
+        show_ship_to INTEGER NOT NULL DEFAULT 1,
+        show_po_details INTEGER NOT NULL DEFAULT 0,
+        show_vehicle_details INTEGER NOT NULL DEFAULT 0,
+        show_pan INTEGER NOT NULL DEFAULT 1,
+        show_phone INTEGER NOT NULL DEFAULT 1,
+        show_email INTEGER NOT NULL DEFAULT 1,
+        show_address INTEGER NOT NULL DEFAULT 1,
+        show_gstin INTEGER NOT NULL DEFAULT 1,
+        show_terms INTEGER NOT NULL DEFAULT 1,
+        show_declaration INTEGER NOT NULL DEFAULT 1,
+        bank_qr_placement TEXT NOT NULL DEFAULT 'left',
+        signature_placement TEXT NOT NULL DEFAULT 'right',
+        logo_placement TEXT NOT NULL DEFAULT 'left',
+        signature_image_path TEXT,
+        declaration_text TEXT NOT NULL DEFAULT 'We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct.',
+        custom_title_override TEXT,
+        updated_at TEXT NOT NULL
+      )
+    ''');
   }
 
   void resetConnection() {
@@ -680,6 +803,7 @@ class AppDatabase {
     final db = await database;
     await db.delete('sync_queue');
     await db.delete('ledger');
+    await db.delete('invoice_customization_settings');
     await db.delete('invoice_items');
     await db.delete('invoices');
     await db.delete('stock_moves');

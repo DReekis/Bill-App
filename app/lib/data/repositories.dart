@@ -727,6 +727,18 @@ class Repository {
     String? paymentMode,
     String? notes,
     required int amountPaid,
+    String? shipToName,
+    String? shipToAddress,
+    String? shipToState,
+    String? shipToPincode,
+    String? placeOfSupply,
+    String? poNumber,
+    String? poDate,
+    String? vehicleNumber,
+    String? ewayBillNumber,
+    String? lrRrNumber,
+    bool reverseCharge = false,
+    String? customFieldsJson,
   }) async {
     final db = await _database;
     String finalNumber = number;
@@ -787,6 +799,18 @@ class Repository {
         'payment_mode': paymentMode,
         'status': status,
         'notes': notes,
+        'ship_to_name': shipToName,
+        'ship_to_address': shipToAddress,
+        'ship_to_state': shipToState,
+        'ship_to_pincode': shipToPincode,
+        'place_of_supply': placeOfSupply,
+        'po_number': poNumber,
+        'po_date': poDate,
+        'vehicle_number': vehicleNumber,
+        'eway_bill_number': ewayBillNumber,
+        'lr_rr_number': lrRrNumber,
+        'reverse_charge': reverseCharge ? 1 : 0,
+        'custom_fields_json': customFieldsJson ?? '{}',
       });
 
       // Automatically advance invoice_sequence in businesses table
@@ -814,6 +838,7 @@ class Repository {
           'discount_percent': line.discountPercent,
           'taxable': line.taxable,
           'tax': line.tax,
+          'unit': line.unit,
         });
       }
 
@@ -1011,6 +1036,18 @@ class Repository {
     String? paymentMode,
     String? notes,
     required int amountPaid,
+    String? shipToName,
+    String? shipToAddress,
+    String? shipToState,
+    String? shipToPincode,
+    String? placeOfSupply,
+    String? poNumber,
+    String? poDate,
+    String? vehicleNumber,
+    String? ewayBillNumber,
+    String? lrRrNumber,
+    bool reverseCharge = false,
+    String? customFieldsJson,
   }) async {
     final db = await _database;
     Map<String, Object?>? beforeAudit;
@@ -1109,6 +1146,7 @@ class Repository {
           'discount_percent': line.discountPercent,
           'taxable': line.taxable,
           'tax': line.tax,
+          'unit': line.unit,
         });
       }
 
@@ -1297,6 +1335,18 @@ class Repository {
         'payment_mode': paymentMode,
         'status': status,
         'notes': notes,
+        'ship_to_name': shipToName,
+        'ship_to_address': shipToAddress,
+        'ship_to_state': shipToState,
+        'ship_to_pincode': shipToPincode,
+        'place_of_supply': placeOfSupply,
+        'po_number': poNumber,
+        'po_date': poDate,
+        'vehicle_number': vehicleNumber,
+        'eway_bill_number': ewayBillNumber,
+        'lr_rr_number': lrRrNumber,
+        'reverse_charge': reverseCharge ? 1 : 0,
+        'custom_fields_json': customFieldsJson ?? '{}',
       }, where: 'id = ?', whereArgs: [invoiceId]);
     });
 
@@ -5100,6 +5150,37 @@ class Repository {
     await db.update('staff_members', {'is_active': 0}, where: 'id = ? AND business_id = ?', whereArgs: [id, businessId]);
     await _audit(businessId, action: 'delete', entity: 'staff', entityId: id);
     await _enqueueSync(businessId, entity: 'staff', entityId: id, op: 'delete');
+  }
+
+  Future<InvoiceCustomizationSettings> getInvoiceCustomizationSettings(int businessId) async {
+    final db = await _database;
+    final rows = await db.query(
+      'invoice_customization_settings',
+      where: 'business_id = ?',
+      whereArgs: [businessId],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
+      return InvoiceCustomizationSettings.fromMap(rows.first);
+    }
+    return InvoiceCustomizationSettings(businessId: businessId);
+  }
+
+  Future<void> saveInvoiceCustomizationSettings(InvoiceCustomizationSettings settings) async {
+    final db = await _database;
+    final map = settings.toMap();
+    await db.insert(
+      'invoice_customization_settings',
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await _audit(
+      settings.businessId,
+      action: 'update',
+      entity: 'invoice_customization_settings',
+      entityId: 0,
+      after: map,
+    );
   }
 }
 

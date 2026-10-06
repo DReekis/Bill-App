@@ -40,6 +40,20 @@ enum GstExportFormat {
   final String extension;
 }
 
+class GstAuditIssue {
+  final String title;
+  final String description;
+  final String? documentNumber;
+  final bool isError;
+
+  const GstAuditIssue({
+    required this.title,
+    required this.description,
+    this.documentNumber,
+    this.isError = false,
+  });
+}
+
 class GstReportsService {
   GstReportsService._();
   static final GstReportsService instance = GstReportsService._();
@@ -77,15 +91,198 @@ class GstReportsService {
   static String resolveStateCode({String? gstin, String? stateName, String defaultCode = '29'}) {
     if (gstin != null && gstin.trim().length >= 2) {
       final code = gstin.trim().substring(0, 2);
-      if (int.tryParse(code) != null) return code;
+      if (int.tryParse(code) != null) return code.padLeft(2, '0');
     }
     if (stateName != null && stateName.trim().isNotEmpty) {
-      final clean = stateName.trim().toLowerCase();
+      final clean = stateName.trim().toLowerCase().replaceAll('&', 'and').replaceAll(RegExp(r'\s+'), ' ');
+      if (int.tryParse(clean) != null) {
+        return clean.padLeft(2, '0');
+      }
       for (final entry in GstService.stateCodes.entries) {
-        if (entry.value.toLowerCase() == clean) return entry.key;
+        final entryVal = entry.value.toLowerCase().replaceAll('&', 'and').replaceAll(RegExp(r'\s+'), ' ');
+        if (entryVal == clean || entry.key.toLowerCase() == clean) {
+          return entry.key.padLeft(2, '0');
+        }
       }
     }
-    return defaultCode;
+    return defaultCode.padLeft(2, '0');
+  }
+
+  /// Audits GSTR-1 dataset and returns list of compliance issues.
+  Future<List<GstAuditIssue>> auditGstr1Data({
+    required Business business,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final issues = <GstAuditIssue>[];
+    final bizId = business.id ?? Repository.instance.session.businessId ?? 1;
+    final sections = await Repository.instance.getGstr1Data(bizId, from: from, to: to);
+    final hsnItems = await Repository.instance.getHsnSummary(bizId, from: from, to: to);
+
+    // 1. Audit B2B Invoices
+    final b2bSection = sections.firstWhere((s) => s.code == 'B2B', orElse: () => Gstr1Section(code: 'B2B', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+    for (final itm in b2bSection.items) {
+      final docNum = itm['number'] as String? ?? 'Invoice';
+      final ctin = (itm['customer_gstin'] as String?)?.trim() ?? '';
+      if (ctin.isEmpty) {
+        issues.add(GstAuditIssue(
+          title: '$docNum: Missing Recipient GSTIN',
+          description: 'B2B invoice has no GSTIN recorded for customer ${itm['customer_name'] ?? ""}.',
+          documentNumber: docNum,
+          isError: true,
+        ));
+      } else if (!GstService.isValidGstinFormat(ctin)) {
+        issues.add(GstAuditIssue(
+          title: '$docNum: Invalid GSTIN Format',
+          description: 'GSTIN "$ctin" does not conform to 15-character standard GSTIN format.',
+          documentNumber: docNum,
+          isError: true,
+        ));
+      }
+
+      final pos = itm['place_of_supply'] as String? ?? itm['customer_state'] as String?;
+      if (pos == null || pos.trim().isEmpty) {
+        issues.add(GstAuditIssue(
+          title: '$docNum: Missing Place of Supply',
+          description: 'Place of supply (POS) is not defined for this invoice.',
+          documentNumber: docNum,
+        ));
+      }
+    }
+
+    // 2. Audit HSN Items
+    for (final h in hsnItems) {
+      if (h.hsn.trim().isEmpty || h.hsn.trim() == 'NA' || h.hsn.trim() == '0000') {
+        issues.add(GstAuditIssue(
+          title: 'Missing HSN: ${h.description}',
+          description: 'Item "${h.description}" is missing statutory HSN/SAC code.',
+        ));
+      }
+      if (h.uqc.trim().isEmpty || h.uqc.trim() == 'OTH') {
+        issues.add(GstAuditIssue(
+          title: 'Non-Standard UQC: ${h.description}',
+          description: 'Item "${h.description}" has generic or missing Unit Quantity Code.',
+        ));
+      }
+    }
+
+    return issues;
+  }
+
+  /// Interactive Pre-Export Audit Guard dialog.
+  Future<bool> runPreExportAuditGuard(
+    BuildContext context, {
+    required Business business,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final issues = await auditGstr1Data(business: business, from: from, to: to);
+    if (issues.isEmpty) return true;
+    if (!context.mounted) return false;
+
+    final proceed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'GSTR-1 Pre-Filing Audit',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Found ${issues.length} compliance warning${issues.length == 1 ? "" : "s"} that may cause rejection on the GST Portal:',
+                style: const TextStyle(fontSize: 13, color: StitchColors.textSecondary, height: 1.3),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: Container(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.all(8),
+                    itemCount: issues.length,
+                    separatorBuilder: (_, __) => const Divider(height: 12),
+                    itemBuilder: (ctx, i) {
+                      final iss = issues[i];
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            iss.isError ? Icons.error_outline_rounded : Icons.info_outline_rounded,
+                            size: 16,
+                            color: iss.isError ? Colors.red.shade700 : Colors.amber.shade800,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  iss.title,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: iss.isError ? Colors.red.shade800 : StitchColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  iss.description,
+                                  style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Review & Fix', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: StitchColors.primary),
+            child: const Text('Proceed Anyway'),
+          ),
+        ],
+      ),
+    );
+
+    return proceed == true;
   }
 
   // ==========================================================================
@@ -99,7 +296,7 @@ class GstReportsService {
     DateTime? from,
     DateTime? to,
   }) async {
-    final bizId = business.id!;
+    final bizId = business.id ?? Repository.instance.session.businessId ?? 1;
     final sections = await Repository.instance.getGstr1Data(bizId, from: from, to: to);
     final hsnItems = await Repository.instance.getHsnSummary(bizId, from: from, to: to);
     final fp = formatFp(from ?? to ?? DateTime.now());
@@ -124,15 +321,17 @@ class GstReportsService {
         final cgst = (itm['cgst'] as num?)?.toInt() ?? 0;
         final sgst = (itm['sgst'] as num?)?.toInt() ?? 0;
         final igst = (itm['igst'] as num?)?.toInt() ?? 0;
-        final pos = resolveStateCode(gstin: ctin, stateName: itm['customer_state'] as String?, defaultCode: '29');
+        final posState = (itm['place_of_supply'] as String?) ?? (itm['customer_state'] as String?);
+        final pos = resolveStateCode(gstin: ctin, stateName: posState, defaultCode: '29');
         final rate = taxable > 0 ? ((cgst + sgst + igst) * 100.0 / taxable).roundToDouble() : 18.0;
+        final rchrg = (itm['reverse_charge'] == 1 || itm['reverse_charge'] == true) ? 'Y' : 'N';
 
         invoices.add({
           'inum': itm['number'] ?? 'INV-0001',
           'idt': formatGstDate(itm['date'] ?? isoDate(DateTime.now())),
           'val': toRupees(total),
           'pos': pos,
-          'rchrg': 'N',
+          'rchrg': rchrg,
           'inv_typ': 'R',
           'itms': [
             {
@@ -158,7 +357,47 @@ class GstReportsService {
       });
     }
 
-    // B2CS: Retail & unregistered supplies grouped by (sply_ty, pos, rt)
+    // B2CL: Inter-state unregistered supplies > 2.5 Lakh
+    final b2clSection = sections.firstWhere((s) => s.code == 'B2CL', orElse: () => Gstr1Section(code: 'B2CL', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+    final b2clMap = <String, List<Map<String, dynamic>>>{};
+    for (final itm in b2clSection.items) {
+      final posState = (itm['place_of_supply'] as String?) ?? (itm['customer_state'] as String?);
+      final pos = resolveStateCode(stateName: posState, defaultCode: resolveStateCode(gstin: gstin));
+      b2clMap.putIfAbsent(pos, () => []).add(itm);
+    }
+    final b2clList = <Map<String, dynamic>>[];
+    for (final entry in b2clMap.entries) {
+      final pos = entry.key;
+      final invs = <Map<String, dynamic>>[];
+      for (final itm in entry.value) {
+        final total = (itm['total'] as num?)?.toInt() ?? 0;
+        final taxable = (itm['taxable'] as num?)?.toInt() ?? 0;
+        final igst = (itm['igst'] as num?)?.toInt() ?? 0;
+        final rate = taxable > 0 ? (igst * 100.0 / taxable).roundToDouble() : 18.0;
+        invs.add({
+          'inum': itm['number'] ?? 'INV-0001',
+          'idt': formatGstDate(itm['date'] ?? isoDate(DateTime.now())),
+          'val': toRupees(total),
+          'itms': [
+            {
+              'num': 1,
+              'itm_det': {
+                'rt': rate,
+                'txval': toRupees(taxable),
+                'iamt': toRupees(igst),
+                'csamt': 0.0,
+              }
+            }
+          ],
+        });
+      }
+      b2clList.add({
+        'pos': pos,
+        'inv': invs,
+      });
+    }
+
+    // B2CS: Retail & unregistered supplies grouped by (sply_ty, pos, rt) using integer paise to prevent double drift
     final b2csSection = sections.firstWhere((s) => s.code == 'B2CS', orElse: () => Gstr1Section(code: 'B2CS', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
     final b2csGroups = <String, Map<String, dynamic>>{};
     for (final itm in b2csSection.items) {
@@ -166,7 +405,8 @@ class GstReportsService {
       final cgst = (itm['cgst'] as num?)?.toInt() ?? 0;
       final sgst = (itm['sgst'] as num?)?.toInt() ?? 0;
       final igst = (itm['igst'] as num?)?.toInt() ?? 0;
-      final pos = resolveStateCode(stateName: itm['customer_state'] as String?, defaultCode: resolveStateCode(gstin: gstin));
+      final posState = (itm['place_of_supply'] as String?) ?? (itm['customer_state'] as String?);
+      final pos = resolveStateCode(stateName: posState, defaultCode: resolveStateCode(gstin: gstin));
       final isInter = igst > 0;
       final rate = taxable > 0 ? ((cgst + sgst + igst) * 100.0 / taxable).roundToDouble() : 18.0;
       final groupKey = '${isInter ? "INTER" : "INTRA"}_${pos}_$rate';
@@ -176,17 +416,79 @@ class GstReportsService {
         'pos': pos,
         'typ': 'OE',
         'rt': rate,
-        'txval': 0.0,
-        'iamt': 0.0,
-        'camt': 0.0,
-        'samt': 0.0,
+        'txval_paise': 0,
+        'iamt_paise': 0,
+        'camt_paise': 0,
+        'samt_paise': 0,
         'csamt': 0.0,
       });
 
-      grp['txval'] = (grp['txval'] as double) + toRupees(taxable);
-      grp['iamt'] = (grp['iamt'] as double) + toRupees(igst);
-      grp['camt'] = (grp['camt'] as double) + toRupees(cgst);
-      grp['samt'] = (grp['samt'] as double) + toRupees(sgst);
+      grp['txval_paise'] = (grp['txval_paise'] as int) + taxable;
+      grp['iamt_paise'] = (grp['iamt_paise'] as int) + igst;
+      grp['camt_paise'] = (grp['camt_paise'] as int) + cgst;
+      grp['samt_paise'] = (grp['samt_paise'] as int) + sgst;
+    }
+
+    final b2csList = b2csGroups.values.map((g) => {
+      'sply_ty': g['sply_ty'],
+      'pos': g['pos'],
+      'typ': g['typ'],
+      'rt': g['rt'],
+      'txval': toRupees(g['txval_paise'] as int),
+      'iamt': toRupees(g['iamt_paise'] as int),
+      'camt': toRupees(g['camt_paise'] as int),
+      'samt': toRupees(g['samt_paise'] as int),
+      'csamt': 0.0,
+    }).toList();
+
+    // CDNR: Credit / Debit Notes to registered recipients
+    final cdnrSection = sections.firstWhere((s) => s.code == 'CDNR', orElse: () => Gstr1Section(code: 'CDNR', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+    final cdnrMap = <String, List<Map<String, dynamic>>>{};
+    for (final itm in cdnrSection.items) {
+      final ctin = (itm['party_gstin'] as String?)?.trim().toUpperCase();
+      if (ctin != null && ctin.length >= 15) {
+        cdnrMap.putIfAbsent(ctin, () => []).add(itm);
+      }
+    }
+    final cdnrList = <Map<String, dynamic>>[];
+    for (final entry in cdnrMap.entries) {
+      final ctin = entry.key;
+      final nt = <Map<String, dynamic>>[];
+      for (final itm in entry.value) {
+        final total = (itm['total'] as num?)?.toInt() ?? 0;
+        final taxable = (itm['taxable'] as num?)?.toInt() ?? 0;
+        final cgst = (itm['cgst'] as num?)?.toInt() ?? 0;
+        final sgst = (itm['sgst'] as num?)?.toInt() ?? 0;
+        final igst = (itm['igst'] as num?)?.toInt() ?? 0;
+        final rate = taxable > 0 ? ((cgst + sgst + igst) * 100.0 / taxable).roundToDouble() : 18.0;
+        final pos = resolveStateCode(gstin: ctin, defaultCode: resolveStateCode(gstin: gstin));
+        nt.add({
+          'nt_num': itm['return_number'] ?? itm['number'] ?? 'CN-001',
+          'nt_dt': formatGstDate(itm['date'] ?? isoDate(DateTime.now())),
+          'val': toRupees(total),
+          'ntty': 'C',
+          'pos': pos,
+          'rchrg': 'N',
+          'itms': [
+            {
+              'num': 1,
+              'itm_det': {
+                'rt': rate,
+                'txval': toRupees(taxable),
+                'iamt': toRupees(igst),
+                'camt': toRupees(cgst),
+                'samt': toRupees(sgst),
+                'csamt': 0.0,
+              }
+            }
+          ],
+        });
+      }
+      cdnrList.add({
+        'ctin': ctin,
+        'cfs': 'Y',
+        'nt': nt,
+      });
     }
 
     // HSN Summary
@@ -209,7 +511,6 @@ class GstReportsService {
     }
 
     // Documents summary
-    final b2clSection = sections.firstWhere((s) => s.code == 'B2CL', orElse: () => Gstr1Section(code: 'B2CL', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
     final expSection = sections.firstWhere((s) => s.code == 'EXP', orElse: () => Gstr1Section(code: 'EXP', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
     final cancSection = sections.firstWhere((s) => s.code == 'CANC', orElse: () => Gstr1Section(code: 'CANC', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
 
@@ -238,9 +539,9 @@ class GstReportsService {
       'gt': toRupees(totalGrossPaise),
       'cur_gt': toRupees(totalGrossPaise),
       'b2b': b2bList,
-      'b2cl': <dynamic>[],
-      'b2cs': b2csGroups.values.toList(),
-      'cdnr': <dynamic>[],
+      'b2cl': b2clList,
+      'b2cs': b2csList,
+      'cdnr': cdnrList,
       'cdnur': <dynamic>[],
       'exp': <dynamic>[],
       'hsn': {'data': hsnList},
@@ -275,7 +576,7 @@ class GstReportsService {
     DateTime? to,
     String table = 'all',
   }) async {
-    final bizId = business.id!;
+    final bizId = business.id ?? Repository.instance.session.businessId ?? 1;
     final sections = await Repository.instance.getGstr1Data(bizId, from: from, to: to);
     final hsnItems = await Repository.instance.getHsnSummary(bizId, from: from, to: to);
     final gstin = business.gstin?.trim().toUpperCase() ?? '29ABCDE1234F1Z5';
@@ -381,14 +682,14 @@ class GstReportsService {
     DateTime? from,
     DateTime? to,
   }) async {
-    final bizId = business.id!;
+    final bizId = business.id ?? Repository.instance.session.businessId ?? 1;
     final sections = await Repository.instance.getGstr1Data(bizId, from: from, to: to);
     final hsnItems = await Repository.instance.getHsnSummary(bizId, from: from, to: to);
     final myState = resolveStateCode(gstin: business.gstin);
 
     final excel = xl.Excel.createExcel();
 
-    // Sheet: b2b
+    // 1. Sheet: b2b
     final b2bSheet = excel['b2b'];
     b2bSheet.appendRow([
       'GSTIN/UIN of Recipient',
@@ -414,7 +715,9 @@ class GstReportsService {
       final igst = (itm['igst'] as num?)?.toInt() ?? 0;
       final rate = taxable > 0 ? ((cgst + sgst + igst) * 100.0 / taxable).roundToDouble() : 18.0;
       final ctin = (itm['customer_gstin'] as String?)?.trim() ?? '';
-      final pos = resolveStateCode(gstin: ctin, stateName: itm['customer_state'] as String?, defaultCode: myState);
+      final posState = (itm['place_of_supply'] as String?) ?? (itm['customer_state'] as String?);
+      final pos = resolveStateCode(gstin: ctin, stateName: posState, defaultCode: myState);
+      final rchrg = (itm['reverse_charge'] == 1 || itm['reverse_charge'] == true) ? 'Y' : 'N';
 
       b2bSheet.appendRow([
         ctin,
@@ -423,7 +726,7 @@ class GstReportsService {
         formatGstDate(itm['date'] ?? ''),
         toRupees((itm['total'] as num?)?.toInt() ?? 0),
         '$pos-${GstService.stateCodes[pos] ?? "State"}',
-        'N',
+        rchrg,
         '',
         'Regular',
         '',
@@ -433,7 +736,42 @@ class GstReportsService {
       ]);
     }
 
-    // Sheet: b2cs
+    // 2. Sheet: b2cl (Inter-state unregistered supplies > 2.5 Lakh)
+    final b2clSheet = excel['b2cl'];
+    b2clSheet.appendRow([
+      'Invoice Number',
+      'Invoice date',
+      'Invoice Value',
+      'Place Of Supply',
+      'Applicable % of Tax Rate',
+      'Rate',
+      'Taxable Value',
+      'Cess Amount',
+      'E-Commerce GSTIN',
+    ]);
+
+    final b2clSection = sections.firstWhere((s) => s.code == 'B2CL', orElse: () => Gstr1Section(code: 'B2CL', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+    for (final itm in b2clSection.items) {
+      final taxable = (itm['taxable'] as num?)?.toInt() ?? 0;
+      final igst = (itm['igst'] as num?)?.toInt() ?? 0;
+      final rate = taxable > 0 ? (igst * 100.0 / taxable).roundToDouble() : 18.0;
+      final posState = (itm['place_of_supply'] as String?) ?? (itm['customer_state'] as String?);
+      final pos = resolveStateCode(stateName: posState, defaultCode: myState);
+
+      b2clSheet.appendRow([
+        itm['number'] ?? '',
+        formatGstDate(itm['date'] ?? ''),
+        toRupees((itm['total'] as num?)?.toInt() ?? 0),
+        '$pos-${GstService.stateCodes[pos] ?? "State"}',
+        '',
+        rate,
+        toRupees(taxable),
+        0.0,
+        '',
+      ]);
+    }
+
+    // 3. Sheet: b2cs (Small B2C supplies)
     final b2csSheet = excel['b2cs'];
     b2csSheet.appendRow([
       'Type',
@@ -452,7 +790,8 @@ class GstReportsService {
       final sgst = (itm['sgst'] as num?)?.toInt() ?? 0;
       final igst = (itm['igst'] as num?)?.toInt() ?? 0;
       final rate = taxable > 0 ? ((cgst + sgst + igst) * 100.0 / taxable).roundToDouble() : 18.0;
-      final pos = resolveStateCode(stateName: itm['customer_state'] as String?, defaultCode: myState);
+      final posState = (itm['place_of_supply'] as String?) ?? (itm['customer_state'] as String?);
+      final pos = resolveStateCode(stateName: posState, defaultCode: myState);
 
       b2csSheet.appendRow([
         'OE',
@@ -465,7 +804,51 @@ class GstReportsService {
       ]);
     }
 
-    // Sheet: hsn
+    // 4. Sheet: cdnr (Credit / Debit Notes)
+    final cdnrSheet = excel['cdnr'];
+    cdnrSheet.appendRow([
+      'GSTIN/UIN of Recipient',
+      'Receiver Name',
+      'Note/Refund Voucher Number',
+      'Note/Refund Voucher date',
+      'Document Type',
+      'Place Of Supply',
+      'Note/Refund Voucher Value',
+      'Applicable % of Tax Rate',
+      'Rate',
+      'Taxable Value',
+      'Cess Amount',
+      'Pre GST',
+    ]);
+
+    final cdnrSection = sections.firstWhere((s) => s.code == 'CDNR', orElse: () => Gstr1Section(code: 'CDNR', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: []));
+    for (final itm in cdnrSection.items) {
+      final total = (itm['total'] as num?)?.toInt() ?? 0;
+      final taxable = (itm['taxable'] as num?)?.toInt() ?? 0;
+      final cgst = (itm['cgst'] as num?)?.toInt() ?? 0;
+      final sgst = (itm['sgst'] as num?)?.toInt() ?? 0;
+      final igst = (itm['igst'] as num?)?.toInt() ?? 0;
+      final rate = taxable > 0 ? ((cgst + sgst + igst) * 100.0 / taxable).roundToDouble() : 18.0;
+      final ctin = (itm['party_gstin'] as String?)?.trim() ?? '';
+      final pos = resolveStateCode(gstin: ctin, defaultCode: myState);
+
+      cdnrSheet.appendRow([
+        ctin,
+        itm['party_name'] ?? '',
+        itm['return_number'] ?? itm['number'] ?? 'CN-001',
+        formatGstDate(itm['date'] ?? ''),
+        'C',
+        '$pos-${GstService.stateCodes[pos] ?? "State"}',
+        toRupees(total),
+        '',
+        rate,
+        toRupees(taxable),
+        0.0,
+        'N',
+      ]);
+    }
+
+    // 5. Sheet: hsn
     final hsnSheet = excel['hsn'];
     hsnSheet.appendRow([
       'HSN',
@@ -495,7 +878,7 @@ class GstReportsService {
       ]);
     }
 
-    // Sheet: docs
+    // 6. Sheet: docs
     final docsSheet = excel['docs'];
     docsSheet.appendRow([
       'Nature of Document',
@@ -504,23 +887,17 @@ class GstReportsService {
       'Total Number',
       'Cancelled',
     ]);
-    final allInv = [...b2bSection.items, ...b2csSection.items];
+    final allInv = [...b2bSection.items, ...b2clSection.items, ...b2csSection.items];
+    final cancCount = sections.firstWhere((s) => s.code == 'CANC', orElse: () => Gstr1Section(code: 'CANC', title: '', subtitle: '', count: 0, taxableAmount: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, totalValue: 0, items: [])).count;
     if (allInv.isNotEmpty) {
       docsSheet.appendRow([
         'Invoices for outward supply',
         allInv.first['number'] ?? '1',
         allInv.last['number'] ?? '1',
         allInv.length,
-        0,
+        cancCount,
       ]);
     }
-
-    // Remove default Sheet1 if unused
-    try {
-      if (excel.sheets.containsKey('Sheet1')) {
-        excel.delete('Sheet1');
-      }
-    } catch (_) {}
 
     final bytes = excel.encode();
     return Uint8List.fromList(bytes ?? []);
@@ -1513,6 +1890,16 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
   String get _cleanGstin => widget.business.gstin?.trim().toUpperCase() ?? 'UNREGISTERED';
 
   Future<void> _handlePdfExport({required bool printDirectly}) async {
+    if (widget.returnType == GstReturnType.gstr1) {
+      final canProceed = await GstReportsService.instance.runPreExportAuditGuard(
+        context,
+        business: widget.business,
+        from: widget.fromDate,
+        to: widget.toDate,
+      );
+      if (!canProceed) return;
+    }
+
     setState(() => activeExportingFormat = 'pdf');
     try {
       final filename = '${widget.returnType.filePrefix}_${_cleanGstin}_$_fp.pdf';
@@ -1569,6 +1956,16 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
   }
 
   Future<void> _handleExcelAction({required bool isShare}) async {
+    if (widget.returnType == GstReturnType.gstr1) {
+      final canProceed = await GstReportsService.instance.runPreExportAuditGuard(
+        context,
+        business: widget.business,
+        from: widget.fromDate,
+        to: widget.toDate,
+      );
+      if (!canProceed) return;
+    }
+
     setState(() => activeExportingFormat = 'excel');
     try {
       final filename = '${widget.returnType.filePrefix}_${_cleanGstin}_$_fp.xlsx';
@@ -1640,6 +2037,16 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
   }
 
   Future<void> _handleJsonAction({required bool isShare}) async {
+    if (widget.returnType == GstReturnType.gstr1) {
+      final canProceed = await GstReportsService.instance.runPreExportAuditGuard(
+        context,
+        business: widget.business,
+        from: widget.fromDate,
+        to: widget.toDate,
+      );
+      if (!canProceed) return;
+    }
+
     setState(() => activeExportingFormat = 'json');
     try {
       final filename = '${widget.returnType.filePrefix}_${_cleanGstin}_$_fp.json';
@@ -1712,6 +2119,16 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
   }
 
   Future<void> _handleCsvAction({required bool isShare}) async {
+    if (widget.returnType == GstReturnType.gstr1) {
+      final canProceed = await GstReportsService.instance.runPreExportAuditGuard(
+        context,
+        business: widget.business,
+        from: widget.fromDate,
+        to: widget.toDate,
+      );
+      if (!canProceed) return;
+    }
+
     setState(() => activeExportingFormat = 'csv');
     try {
       final filename = '${widget.returnType.filePrefix}_${_cleanGstin}_$_fp.csv';
