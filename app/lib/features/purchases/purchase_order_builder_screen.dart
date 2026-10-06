@@ -11,6 +11,7 @@ import '../../utils/widgets.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import '../inventory/product_form.dart';
 import '../sales/barcode_scanner_screen.dart';
+import '../sales/sales_order_builder_screen.dart';
 import '../suppliers/supplier_form.dart';
 import 'purchase_order_detail_screen.dart';
 
@@ -443,6 +444,41 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
       ),
       body: Column(
         children: [
+          // Order Type Selector (BillBook Style: Sell Order vs Purchase Order)
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(
+                    value: 'sale',
+                    label: Text('Sell Order', style: TextStyle(fontWeight: FontWeight.w700)),
+                    icon: Icon(Icons.assignment_outlined, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: 'purchase',
+                    label: Text('Purchase Order', style: TextStyle(fontWeight: FontWeight.w700)),
+                    icon: Icon(Icons.inventory_2_outlined, size: 16),
+                  ),
+                ],
+                selected: const {'purchase'},
+                onSelectionChanged: (s) {
+                  if (s.first == 'sale') {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => SalesOrderBuilderScreen(businessId: widget.businessId),
+                      ),
+                    );
+                  }
+                },
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+
           // Order Header Bar (Number & Dates)
           Container(
             color: Colors.white,

@@ -1170,6 +1170,10 @@ class DeliveryChallan {
     this.transportDetails,
     this.status = 'Pending',
     this.lines = const [],
+    this.invoiceId,
+    this.invoiceNumber,
+    this.vehicleNo,
+    this.notes,
   });
   final int? id;
   final int? businessId;
@@ -1181,6 +1185,10 @@ class DeliveryChallan {
   String? transportDetails;
   String status;
   List<InvoiceLine> lines;
+  int? invoiceId;
+  String? invoiceNumber;
+  String? vehicleNo;
+  String? notes;
 
   Map<String, Object?> toMap() => {
         'business_id': businessId,
@@ -1191,6 +1199,10 @@ class DeliveryChallan {
         'address': address,
         'transport_details': transportDetails,
         'status': status,
+        'invoice_id': invoiceId,
+        'invoice_number': invoiceNumber,
+        'vehicle_no': vehicleNo,
+        'notes': notes,
       };
 
   static DeliveryChallan fromMap(Map<String, Object?> map) => DeliveryChallan(
@@ -1203,6 +1215,10 @@ class DeliveryChallan {
         address: map['address'] as String?,
         transportDetails: map['transport_details'] as String?,
         status: map['status'] as String? ?? 'Pending',
+        invoiceId: map['invoice_id'] as int?,
+        invoiceNumber: map['invoice_number'] as String?,
+        vehicleNo: map['vehicle_no'] as String?,
+        notes: map['notes'] as String?,
       );
 }
 

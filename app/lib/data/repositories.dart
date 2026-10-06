@@ -401,6 +401,61 @@ class Repository {
     }
   }
 
+  Future<int> _resolveHighestChallanSequence(DatabaseExecutor db, int businessId, String prefix) async {
+    int highest = 0;
+    final pfx = prefix.trim().isEmpty ? 'DC' : prefix.trim().toUpperCase();
+    final rows = await db.rawQuery(
+      "SELECT number FROM delivery_challans WHERE business_id = ? AND (number LIKE ? OR number LIKE ?)",
+      [businessId, '$pfx-%', '$pfx%'],
+    );
+    for (final r in rows) {
+      final numStr = r['number'] as String?;
+      if (numStr != null) {
+        final seq = InvoiceNumbering.extractSequence(numStr);
+        if (seq != null && seq > highest) {
+          highest = seq;
+        }
+      }
+    }
+    return highest;
+  }
+
+  Future<String> nextChallanNumber(int businessId, [String prefix = 'DC']) async {
+    final db = await _database;
+    final highest = await _resolveHighestChallanSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('delivery_challans',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
+  }
+
+  Future<String> peekNextChallanNumber(int businessId, [String prefix = 'DC']) async {
+    final db = await _database;
+    final highest = await _resolveHighestChallanSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('delivery_challans',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
+  }
+
   Future<int> upsertCustomer(Customer customer, {int? businessIdOverride}) async {
     final db = await _database;
     final businessId = businessIdOverride ?? session.businessId;
@@ -2195,6 +2250,8 @@ class Repository {
           'product_id': line.productId,
           'name': line.name,
           'quantity': line.quantity,
+          'price': line.price,
+          'unit': line.unit,
         });
       }
       return challanId;
@@ -2603,8 +2660,79 @@ class Repository {
     final dc = DeliveryChallan.fromMap(rows.first);
     final items = await db.query('delivery_challan_items',
         where: 'challan_id = ?', whereArgs: [id], orderBy: 'id ASC');
-    dc.lines = items.map(InvoiceLine.fromMap).toList();
+    dc.lines = items.map((m) => InvoiceLine(
+      productId: m['product_id'] as int?,
+      name: m['name'] as String? ?? '',
+      quantity: (m['quantity'] as num?)?.toDouble() ?? 1,
+      price: (m['price'] as num?)?.toInt() ?? 0,
+      unit: m['unit'] as String?,
+    )).toList();
     return dc;
+  }
+
+  Future<List<DeliveryChallan>> deliveryChallansForInvoice(int businessId, int invoiceId) async {
+    final db = await _database;
+    final rows = await db.query('delivery_challans',
+        where: 'business_id = ? AND invoice_id = ?',
+        whereArgs: [businessId, invoiceId],
+        orderBy: 'id DESC');
+    final list = <DeliveryChallan>[];
+    for (final row in rows) {
+      final dc = DeliveryChallan.fromMap(row);
+      final items = await db.query('delivery_challan_items',
+          where: 'challan_id = ?', whereArgs: [dc.id], orderBy: 'id ASC');
+      dc.lines = items.map((m) => InvoiceLine(
+        productId: m['product_id'] as int?,
+        name: m['name'] as String? ?? '',
+        quantity: (m['quantity'] as num?)?.toDouble() ?? 1,
+        price: (m['price'] as num?)?.toInt() ?? 0,
+        unit: m['unit'] as String?,
+      )).toList();
+      list.add(dc);
+    }
+    return list;
+  }
+
+  Future<List<DeliveryChallan>> allDeliveryChallans(int businessId) async {
+    final db = await _database;
+    final rows = await db.query('delivery_challans',
+        where: 'business_id = ?', whereArgs: [businessId], orderBy: 'date DESC, id DESC');
+    final list = <DeliveryChallan>[];
+    for (final row in rows) {
+      final dc = DeliveryChallan.fromMap(row);
+      final items = await db.query('delivery_challan_items',
+          where: 'challan_id = ?', whereArgs: [dc.id], orderBy: 'id ASC');
+      dc.lines = items.map((m) => InvoiceLine(
+        productId: m['product_id'] as int?,
+        name: m['name'] as String? ?? '',
+        quantity: (m['quantity'] as num?)?.toDouble() ?? 1,
+        price: (m['price'] as num?)?.toInt() ?? 0,
+        unit: m['unit'] as String?,
+      )).toList();
+      list.add(dc);
+    }
+    return list;
+  }
+
+  Future<void> deleteDeliveryChallan(int businessId, int id) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      await txn.delete('delivery_challan_items', where: 'challan_id = ?', whereArgs: [id]);
+      await txn.delete('delivery_challans', where: 'business_id = ? AND id = ?', whereArgs: [businessId, id]);
+    });
+    await _audit(businessId, action: 'delete', entity: 'delivery_challan', entityId: id);
+  }
+
+  Future<List<SalesOrder>> allSalesOrders(int businessId) async {
+    final db = await _database;
+    final rows = await db.query('sales_orders', where: 'business_id = ?', whereArgs: [businessId], orderBy: 'date DESC, id DESC');
+    return rows.map(SalesOrder.fromMap).toList();
+  }
+
+  Future<List<PurchaseOrder>> allPurchaseOrders(int businessId) async {
+    final db = await _database;
+    final rows = await db.query('purchase_orders', where: 'business_id = ?', whereArgs: [businessId], orderBy: 'date DESC, id DESC');
+    return rows.map(PurchaseOrder.fromMap).toList();
   }
 
   Future<int> convertQuotationToInvoice(int quotationId, {String? invoiceNumber}) async {

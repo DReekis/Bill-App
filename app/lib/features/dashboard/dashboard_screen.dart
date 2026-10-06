@@ -17,6 +17,7 @@ import '../purchases/purchase_builder_screen.dart';
 import '../purchases/purchase_order_builder_screen.dart';
 import '../sales/delivery_challan_builder_screen.dart';
 import '../sales/invoice_builder_screen.dart';
+import '../orders/orders_screen.dart';
 import '../sales/quotation_builder_screen.dart';
 import '../sales/sales_order_builder_screen.dart';
 import '../sales/invoice_detail_screen.dart';
@@ -717,6 +718,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .push(MaterialPageRoute(
                 builder: (_) => const QuotationBuilderScreen()))
             .then((_) => onDone());
+      case 'Order':
+      case 'Orders':
+        nav
+            .push(MaterialPageRoute(
+                builder: (_) => const OrdersScreen()))
+            .then((_) => onDone());
       case 'Sales Order':
         nav
             .push(MaterialPageRoute(
@@ -1328,7 +1335,7 @@ class _ReferenceDashboard extends StatelessWidget {
               _ReferenceAction(Icons.account_balance_wallet_outlined, l10n.text('cash_bank'), 'Cash & Bank', onQuick, color: const Color(0xFF1B5E20)),
               _ReferenceAction(Icons.inventory_2_outlined, l10n.text('item'), 'Product', onQuick, color: const Color(0xFF7B1FA2)),
               _ReferenceAction(Icons.description_outlined, l10n.text('estimate'), 'Estimate', onQuick, color: const Color(0xFF0288D1)),
-              _ReferenceAction(Icons.assignment_outlined, l10n.text('order'), 'Sales Order', onQuick, color: const Color(0xFFE65100)),
+              _ReferenceAction(Icons.assignment_outlined, l10n.text('order'), 'Orders', onQuick, color: const Color(0xFFE65100)),
               _ReferenceAction(Icons.bar_chart_rounded, l10n.text('reports'), 'Reports', onQuick, color: const Color(0xFF5C6BC0)),
             ],
           ),

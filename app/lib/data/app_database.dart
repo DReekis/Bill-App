@@ -150,6 +150,24 @@ class AppDatabase {
       await db.execute('ALTER TABLE businesses ADD COLUMN purchase_sequence INTEGER DEFAULT 0;');
     } catch (_) {}
     try {
+      await db.execute('ALTER TABLE delivery_challans ADD COLUMN invoice_id INTEGER;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE delivery_challans ADD COLUMN invoice_number TEXT;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE delivery_challans ADD COLUMN vehicle_no TEXT;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE delivery_challans ADD COLUMN notes TEXT;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE delivery_challan_items ADD COLUMN price INTEGER DEFAULT 0;');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE delivery_challan_items ADD COLUMN unit TEXT;');
+    } catch (_) {}
+    try {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS staff_members (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -633,7 +651,11 @@ class AppDatabase {
         date TEXT NOT NULL,
         address TEXT,
         transport_details TEXT,
-        status TEXT DEFAULT 'Pending'
+        status TEXT DEFAULT 'Pending',
+        invoice_id INTEGER,
+        invoice_number TEXT,
+        vehicle_no TEXT,
+        notes TEXT
       )
     ''');
 
@@ -643,7 +665,9 @@ class AppDatabase {
         challan_id INTEGER NOT NULL,
         product_id INTEGER,
         name TEXT,
-        quantity REAL DEFAULT 0
+        quantity REAL DEFAULT 0,
+        price INTEGER DEFAULT 0,
+        unit TEXT
       )
     ''');
 

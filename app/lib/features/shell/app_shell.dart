@@ -17,6 +17,7 @@ import '../reports/reports_menu_screen.dart';
 import '../reports/reports_screen.dart';
 import '../sales/invoice_builder_screen.dart';
 import '../sales/quotation_builder_screen.dart';
+import '../orders/orders_screen.dart';
 import '../sales/sales_order_builder_screen.dart';
 import '../sales/delivery_challan_builder_screen.dart';
 import '../purchases/purchase_order_builder_screen.dart';
@@ -132,6 +133,12 @@ class _AppShellState extends State<AppShell> {
           businessId: session.businessId!,
           onSaved: _reloadTabs,
         );
+      case 'Order':
+      case 'Orders':
+        Navigator.of(context)
+            .push(MaterialPageRoute(
+                builder: (_) => const OrdersScreen()))
+            .then((_) => _reloadTabs());
       case 'Sales Order':
         Navigator.of(context)
             .push(MaterialPageRoute(

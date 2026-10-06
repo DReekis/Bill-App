@@ -13,6 +13,8 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
 import '../payments/payment_form.dart';
+import 'delivery_challan_builder_screen.dart';
+import 'delivery_challan_detail_screen.dart';
 import 'invoice_builder_screen.dart';
 import 'sales_return_form.dart';
 
@@ -26,6 +28,7 @@ class InvoiceDetailScreen extends StatefulWidget {
 class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Invoice? invoice;
   Business? business;
+  List<DeliveryChallan> challans = [];
   bool busy = false;
 
   Future<void> _load() async {
@@ -34,10 +37,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (session.businessId == null) return;
     final inv = await repo.invoice(session.businessId!, widget.invoiceId);
     final biz = await repo.getBusiness(session.businessId!);
+    final dcs = await repo.deliveryChallansForInvoice(session.businessId!, widget.invoiceId);
     if (!mounted) return;
     setState(() {
       invoice = inv;
       business = biz;
+      challans = dcs;
     });
   }
 
@@ -504,12 +509,52 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.share_rounded),
           ),
-          if (canCancel)
-            PopupMenuButton<String>(
-              onSelected: (val) {
-                if (val == 'cancel') _cancelInvoice();
-              },
-              itemBuilder: (ctx) => [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (val) {
+              if (val == 'create_challan') {
+                if (inv != null) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => DeliveryChallanBuilderScreen(fromInvoice: inv),
+                    ),
+                  ).then((_) => _load());
+                }
+              } else if (val == 'view_challans') {
+                if (challans.isNotEmpty) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => DeliveryChallanDetailScreen(challanId: challans.first.id!),
+                    ),
+                  ).then((_) => _load());
+                }
+              } else if (val == 'cancel') {
+                _cancelInvoice();
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'create_challan',
+                child: Row(
+                  children: [
+                    Icon(Icons.local_shipping_outlined, color: StitchColors.primary, size: 20),
+                    SizedBox(width: 10),
+                    Text('Create Delivery Challan', style: TextStyle(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              if (challans.isNotEmpty)
+                PopupMenuItem(
+                  value: 'view_challans',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.receipt_long_rounded, color: Color(0xFF0284C7), size: 20),
+                      const SizedBox(width: 10),
+                      Text('View Challan (${challans.first.number})', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              if (canCancel)
                 const PopupMenuItem(
                   value: 'cancel',
                   child: Row(
@@ -520,13 +565,72 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     ],
                   ),
                 ),
-              ],
-            ),
+            ],
+          ),
         ],
       ),
       body: inv == null || biz == null
           ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 90), children: [
+              if (challans.isNotEmpty) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.local_shipping_rounded, color: Color(0xFF2563EB), size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Text('Delivery Challan: ', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF1E40AF))),
+                                Text(
+                                  challans.first.number,
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Color(0xFF1D4ED8)),
+                                ),
+                              ],
+                            ),
+                            if (challans.first.vehicleNo != null && challans.first.vehicleNo!.isNotEmpty)
+                              Text(
+                                'Vehicle: ${challans.first.vehicleNo}',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF3B82F6)),
+                              ),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => DeliveryChallanDetailScreen(challanId: challans.first.id!),
+                            ),
+                          ).then((_) => _load());
+                        },
+                        child: const Text('View Challan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               if (isCancelled) ...[
                 Container(
                   padding: const EdgeInsets.all(14),

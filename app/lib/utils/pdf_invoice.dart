@@ -1540,6 +1540,65 @@ Future<void> sharePurchaseOrder({
   await Printing.sharePdf(bytes: bytes, filename: '${order.number}.pdf');
 }
 
+Future<Uint8List> buildDeliveryChallanPdf({
+  required Business business,
+  required DeliveryChallan challan,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
+}) async {
+  int subtotal = 0;
+  for (final l in challan.lines) {
+    subtotal += l.price * l.quantity.round();
+  }
+
+  return buildDocumentPdf(
+    business: business,
+    title: 'DELIVERY CHALLAN',
+    number: challan.number,
+    date: challan.date,
+    partyName: challan.customerName,
+    partyAddress: challan.address,
+    vehicleNumber: challan.vehicleNo,
+    lrRrNumber: challan.transportDetails,
+    poNumber: challan.invoiceNumber != null && challan.invoiceNumber!.isNotEmpty
+        ? 'Ref Invoice: ${challan.invoiceNumber}'
+        : null,
+    lines: challan.lines,
+    subtotal: subtotal,
+    discount: 0,
+    taxable: subtotal,
+    igst: 0,
+    cgst: 0,
+    sgst: 0,
+    roundOff: 0,
+    total: subtotal,
+    outstandingPaise: 0,
+    notes: challan.notes,
+    termsText: business.termsChallan,
+    pageFormat: paperSize.format,
+    settings: settings,
+  );
+}
+
+Future<void> printDeliveryChallan({
+  required Business business,
+  required DeliveryChallan challan,
+}) async {
+  final bytes = await buildDeliveryChallanPdf(business: business, challan: challan);
+  await Printing.layoutPdf(
+    onLayout: (_) async => bytes,
+    name: '${challan.number}.pdf',
+  );
+}
+
+Future<void> shareDeliveryChallan({
+  required Business business,
+  required DeliveryChallan challan,
+}) async {
+  final bytes = await buildDeliveryChallanPdf(business: business, challan: challan);
+  await Printing.sharePdf(bytes: bytes, filename: '${challan.number}.pdf');
+}
+
 String _qty(double q) =>
     q == q.roundToDouble() ? q.round().toString() : q.toStringAsFixed(2);
 

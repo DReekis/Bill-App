@@ -10,6 +10,7 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../payments/payment_form.dart';
 import '../purchases/purchase_builder_screen.dart';
+import '../purchases/purchase_order_builder_screen.dart';
 import 'supplier_form.dart';
 
 class SupplierDetailScreen extends StatefulWidget {
@@ -107,19 +108,31 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
               Row(children: [
                 Expanded(
                   child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(vertical: 8)),
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                         builder: (_) => PurchaseBuilderScreen(initialSupplierId: s.id))),
-                    icon: const Icon(Icons.local_shipping_rounded, size: 18),
-                    label: const Text('New purchase'),
+                    icon: const Icon(Icons.local_shipping_rounded, size: 16),
+                    label: const Text('Purchase', style: TextStyle(fontSize: 12)),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(vertical: 8)),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => PurchaseOrderBuilderScreen(supplierId: s.id))),
+                    icon: const Icon(Icons.inventory_2_outlined, size: 16),
+                    label: const Text('+ PO', style: TextStyle(fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(backgroundColor: StitchColors.warning, visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(vertical: 8)),
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                         builder: (_) => PaymentFormScreen(partyType: 'supplier', partyId: s.id, partyName: s.name))),
-                    icon: const Icon(Icons.call_made_rounded, size: 18),
-                    label: const Text('Payment out'),
+                    icon: const Icon(Icons.call_made_rounded, size: 16),
+                    label: const Text('Pay Out', style: TextStyle(fontSize: 12)),
                   ),
                 ),
               ]),

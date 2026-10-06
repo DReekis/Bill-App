@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
-import '../../data/app_database.dart';
 import '../../data/repositories.dart';
+import '../purchases/purchase_order_detail_screen.dart';
+import '../sales/delivery_challan_detail_screen.dart';
+import '../sales/quotation_detail_screen.dart';
+import '../sales/sales_order_detail_screen.dart';
 
 class TransactionHistoryScreen extends StatefulWidget {
   const TransactionHistoryScreen({super.key});
@@ -144,6 +147,17 @@ class _List extends StatelessWidget {
             trailing: onConvert != null && item.status != 'Converted'
                 ? TextButton(onPressed: () => onConvert!(item), child: const Text('Convert'))
                 : null,
+            onTap: () {
+              if (item is Quotation && item.id != null) {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => QuotationDetailScreen(quotationId: item.id!)));
+              } else if (item is SalesOrder && item.id != null) {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => SalesOrderDetailScreen(orderId: item.id!)));
+              } else if (item is PurchaseOrder && item.id != null) {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => PurchaseOrderDetailScreen(orderId: item.id!)));
+              } else if (item is DeliveryChallan && item.id != null) {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => DeliveryChallanDetailScreen(challanId: item.id!)));
+              }
+            },
           ),
         );
       },
@@ -151,23 +165,7 @@ class _List extends StatelessWidget {
   }
 }
 
-extension on Repository {
-  Future<List<SalesOrder>> allSalesOrders(int businessId) async {
-    final db = await AppDatabase.instance.database;
-    final rows = await db.query('sales_orders', where: 'business_id = ?', whereArgs: [businessId], orderBy: 'date DESC');
-    return rows.map(SalesOrder.fromMap).toList();
-  }
-  Future<List<PurchaseOrder>> allPurchaseOrders(int businessId) async {
-    final db = await AppDatabase.instance.database;
-    final rows = await db.query('purchase_orders', where: 'business_id = ?', whereArgs: [businessId], orderBy: 'date DESC');
-    return rows.map(PurchaseOrder.fromMap).toList();
-  }
-  Future<List<DeliveryChallan>> allDeliveryChallans(int businessId) async {
-    final db = await AppDatabase.instance.database;
-    final rows = await db.query('delivery_challans', where: 'business_id = ?', whereArgs: [businessId], orderBy: 'date DESC');
-    return rows.map(DeliveryChallan.fromMap).toList();
-  }
-}
+
 
 void showAppMessage(BuildContext context, String msg, {bool error = false}) {
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
