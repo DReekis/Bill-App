@@ -38,6 +38,25 @@ class Repository {
     });
   }
 
+  static int? _safeInt(dynamic val) {
+    if (val == null) return null;
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    final s = val.toString().trim();
+    if (s.isEmpty || s == 'null' || s == 'undefined') return null;
+    final clean = s.contains('_') ? s.split('_').last : s;
+    return int.tryParse(clean);
+  }
+
+  static double? _safeDouble(dynamic val) {
+    if (val == null) return null;
+    if (val is double) return val;
+    if (val is num) return val.toDouble();
+    final s = val.toString().trim();
+    if (s.isEmpty || s == 'null' || s == 'undefined') return null;
+    return double.tryParse(s);
+  }
+
   Future<void> _enqueueSync(int businessId, {
     required String entity,
     required int entityId,
@@ -51,7 +70,7 @@ class Repository {
       'entity_id': entityId,
       'op': op,
       'payload': payload,
-      'idempotency_key': '${session.mobile ?? 'device'}#$entity#$entityId#$op',
+      'idempotency_key': '${session.mobile ?? 'device'}#$entity#$entityId#$op#${DateTime.now().millisecondsSinceEpoch}',
       'status': 'pending',
       'attempts': 0,
       'created_at': timestampNow(),
@@ -3367,6 +3386,18 @@ class Repository {
         if (rows.isEmpty) return null;
         return jsonEncode(rows.first);
 
+      case 'purchase':
+      case 'purchases':
+        final rows = await db.query('expenses', where: 'id = ?', whereArgs: [entityId], limit: 1);
+        if (rows.isEmpty) return null;
+        return jsonEncode(rows.first);
+
+      case 'staff':
+      case 'staff_members':
+        final rows = await db.query('staff_members', where: 'id = ?', whereArgs: [entityId], limit: 1);
+        if (rows.isEmpty) return null;
+        return jsonEncode(rows.first);
+
       default:
         return null;
     }
@@ -3409,9 +3440,7 @@ class Repository {
           'billing_address': data['billingAddress'] ?? data['billing_address'],
           'city': data['city'] as String?,
           'state': data['state'] as String?,
-          'opening_balance': (data['openingBalance'] ?? data['opening_balance'] ?? 0) is num
-              ? ((data['openingBalance'] ?? data['opening_balance'] ?? 0) as num).toInt()
-              : 0,
+          'opening_balance': _safeInt(data['openingBalance'] ?? data['opening_balance']) ?? 0,
         };
         if (existing.isNotEmpty) {
           await db.update('customers', map,
@@ -3434,7 +3463,7 @@ class Repository {
           whereArgs: [bizId, sku ?? '', barcode ?? '', name],
           limit: 1,
         );
-        final remoteStock = ((data['stock'] as num?)?.toDouble() ?? 0).round();
+        final remoteStock = _safeDouble(data['stock'])?.round() ?? 0;
         final map = {
           'business_id': bizId,
           'name': name,
@@ -3442,16 +3471,10 @@ class Repository {
           'barcode': barcode,
           'category': data['category'] as String?,
           'unit': data['unit'] as String? ?? 'pc',
-          'sale_price': (data['salePrice'] ?? data['sale_price'] ?? 0) is num
-              ? ((data['salePrice'] ?? data['sale_price'] ?? 0) as num).toInt()
-              : 0,
-          'purchase_price': (data['purchasePrice'] ?? data['purchase_price'] ?? 0) is num
-              ? ((data['purchasePrice'] ?? data['purchase_price'] ?? 0) as num).toInt()
-              : 0,
+          'sale_price': _safeInt(data['salePrice'] ?? data['sale_price']) ?? 0,
+          'purchase_price': _safeInt(data['purchasePrice'] ?? data['purchase_price']) ?? 0,
           'stock': remoteStock,
-          'gst_rate': (data['gstRate'] ?? data['gst_rate'] ?? 0) is num
-              ? ((data['gstRate'] ?? data['gst_rate'] ?? 0) as num).toInt()
-              : 0,
+          'gst_rate': _safeInt(data['gstRate'] ?? data['gst_rate']) ?? 0,
         };
         if (existing.isNotEmpty) {
           final currentStock = (existing.first['stock'] as num?)?.toInt() ?? 0;
@@ -3487,8 +3510,8 @@ class Repository {
 
       case 'stock_move':
       case 'stock_moves':
-        final prodId = (data['product_id'] ?? data['productId'] as num?)?.toInt();
-        final changeQty = ((data['change_qty'] ?? data['changeQty'] ?? 0) as num).toDouble();
+        final prodId = _safeInt(data['product_id'] ?? data['productId']);
+        final changeQty = _safeDouble(data['change_qty'] ?? data['changeQty']) ?? 0.0;
         if (prodId != null) {
           final prodRows = await db.query('products', where: 'id = ? AND business_id = ?', whereArgs: [prodId, bizId], limit: 1);
           if (prodRows.isNotEmpty) {
@@ -3520,25 +3543,25 @@ class Repository {
           limit: 1,
         );
 
-        final total = (data['total'] as num?)?.toInt() ?? 0;
-        final amountPaid = (data['amount_paid'] ?? data['amountPaid'] as num?)?.toInt() ?? 0;
+        final total = _safeInt(data['total']) ?? 0;
+        final amountPaid = _safeInt(data['amount_paid'] ?? data['amountPaid']) ?? 0;
         final status = data['status'] as String? ?? resolveInvoiceStatus(total: total, amountPaid: amountPaid);
         final invMap = {
           'business_id': bizId,
           'number': number,
-          'customer_id': (data['customer_id'] ?? data['customerId'] as num?)?.toInt(),
+          'customer_id': _safeInt(data['customer_id'] ?? data['customerId']),
           'customer_name': data['customer_name'] ?? data['customerName'] ?? 'Walk-in Customer',
           'date': data['date'] as String? ?? todayIso(),
           'due_date': data['due_date'] ?? data['dueDate'],
           'gst_type': data['gst_type'] ?? data['gstType'] ?? 'gst',
-          'subtotal': (data['subtotal'] as num?)?.toInt() ?? 0,
-          'discount': (data['discount'] as num?)?.toInt() ?? 0,
-          'taxable': (data['taxable'] as num?)?.toInt() ?? 0,
-          'cgst': (data['cgst'] as num?)?.toInt() ?? 0,
-          'sgst': (data['sgst'] as num?)?.toInt() ?? 0,
-          'igst': (data['igst'] as num?)?.toInt() ?? 0,
-          'cess': (data['cess'] as num?)?.toInt() ?? 0,
-          'round_off': (data['round_off'] ?? data['roundOff'] as num?)?.toInt() ?? 0,
+          'subtotal': _safeInt(data['subtotal']) ?? 0,
+          'discount': _safeInt(data['discount']) ?? 0,
+          'taxable': _safeInt(data['taxable']) ?? 0,
+          'cgst': _safeInt(data['cgst']) ?? 0,
+          'sgst': _safeInt(data['sgst']) ?? 0,
+          'igst': _safeInt(data['igst']) ?? 0,
+          'cess': _safeInt(data['cess']) ?? 0,
+          'round_off': _safeInt(data['round_off'] ?? data['roundOff']) ?? 0,
           'total': total,
           'amount_paid': amountPaid,
           'payment_mode': data['payment_mode'] ?? data['paymentMode'] ?? 'Cash',
@@ -3571,15 +3594,15 @@ class Repository {
             if (raw is Map) {
               await db.insert('invoice_items', {
                 'invoice_id': targetInvId,
-                'product_id': (raw['product_id'] ?? raw['productId'] as num?)?.toInt(),
+                'product_id': _safeInt(raw['product_id'] ?? raw['productId']),
                 'name': raw['name'] as String? ?? 'Item',
                 'hsn': raw['hsn'] as String?,
-                'gst_rate': (raw['gst_rate'] ?? raw['gstRate'] as num?)?.toInt() ?? 0,
-                'quantity': ((raw['quantity'] as num?)?.toDouble()) ?? 1.0,
-                'price': (raw['price'] as num?)?.toInt() ?? 0,
-                'discount': (raw['discount'] as num?)?.toInt() ?? 0,
-                'taxable': (raw['taxable'] as num?)?.toInt() ?? 0,
-                'tax': (raw['tax'] as num?)?.toInt() ?? 0,
+                'gst_rate': _safeInt(raw['gst_rate'] ?? raw['gstRate']) ?? 0,
+                'quantity': _safeDouble(raw['quantity']) ?? 1.0,
+                'price': _safeInt(raw['price']) ?? 0,
+                'discount': _safeInt(raw['discount']) ?? 0,
+                'taxable': _safeInt(raw['taxable']) ?? 0,
+                'tax': _safeInt(raw['tax']) ?? 0,
               });
             }
           }
@@ -3588,11 +3611,11 @@ class Repository {
 
       case 'payment':
       case 'payments':
-        final amount = (data['amount'] as num?)?.toInt() ?? 0;
+        final amount = _safeInt(data['amount']) ?? 0;
         final date = data['date'] as String? ?? todayIso();
         final mode = data['mode'] as String? ?? 'Cash';
         final partyType = data['party_type'] ?? data['partyType'] ?? 'customer';
-        final partyId = (data['party_id'] ?? data['partyId'] as num?)?.toInt() ?? 0;
+        final partyId = _safeInt(data['party_id'] ?? data['partyId']) ?? 0;
         final partyName = data['party_name'] ?? data['partyName'] as String?;
         final invNumber = data['invoice_number'] ?? data['invoiceNumber'] as String?;
         final type = data['type'] as String? ?? 'in';
@@ -3603,7 +3626,7 @@ class Repository {
           'party_type': partyType,
           'party_id': partyId,
           'party_name': partyName,
-          'invoice_id': (data['invoice_id'] ?? data['invoiceId'] as num?)?.toInt(),
+          'invoice_id': _safeInt(data['invoice_id'] ?? data['invoiceId']),
           'invoice_number': invNumber,
           'amount': amount,
           'mode': mode,
@@ -3655,12 +3678,15 @@ class Repository {
         }
         break;
 
+      case 'purchase':
+      case 'purchases':
       case 'expense':
       case 'expenses':
-        final cat = data['category'] as String? ?? 'General';
-        final amt = (data['amount'] as num?)?.toInt() ?? 0;
+        final isPurchase = entity.startsWith('purchase');
+        final cat = data['category'] as String? ?? (isPurchase ? 'Purchase' : 'General');
+        final amt = _safeInt(data['amount']) ?? 0;
         final expDate = data['date'] as String? ?? todayIso();
-        final expMode = data['mode'] as String? ?? 'Cash';
+        final expMode = data['mode'] as String? ?? (isPurchase ? 'Credit' : 'Cash');
         final desc = data['description'] as String?;
         final vend = data['vendor'] as String?;
 
@@ -3680,9 +3706,9 @@ class Repository {
           'account': expMode == 'Cash' ? 'cash' : 'bank',
           'debit': 0,
           'credit': amt,
-          'ref_type': 'expense',
+          'ref_type': isPurchase ? 'purchase' : 'expense',
           'ref_id': expId,
-          'note': desc ?? 'Expense ($cat)',
+          'note': desc ?? '$cat ($expMode)',
         });
         break;
 
@@ -3704,9 +3730,7 @@ class Repository {
           'email': data['email'] as String?,
           'gstin': data['gstin'] as String?,
           'address': data['address'] as String?,
-          'opening_balance': (data['openingBalance'] ?? data['opening_balance'] ?? 0) is num
-              ? ((data['openingBalance'] ?? data['opening_balance'] ?? 0) as num).toInt()
-              : 0,
+          'opening_balance': _safeInt(data['openingBalance'] ?? data['opening_balance']) ?? 0,
         };
         if (existing.isNotEmpty) {
           await db.update('suppliers', map,
@@ -3732,9 +3756,7 @@ class Repository {
             'bank_name': bankName,
             'account_name': data['accountName'] ?? data['account_name'],
             'account_number': accNum,
-            'opening_balance': (data['openingBalance'] ?? data['opening_balance'] ?? 0) is num
-                ? ((data['openingBalance'] ?? data['opening_balance'] ?? 0) as num).toInt()
-                : 0,
+            'opening_balance': _safeInt(data['openingBalance'] ?? data['opening_balance']) ?? 0,
           };
           if (existing.isNotEmpty) {
             await db.update('bank_accounts', map,
@@ -3759,11 +3781,11 @@ class Repository {
             'business_id': bizId,
             'cheque_number': chqNum,
             'bank_name': data['bank_name'] ?? data['bankName'],
-            'bank_account_id': (data['bank_account_id'] ?? data['bankAccountId'] as num?)?.toInt(),
+            'bank_account_id': _safeInt(data['bank_account_id'] ?? data['bankAccountId']),
             'party_type': data['party_type'] ?? data['partyType'],
-            'party_id': (data['party_id'] ?? data['partyId'] as num?)?.toInt(),
+            'party_id': _safeInt(data['party_id'] ?? data['partyId']),
             'party_name': data['party_name'] ?? data['partyName'],
-            'amount': (data['amount'] as num?)?.toInt() ?? 0,
+            'amount': _safeInt(data['amount']) ?? 0,
             'date': data['date'] as String? ?? todayIso(),
             'clearing_date': data['clearing_date'] ?? data['clearingDate'],
             'type': data['type'] as String? ?? 'in',
@@ -3775,6 +3797,35 @@ class Repository {
             await db.update('cheques', chqMap, where: 'id = ?', whereArgs: [existing.first['id']]);
           } else {
             await db.insert('cheques', chqMap);
+          }
+        }
+        break;
+
+      case 'staff':
+      case 'staff_members':
+        final sName = data['name'] as String? ?? '';
+        final sPhone = data['phone'] as String? ?? '';
+        if (sName.isNotEmpty && sPhone.isNotEmpty) {
+          final existing = await db.query(
+            'staff_members',
+            where: 'business_id = ? AND phone = ?',
+            whereArgs: [bizId, sPhone],
+            limit: 1,
+          );
+          final staffMap = {
+            'business_id': bizId,
+            'name': sName,
+            'phone': sPhone,
+            'email': data['email'] as String?,
+            'role': data['role'] as String? ?? 'cashier',
+            'pin': data['pin'] as String?,
+            'is_active': _safeInt(data['is_active'] ?? data['isActive']) ?? 1,
+            'created_at': data['created_at'] ?? data['createdAt'] ?? todayIso(),
+          };
+          if (existing.isNotEmpty) {
+            await db.update('staff_members', staffMap, where: 'id = ?', whereArgs: [existing.first['id']]);
+          } else {
+            await db.insert('staff_members', staffMap);
           }
         }
         break;

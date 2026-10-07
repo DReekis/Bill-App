@@ -14,6 +14,11 @@ export async function enqueueSync(input: {
       where: { idempotencyKey: input.idempotencyKey },
     });
     if (existing) {
+      if (existing.status === 'failed') {
+        try {
+          await processSyncItem(existing.id);
+        } catch {}
+      }
       return existing;
     }
   }
@@ -132,6 +137,8 @@ async function handleDelete(entity: string, entityId: string, businessId: string
       break;
     case 'expense':
     case 'expenses':
+    case 'purchase':
+    case 'purchases':
       await prisma.expense.deleteMany({
         where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
       });
@@ -408,15 +415,17 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
     }
 
     case 'expense':
-    case 'expenses': {
+    case 'expenses':
+    case 'purchase':
+    case 'purchases': {
       await prisma.expense.upsert({
         where: { id: scopedId },
         create: {
           id: scopedId,
           businessId,
-          category: data.category ?? 'General',
+          category: data.category ?? (entity.toLowerCase().startsWith('purchase') ? 'Purchase' : 'General'),
           amount: Number(data.amount ?? 0),
-          mode: data.mode ?? 'Cash',
+          mode: data.mode ?? (entity.toLowerCase().startsWith('purchase') ? 'Credit' : 'Cash'),
           date: data.date ? new Date(data.date) : new Date(),
           description: data.description ?? null,
           vendor: data.vendor ?? null,

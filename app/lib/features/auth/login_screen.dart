@@ -27,9 +27,21 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _authService = CloudAuthService();
 
+  final _phoneController = TextEditingController();
+  final _otpController = TextEditingController();
+  bool _otpSent = false;
+  bool _phoneBusy = false;
+
   bool _busy = false;
   String? _errorMessage;
   bool _isUnregisteredSha1Error = false;
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _otpController.dispose();
+    super.dispose();
+  }
 
   String _friendlyAuthError(Object e, String serverUrl) {
     final msg = e.toString();
@@ -127,6 +139,74 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _busy = false;
         _errorMessage = msg;
+      });
+    }
+  }
+
+  Future<void> _handleRequestOtp() async {
+    final phone = _phoneController.text.trim();
+    if (phone.length < 10) {
+      setState(() => _errorMessage = 'Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    setState(() {
+      _phoneBusy = true;
+      _errorMessage = null;
+      _isUnregisteredSha1Error = false;
+    });
+
+    final apiClient = SyncEngine.instance.apiClient;
+    try {
+      await apiClient.ensureReady();
+      await _authService.requestPhoneOtp(phone, apiClient: apiClient);
+      if (!mounted) return;
+      setState(() {
+        _phoneBusy = false;
+        _otpSent = true;
+      });
+      showAppMessage(context, 'OTP sent! (Use 1234 or 0000 in test mode)');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _phoneBusy = false;
+        _errorMessage = _friendlyAuthError(e, apiClient.baseUrl);
+      });
+    }
+  }
+
+  Future<void> _handleVerifyPhoneOtp() async {
+    final phone = _phoneController.text.trim();
+    final otp = _otpController.text.trim();
+    if (phone.length < 10) {
+      setState(() => _errorMessage = 'Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    if (otp.length < 4) {
+      setState(() => _errorMessage = 'Please enter the 4-digit OTP (Use 1234 in test mode).');
+      return;
+    }
+
+    setState(() {
+      _phoneBusy = true;
+      _errorMessage = null;
+      _isUnregisteredSha1Error = false;
+    });
+
+    final apiClient = SyncEngine.instance.apiClient;
+    try {
+      await apiClient.ensureReady();
+      final result = await _authService.signInWithPhone(
+        phone: phone,
+        otp: otp,
+        apiClient: apiClient,
+      );
+      await _finishLogin(result, 'Signed in as ${result.user.displayName}');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _phoneBusy = false;
+        _errorMessage = _friendlyAuthError(e, apiClient.baseUrl);
       });
     }
   }
@@ -488,12 +568,309 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 24),
                   ],
 
-                  // Primary Production Action: Google Sign-In Button
+                  // Primary Action: Phone Number + OTP Authentication Card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF2FF),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.phone_android_rounded, color: Color(0xFF4F46E5), size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isBn ? 'মোবাইল নম্বর দিয়ে প্রবেশ' : isHi ? 'मोबाइल नंबर से लॉगिन' : 'Mobile Number Login',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isBn
+                                        ? 'তাত্ক্ষণিক ওটিপি দিয়ে শুরু করুন'
+                                        : isHi
+                                            ? 'त्वरित ओटीपी से शुरू करें'
+                                            : 'Instant 4-digit OTP verification',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF64748B),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+
+                        // Phone Number Input
+                        TextField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          enabled: !_phoneBusy && !_otpSent,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(10),
+                          ],
+                          decoration: InputDecoration(
+                            labelText: isBn ? 'ফোন নম্বর' : isHi ? 'मोबाइल नंबर' : 'Phone Number',
+                            hintText: '9876543210',
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.8),
+                            ),
+                            prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                            prefixIcon: const Padding(
+                              padding: EdgeInsets.only(left: 14, right: 10),
+                              child: Text(
+                                '🇮🇳 +91',
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1E293B),
+                                ),
+                              ),
+                            ),
+                            suffixIcon: _otpSent
+                                ? IconButton(
+                                    icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF4F46E5)),
+                                    tooltip: 'Change Number',
+                                    onPressed: _phoneBusy ? null : () => setState(() => _otpSent = false),
+                                  )
+                                : null,
+                          ),
+                        ),
+
+                        if (!_otpSent) ...[
+                          const SizedBox(height: 10),
+                          // Quick Test Mode Auto-Fill Chip
+                          InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () {
+                              _phoneController.text = '9876543210';
+                              _otpController.text = '1234';
+                              setState(() => _otpSent = true);
+                            },
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFFDE68A)),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.bolt_rounded, size: 15, color: Color(0xFFB45309)),
+                                  SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      'Test Mode: Auto-fill 9876543210 (OTP: 1234)',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF92400E),
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: FilledButton(
+                              onPressed: _phoneBusy ? null : _handleRequestOtp,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF4F46E5),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: _phoneBusy
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : Text(
+                                      isBn ? 'ওটিপি পাঠান' : isHi ? 'ओटीपी प्राप्त करें' : 'Get OTP',
+                                      style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+                                    ),
+                            ),
+                          ),
+                        ] else ...[
+                          const SizedBox(height: 14),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                isBn ? '৪-সংখ্যার ওটিপি লিখুন' : isHi ? '4-अंकीय ओटीपी दर्ज करें' : 'Enter 4-Digit OTP',
+                                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF334155)),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDCFCE7),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'Test OTP: 1234',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _otpController,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              letterSpacing: 10,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF1E293B),
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(6),
+                            ],
+                            decoration: InputDecoration(
+                              hintText: '••••',
+                              hintStyle: const TextStyle(letterSpacing: 8, color: Color(0xFF94A3B8)),
+                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: Color(0xFF16A34A), width: 1.8),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: FilledButton(
+                              onPressed: _phoneBusy ? null : _handleVerifyPhoneOtp,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF16A34A),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: _phoneBusy
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.check_circle_outline_rounded, size: 18),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          isBn ? 'যাচাই করে এগিয়ে যান' : isHi ? 'सत्यापित करें और आगे बढ़ें' : 'Verify & Continue',
+                                          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              TextButton(
+                                onPressed: _phoneBusy ? null : () => setState(() => _otpSent = false),
+                                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                                child: Text(
+                                  isBn ? 'নম্বর পরিবর্তন' : isHi ? 'नंबर बदलें' : 'Change number',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _phoneBusy ? null : _handleRequestOtp,
+                                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                                child: Text(
+                                  isBn ? 'পুনরায় ওটিপি পাঠান' : isHi ? 'पुनः ओटीपी भेजें' : 'Resend OTP',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4F46E5)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Divider
+                  const Row(
+                    children: [
+                      Expanded(child: Divider(color: Color(0xFFE2E8F0), thickness: 1)),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 14),
+                        child: Text(
+                          'OR',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF94A3B8),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      Expanded(child: Divider(color: Color(0xFFE2E8F0), thickness: 1)),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Secondary Action: Google Sign-In Button
                   SizedBox(
                     width: double.infinity,
-                    height: 54,
+                    height: 52,
                     child: OutlinedButton(
-                      onPressed: _busy ? null : _handleGoogleSignIn,
+                      onPressed: (_busy || _phoneBusy) ? null : _handleGoogleSignIn,
                       style: OutlinedButton.styleFrom(
                         backgroundColor: Colors.white,
                         side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.4),
@@ -518,7 +895,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 Text(
                                   isBn ? 'গুগল দিয়ে সাইন ইন করুন' : isHi ? 'Google से साइन इन करें' : 'Sign in with Google',
                                   style: const TextStyle(
-                                    fontSize: 15.5,
+                                    fontSize: 15,
                                     fontWeight: FontWeight.w700,
                                     color: Color(0xFF0F172A),
                                     letterSpacing: -0.2,
