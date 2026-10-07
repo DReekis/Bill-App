@@ -44,6 +44,7 @@ const List<AppUnit> kStandardUnits = [
   AppUnit(code: 'TUB', name: 'Tubes', category: 'Packages', uqc: 'TUB'),
   AppUnit(code: 'TIN', name: 'Tins', category: 'Packages', uqc: 'TIN'),
   AppUnit(code: 'BDL', name: 'Bundles', category: 'Packages', uqc: 'BDL'),
+  AppUnit(code: 'SHT', name: 'Sheets', category: 'Packages', uqc: 'SHT'),
   AppUnit(code: 'BAL', name: 'Bales', category: 'Packages', uqc: 'BAL'),
   AppUnit(code: 'CRT', name: 'Crates', category: 'Packages', uqc: 'CRT'),
   AppUnit(code: 'VIL', name: 'Vials', category: 'Packages', uqc: 'VIL'),
@@ -61,6 +62,7 @@ const List<AppUnit> kStandardUnits = [
   // Volume / Liquid
   AppUnit(code: 'LTR', name: 'Litres', category: 'Volume', uqc: 'LTR'),
   AppUnit(code: 'MLT', name: 'Millilitres', category: 'Volume', uqc: 'MLT'),
+  AppUnit(code: 'CFT', name: 'Cubic Feet', category: 'Volume', uqc: 'CFT'),
   AppUnit(code: 'CCM', name: 'Cubic Centimeters', category: 'Volume', uqc: 'CCM'),
   AppUnit(code: 'CBM', name: 'Cubic Meters', category: 'Volume', uqc: 'CBM'),
   AppUnit(code: 'GAL', name: 'Gallons', category: 'Volume', uqc: 'GAL'),
@@ -93,6 +95,26 @@ const List<AppUnit> kStandardUnits = [
 
   // Others
   AppUnit(code: 'OTH', name: 'Others', category: 'Others', uqc: 'OTH'),
+];
+
+/// Common retail, trade and industrial units (including Bag, Bundle, Roll, Sheet, Tin, Ton, Quintal, CFT)
+const List<String> kTradeUnitCodes = [
+  'PCS',
+  'BAG',
+  'BDL',
+  'ROL',
+  'SHT',
+  'TIN',
+  'TON',
+  'QTL',
+  'CFT',
+  'KGS',
+  'GMS',
+  'LTR',
+  'BOX',
+  'PAC',
+  'MTR',
+  'SQF',
 ];
 
 const List<String> kUnitCategories = [
@@ -169,6 +191,38 @@ AppUnit? matchAppUnit(String? unit) {
     case 'hr':
     case 'hour':
       return kStandardUnits.firstWhere((u) => u.code == 'HRS');
+    case 'bag':
+    case 'bags':
+      return kStandardUnits.firstWhere((u) => u.code == 'BAG');
+    case 'bundle':
+    case 'bundles':
+    case 'bdl':
+      return kStandardUnits.firstWhere((u) => u.code == 'BDL');
+    case 'roll':
+    case 'rolls':
+    case 'rol':
+      return kStandardUnits.firstWhere((u) => u.code == 'ROL');
+    case 'sheet':
+    case 'sheets':
+    case 'sht':
+      return kStandardUnits.firstWhere((u) => u.code == 'SHT');
+    case 'tin':
+    case 'tins':
+      return kStandardUnits.firstWhere((u) => u.code == 'TIN');
+    case 'ton':
+    case 'tons':
+    case 'tonne':
+    case 'tonnes':
+      return kStandardUnits.firstWhere((u) => u.code == 'TON');
+    case 'quintal':
+    case 'quintals':
+    case 'qtl':
+      return kStandardUnits.firstWhere((u) => u.code == 'QTL');
+    case 'cft':
+    case 'cubic feet':
+    case 'cu ft':
+    case 'cuft':
+      return kStandardUnits.firstWhere((u) => u.code == 'CFT');
   }
   return null;
 }

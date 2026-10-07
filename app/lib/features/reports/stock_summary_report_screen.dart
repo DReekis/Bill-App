@@ -30,6 +30,7 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
   String searchQuery = '';
   String selectedCategory = 'All';
   String statusFilter = 'All'; // 'All', 'In Stock', 'Low Stock', 'Out of Stock'
+  String valuationMode = 'cost'; // 'cost' or 'sale'
 
   @override
   void initState() {
@@ -100,40 +101,27 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
     final sheet = excel['Stock Summary'];
 
     sheet.appendRow([
-      'Item Name',
-      'Category',
-      'SKU',
-      'HSN',
-      'Stock Qty',
-      'Unit',
-      'Purchase Price (Rs)',
-      'Sale Price (Rs)',
-      'Stock Value @ Cost (Rs)',
-      'Stock Value @ Sale (Rs)',
-      'Status',
+      'Item',
+      'Quantity',
+      'Buy/Sell Rate',
+      'Stock Value',
     ]);
 
     for (final p in filteredProducts) {
-      final status = p.stock <= 0 ? 'Out of Stock' : (p.stock <= p.lowStockThreshold ? 'Low Stock' : 'In Stock');
+      final rateStr = 'Rs ${formatPaise(p.purchasePrice)} / ${formatPaise(p.salePrice)}';
+      final stockValPaise = valuationMode == 'cost' ? (p.stock * p.purchasePrice) : (p.stock * p.salePrice);
       sheet.appendRow([
         p.name,
-        p.category ?? '-',
-        p.sku ?? '-',
-        p.hsn ?? '-',
-        p.stock,
-        p.unit,
-        p.purchasePrice / 100.0,
-        p.salePrice / 100.0,
-        (p.stock * p.purchasePrice) / 100.0,
-        (p.stock * p.salePrice) / 100.0,
-        status,
+        '${p.stock} ${p.unit}',
+        rateStr,
+        'Rs ${formatPaise(stockValPaise)}',
       ]);
     }
 
     final bytes = excel.save();
     if (bytes == null) return;
     final tempDir = await getTemporaryDirectory();
-    final filename = 'Stock_Summary_${todayIso()}.xlsx';
+    final filename = 'Stock_Summary_${valuationMode == 'cost' ? 'Cost' : 'Sale'}_${todayIso()}.xlsx';
     final file = File('${tempDir.path}/$filename');
     await file.writeAsBytes(bytes);
 
@@ -211,8 +199,8 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
         title: const Text('Stock Summary', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.table_chart_outlined, size: 20),
-            tooltip: 'Export Excel',
+            icon: const Icon(Icons.table_chart_rounded, size: 20),
+            tooltip: 'Export to Excel (.xlsx)',
             onPressed: allProducts.isEmpty ? null : _exportExcel,
           ),
           IconButton(
@@ -227,6 +215,10 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
+            // Valuation Mode Toggle
+            _buildValuationToggle(),
+            const SizedBox(height: 12),
+
             // KPI Summary Header
             _buildValuationBanner(),
             const SizedBox(height: 14),
@@ -328,7 +320,65 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
     );
   }
 
+  Widget _buildValuationToggle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: StitchColors.outline.withValues(alpha: 0.8)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.tune_rounded, size: 18, color: StitchColors.primary),
+              SizedBox(width: 8),
+              Text(
+                'Valuation:',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.textPrimary),
+              ),
+            ],
+          ),
+          SegmentedButton<String>(
+            showSelectedIcon: false,
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12, vertical: 0)),
+              textStyle: WidgetStateProperty.all(const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+            segments: const [
+              ButtonSegment(
+                value: 'cost',
+                label: Text('Cost Price'),
+              ),
+              ButtonSegment(
+                value: 'sale',
+                label: Text('Sale Price'),
+              ),
+            ],
+            selected: {valuationMode},
+            onSelectionChanged: (val) {
+              setState(() {
+                valuationMode = val.first;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildValuationBanner() {
+    final isCost = valuationMode == 'cost';
+    final activeTotalVal = isCost ? totalCostValue : totalSaleValue;
+    final secondaryVal = isCost ? totalSaleValue : totalCostValue;
+    final secondaryLabel = isCost ? 'Retail Value' : 'Cost Value';
+    final headerLabel = isCost ? 'Total Inventory Value (Cost)' : 'Total Inventory Value (Sale)';
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -351,10 +401,10 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Total Inventory Value (Cost)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: StitchColors.textSecondary)),
+                    Text(headerLabel, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: StitchColors.textSecondary)),
                     const SizedBox(height: 4),
                     Text(
-                      formatPaise(totalCostValue),
+                      formatPaise(activeTotalVal),
                       style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF1E3A8A)),
                     ),
                   ],
@@ -384,7 +434,7 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
           Row(
             children: [
               Expanded(
-                child: _valMetric('Retail Value', formatPaise(totalSaleValue), const Color(0xFF0F172A)),
+                child: _valMetric(secondaryLabel, formatPaise(secondaryVal), const Color(0xFF0F172A)),
               ),
               Container(width: 1, height: 28, color: StitchColors.outline),
               Expanded(
@@ -436,7 +486,10 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
     final badgeBg = isOut ? const Color(0xFFFEE2E2) : (isLow ? const Color(0xFFFEF3C7) : const Color(0xFFDCFCE7));
     final badgeText = isOut ? 'Out of Stock' : (isLow ? 'Low Stock' : 'In Stock');
 
-    final costVal = p.stock * p.purchasePrice;
+    final isCost = valuationMode == 'cost';
+    final selectedRate = isCost ? p.purchasePrice : p.salePrice;
+    final stockVal = p.stock * selectedRate;
+    final valLabel = isCost ? 'Stock Value (Cost)' : 'Stock Value (Sale)';
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -518,19 +571,37 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
                   children: [
                     const Text('Buy / Sell Rate', style: TextStyle(fontSize: 10, color: StitchColors.textSecondary)),
                     const SizedBox(height: 1),
-                    Text(
-                      'Rs ${formatPaise(p.purchasePrice)} / ${formatPaise(p.salePrice)}',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(fontSize: 12, color: StitchColors.textPrimary),
+                        children: [
+                          TextSpan(
+                            text: 'Rs ${formatPaise(p.purchasePrice)}',
+                            style: TextStyle(
+                              fontWeight: isCost ? FontWeight.w800 : FontWeight.w500,
+                              color: isCost ? StitchColors.primary : StitchColors.textSecondary,
+                            ),
+                          ),
+                          const TextSpan(text: ' / ', style: TextStyle(color: StitchColors.textSecondary)),
+                          TextSpan(
+                            text: formatPaise(p.salePrice),
+                            style: TextStyle(
+                              fontWeight: !isCost ? FontWeight.w800 : FontWeight.w500,
+                              color: !isCost ? StitchColors.primary : StitchColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text('Stock Value (Cost)', style: TextStyle(fontSize: 10, color: StitchColors.textSecondary)),
+                    Text(valLabel, style: const TextStyle(fontSize: 10, color: StitchColors.textSecondary)),
                     const SizedBox(height: 1),
                     Text(
-                      formatPaise(costVal),
+                      formatPaise(stockVal),
                       style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Color(0xFF1E3A8A)),
                     ),
                   ],

@@ -2448,3 +2448,50 @@ class StaffMember {
       );
 }
 
+class CashflowEntry {
+  const CashflowEntry({
+    required this.id,
+    required this.date,
+    required this.partyName,
+    required this.transactionType,
+    required this.amount,
+    required this.isMoneyIn,
+    required this.account,
+    this.accountDisplayName,
+    this.note,
+    this.refType,
+    this.refId,
+  });
+
+  final int id;
+  final String date;
+  final String partyName;
+  final String transactionType;
+  final int amount; // in paise
+  final bool isMoneyIn; // true if debit (money in), false if credit (money out)
+  final String account;
+  final String? accountDisplayName;
+  final String? note;
+  final String? refType;
+  final int? refId;
+}
+
+class CashflowReportData {
+  const CashflowReportData({
+    required this.openingCash,
+    required this.moneyIn,
+    required this.moneyOut,
+    required this.closingCash,
+    required this.moneyInList,
+    required this.moneyOutList,
+  });
+
+  final int openingCash;
+  final int moneyIn;
+  final int moneyOut;
+  final int closingCash;
+  final List<CashflowEntry> moneyInList;
+  final List<CashflowEntry> moneyOutList;
+}
+
+

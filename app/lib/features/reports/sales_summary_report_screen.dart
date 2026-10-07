@@ -16,6 +16,7 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../sales/invoice_detail_screen.dart';
+import 'date_filter_bar.dart';
 
 class SalesSummaryReportScreen extends StatefulWidget {
   const SalesSummaryReportScreen({super.key});
@@ -89,27 +90,6 @@ class _SalesSummaryReportScreenState extends State<SalesSummaryReportScreen> {
         error = '$e';
         loading = false;
       });
-    }
-  }
-
-  Future<void> _selectCustomRange() async {
-    final now = DateTime.now();
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(now.year + 2),
-      initialDateRange: DateTimeRange(
-        start: customFrom ?? DateTime(now.year, now.month, 1),
-        end: customTo ?? now,
-      ),
-    );
-    if (picked != null) {
-      setState(() {
-        period = 'Custom';
-        customFrom = picked.start;
-        customTo = picked.end;
-      });
-      _load();
     }
   }
 
@@ -250,38 +230,21 @@ class _SalesSummaryReportScreenState extends State<SalesSummaryReportScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
-            // Period selector pills
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final p in ['Today', 'This Week', 'This Month', 'This Quarter', 'This Year'])
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(p),
-                        selected: period == p,
-                        onSelected: (sel) {
-                          if (sel) {
-                            setState(() => period = p);
-                            _load();
-                          }
-                        },
-                      ),
-                    ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ActionChip(
-                      avatar: const Icon(Icons.date_range_rounded, size: 16),
-                      label: Text(period == 'Custom' && customFrom != null
-                          ? '${displayDate(isoDate(customFrom!))} - ${displayDate(isoDate(customTo ?? DateTime.now()))}'
-                          : 'Custom Date'),
-                      backgroundColor: period == 'Custom' ? StitchColors.primary.withValues(alpha: 0.15) : null,
-                      onPressed: _selectCustomRange,
-                    ),
-                  ),
-                ],
-              ),
+            // Global Date Filter Bar
+            GlobalDateFilterBar(
+              selectedPeriod: period,
+              customStart: customFrom,
+              customEnd: customTo,
+              padding: EdgeInsets.zero,
+              presets: const ['Today', 'This Week', 'This Month', 'This Quarter', 'This Year'],
+              onRangeChanged: (start, end, label) {
+                setState(() {
+                  period = label;
+                  customFrom = start;
+                  customTo = end;
+                });
+                _load();
+              },
             ),
             const SizedBox(height: 14),
 

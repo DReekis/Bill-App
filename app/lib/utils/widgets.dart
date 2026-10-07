@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../core/dates.dart';
 import '../core/money.dart';
 import '../theme/stitch_theme.dart';
+export '../features/reports/date_filter_bar.dart';
 
 Color statusColor(String status) {
   switch (status) {

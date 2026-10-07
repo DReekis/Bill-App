@@ -18,6 +18,7 @@ import 'sales_summary_report_screen.dart';
 import 'stock_summary_report_screen.dart';
 import 'tally_export_screen.dart';
 import 'audit_trail_screen.dart';
+import 'cashflow_report_screen.dart';
 
 class ReportsMenuScreen extends StatelessWidget {
   const ReportsMenuScreen({super.key, this.isTab = false});
@@ -104,6 +105,13 @@ class ReportsMenuScreen extends StatelessWidget {
                 icon: Icons.balance_rounded,
                 title: 'Balance Sheet',
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BalanceSheetScreen())),
+              ),
+            if (session.canViewBankBalances)
+              _ReportListItem(
+                icon: Icons.swap_horiz_rounded,
+                title: 'Cash Flow Statement',
+                subtitle: 'Opening cash, money in, money out, and closing cash balances',
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashflowReportScreen())),
               ),
             if (session.canViewBankBalances)
               _ReportListItem(

@@ -4405,7 +4405,7 @@ class Repository {
     );
   }
 
-  Future<Map<String, int>> periodTotals(int businessId, String fromDate) async {
+  Future<Map<String, int>> periodTotals(int businessId, String fromDate, {String? toDate}) async {
     final db = await _database;
     Future<int> sumOf(String table, String column, String whereClause, List<Object?> args) async {
       final rows = await db.rawQuery(
@@ -4413,12 +4413,15 @@ class Repository {
       return rows.isEmpty ? 0 : (rows.first['s'] as num).toInt();
     }
 
-    final sales = await sumOf('invoices', 'total', 'business_id = ? AND date >= ?', [businessId, fromDate]);
-    final taxable = await sumOf('invoices', 'taxable', 'business_id = ? AND date >= ?', [businessId, fromDate]);
-    final purchases = await sumOf('expenses', 'amount', "business_id = ? AND date >= ? AND category = 'Purchase'", [businessId, fromDate]);
-    final expenses = await sumOf('expenses', 'amount', "business_id = ? AND date >= ? AND category != 'Purchase'", [businessId, fromDate]);
-    final cogs = await sumOf('ledger', 'debit', "business_id = ? AND date >= ? AND account = 'cogs'", [businessId, fromDate]);
-    final collected = await sumOf('payments', 'amount', "business_id = ? AND date >= ? AND type = 'in'", [businessId, fromDate]);
+    final dateClause = toDate != null ? 'date >= ? AND date <= ?' : 'date >= ?';
+    final dateArgs = toDate != null ? [fromDate, toDate] : [fromDate];
+
+    final sales = await sumOf('invoices', 'total', 'business_id = ? AND $dateClause', [businessId, ...dateArgs]);
+    final taxable = await sumOf('invoices', 'taxable', 'business_id = ? AND $dateClause', [businessId, ...dateArgs]);
+    final purchases = await sumOf('expenses', 'amount', "business_id = ? AND $dateClause AND category = 'Purchase'", [businessId, ...dateArgs]);
+    final expenses = await sumOf('expenses', 'amount', "business_id = ? AND $dateClause AND category != 'Purchase'", [businessId, ...dateArgs]);
+    final cogs = await sumOf('ledger', 'debit', "business_id = ? AND $dateClause AND account = 'cogs'", [businessId, ...dateArgs]);
+    final collected = await sumOf('payments', 'amount', "business_id = ? AND $dateClause AND type = 'in'", [businessId, ...dateArgs]);
     return {
       'sales': sales,
       'taxable': taxable,
@@ -4430,26 +4433,30 @@ class Repository {
     };
   }
 
-  Future<List<(String, int)>> expenseBreakdown(int businessId, String fromDate) async {
+  Future<List<(String, int)>> expenseBreakdown(int businessId, String fromDate, {String? toDate}) async {
     final db = await _database;
+    final dateClause = toDate != null ? 'date >= ? AND date <= ?' : 'date >= ?';
+    final dateArgs = toDate != null ? [fromDate, toDate] : [fromDate];
     final rows = await db.rawQuery(
-        'SELECT category, SUM(amount) AS s FROM expenses WHERE business_id = ? AND date >= ? AND category != ? '
+        'SELECT category, SUM(amount) AS s FROM expenses WHERE business_id = ? AND $dateClause AND category != ? '
         'GROUP BY category ORDER BY s DESC',
-        [businessId, fromDate, 'Purchase']);
+        [businessId, ...dateArgs, 'Purchase']);
     return rows
         .map((r) => (r['category'] as String? ?? 'Other', (r['s'] as num).toInt()))
         .toList();
   }
 
-  Future<List<(String, int, int)>> bestProducts(int businessId, String fromDate, {int limit = 5}) async {
+  Future<List<(String, int, int)>> bestProducts(int businessId, String fromDate, {String? toDate, int limit = 5}) async {
     final db = await _database;
+    final dateClause = toDate != null ? 'invoices.date >= ? AND invoices.date <= ?' : 'invoices.date >= ?';
+    final dateArgs = toDate != null ? [fromDate, toDate] : [fromDate];
     final rows = await db.rawQuery(
         'SELECT invoice_items.name AS name, SUM(invoice_items.quantity) AS qty, '
         'SUM(invoice_items.taxable) AS rev FROM invoice_items '
         'JOIN invoices ON invoices.id = invoice_items.invoice_id '
-        'WHERE invoices.business_id = ? AND invoices.date >= ? '
+        'WHERE invoices.business_id = ? AND $dateClause '
         'GROUP BY name ORDER BY qty DESC LIMIT ?',
-        [businessId, fromDate, limit]);
+        [businessId, ...dateArgs, limit]);
     return rows
         .map((r) => (
               r['name'] as String? ?? '',
@@ -5308,6 +5315,162 @@ class Repository {
       entity: 'invoice_customization_settings',
       entityId: 0,
       after: map,
+    );
+  }
+
+  Future<CashflowReportData> getCashflowReport(
+    int businessId, {
+    String accountType = 'all',
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final db = await _database;
+    final startIso = isoDate(startDate);
+    final endIso = isoDate(endDate);
+
+    String accountClause;
+    if (accountType == 'cash') {
+      accountClause = "l.account = 'cash'";
+    } else if (accountType == 'bank') {
+      accountClause = "(l.account = 'bank' OR l.account LIKE 'bank:%')";
+    } else {
+      accountClause = "(l.account = 'cash' OR l.account = 'bank' OR l.account LIKE 'bank:%')";
+    }
+
+    final openingRows = await db.rawQuery(
+      'SELECT COALESCE(SUM(l.debit - l.credit), 0) AS opening '
+      'FROM ledger l '
+      'WHERE l.business_id = ? AND $accountClause AND l.date < ?',
+      [businessId, startIso],
+    );
+    final openingCash = openingRows.isEmpty ? 0 : (openingRows.first['opening'] as num).toInt();
+
+    final rows = await db.rawQuery('''
+      SELECT
+        l.id,
+        l.date,
+        l.account,
+        l.debit,
+        l.credit,
+        l.ref_type,
+        l.ref_id,
+        l.note,
+        p.party_name AS payment_party_name,
+        p.type AS payment_type,
+        p.mode AS payment_mode,
+        e.vendor AS expense_vendor,
+        e.category AS expense_category,
+        inv.customer_name AS invoice_customer_name,
+        ba.bank_name AS bank_name
+      FROM ledger l
+      LEFT JOIN payments p ON (l.ref_type = 'payment' AND l.ref_id = p.id)
+      LEFT JOIN expenses e ON (l.ref_type = 'expense' AND l.ref_id = e.id)
+      LEFT JOIN invoices inv ON (l.ref_type = 'invoice' AND l.ref_id = inv.id)
+      LEFT JOIN bank_accounts ba ON (l.account = ('bank:' || ba.id))
+      WHERE l.business_id = ?
+        AND $accountClause
+        AND l.date >= ? AND l.date <= ?
+      ORDER BY l.date DESC, l.id DESC
+    ''', [businessId, startIso, endIso]);
+
+    final moneyInList = <CashflowEntry>[];
+    final moneyOutList = <CashflowEntry>[];
+    int totalMoneyIn = 0;
+    int totalMoneyOut = 0;
+
+    for (final r in rows) {
+      final debit = (r['debit'] as num?)?.toInt() ?? 0;
+      final credit = (r['credit'] as num?)?.toInt() ?? 0;
+      if (debit == 0 && credit == 0) continue;
+
+      final isMoneyIn = debit > 0;
+      final amount = isMoneyIn ? debit : credit;
+      final refType = r['ref_type'] as String?;
+      final note = r['note'] as String?;
+      final paymentParty = (r['payment_party_name'] as String?)?.trim();
+      final invoiceCust = (r['invoice_customer_name'] as String?)?.trim();
+      final expenseVendor = (r['expense_vendor'] as String?)?.trim();
+      final expenseCat = (r['expense_category'] as String?)?.trim();
+      final bankName = (r['bank_name'] as String?)?.trim();
+      final accountStr = r['account'] as String? ?? 'cash';
+      final paymentType = r['payment_type'] as String?;
+
+      String partyName;
+      if (paymentParty != null && paymentParty.isNotEmpty) {
+        partyName = paymentParty;
+      } else if (invoiceCust != null && invoiceCust.isNotEmpty) {
+        partyName = invoiceCust;
+      } else if (expenseVendor != null && expenseVendor.isNotEmpty) {
+        partyName = expenseVendor;
+      } else if (refType == 'opening' || (note != null && note.toLowerCase().contains('opening balance'))) {
+        partyName = 'Opening Balance';
+      } else if (note != null && note.trim().isNotEmpty) {
+        partyName = note.trim();
+      } else if (expenseCat != null && expenseCat.isNotEmpty) {
+        partyName = expenseCat;
+      } else {
+        partyName = accountStr == 'cash' ? 'Cash in Hand' : (bankName ?? 'Bank Account');
+      }
+
+      String txType;
+      if (refType == 'invoice') {
+        txType = 'Sales';
+      } else if (refType == 'purchase' || expenseCat == 'Purchase') {
+        txType = 'Purchase';
+      } else if (refType == 'expense' || paymentType == 'expense') {
+        txType = 'Expense';
+      } else if (refType == 'payment') {
+        if (paymentType == 'in') {
+          txType = 'Sales';
+        } else if (paymentType == 'out') {
+          txType = 'Payment Out';
+        } else {
+          txType = isMoneyIn ? 'Sales' : 'Payment Out';
+        }
+      } else if (refType == 'transfer' || (note != null && note.toLowerCase().contains('transfer'))) {
+        txType = 'Transfer';
+      } else if (refType == 'opening') {
+        txType = 'Opening Balance';
+      } else {
+        txType = isMoneyIn ? 'Sales' : 'Expense';
+      }
+
+      final displayAccount = accountStr == 'cash'
+          ? 'Cash'
+          : (bankName != null && bankName.isNotEmpty ? bankName : 'Bank');
+
+      final entry = CashflowEntry(
+        id: (r['id'] as num).toInt(),
+        date: r['date'] as String? ?? todayIso(),
+        partyName: partyName,
+        transactionType: txType,
+        amount: amount,
+        isMoneyIn: isMoneyIn,
+        account: accountStr,
+        accountDisplayName: displayAccount,
+        note: note,
+        refType: refType,
+        refId: (r['ref_id'] as num?)?.toInt(),
+      );
+
+      if (isMoneyIn) {
+        moneyInList.add(entry);
+        totalMoneyIn += amount;
+      } else {
+        moneyOutList.add(entry);
+        totalMoneyOut += amount;
+      }
+    }
+
+    final closingCash = openingCash + totalMoneyIn - totalMoneyOut;
+
+    return CashflowReportData(
+      openingCash: openingCash,
+      moneyIn: totalMoneyIn,
+      moneyOut: totalMoneyOut,
+      closingCash: closingCash,
+      moneyInList: moneyInList,
+      moneyOutList: moneyOutList,
     );
   }
 }

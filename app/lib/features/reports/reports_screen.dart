@@ -17,35 +17,24 @@ class ReportsScreen extends StatefulWidget {
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
-  String period = 'This month';
+  String _period = 'This Month';
+  late DateTime _startDate;
+  late DateTime _endDate;
   Map<String, int>? totals;
   List<(String, int)>? expenses;
   List<(String, int, int)>? products;
   String? loadError;
 
-  String get fromDate {
-    final now = DateTime.now();
-    switch (period) {
-      case 'Today':
-        return todayIso();
-      case 'This week':
-        return isoDate(now.subtract(Duration(days: now.weekday - 1)));
-      case 'This year':
-        return isoDate(DateTime(now.year, 1, 1));
-      default:
-        return isoDate(DateTime(now.year, now.month, 1));
-    }
-  }
-
   Future<void> _load() async {
     final businessId = context.read<Session>().businessId;
     if (businessId == null) return;
     final repo = Repository.instance;
-    final from = fromDate;
+    final from = isoDate(_startDate);
+    final to = isoDate(_endDate);
     try {
-      final t = await repo.periodTotals(businessId, from);
-      final e = await repo.expenseBreakdown(businessId, from);
-      final p = await repo.bestProducts(businessId, from);
+      final t = await repo.periodTotals(businessId, from, toDate: to);
+      final e = await repo.expenseBreakdown(businessId, from, toDate: to);
+      final p = await repo.bestProducts(businessId, from, toDate: to);
       if (!mounted) return;
       setState(() {
         loadError = null;
@@ -63,6 +52,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void initState() {
     super.initState();
+    final range = resolvePresetDateRange(_period);
+    _startDate = range.start;
+    _endDate = range.end;
     _load();
   }
 
@@ -72,17 +64,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final content = RefreshIndicator(
       onRefresh: _load,
       child: ListView(padding: const EdgeInsets.all(16), children: [
-        SegmentedButton<String>(
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: 'Today', label: Text('Today')),
-            ButtonSegment(value: 'This week', label: Text('Week')),
-            ButtonSegment(value: 'This month', label: Text('Month')),
-            ButtonSegment(value: 'This year', label: Text('Year')),
-          ],
-          selected: {period},
-          onSelectionChanged: (s) {
-            setState(() => period = s.first);
+        GlobalDateFilterBar(
+          selectedPeriod: _period,
+          customStart: _startDate,
+          customEnd: _endDate,
+          padding: EdgeInsets.zero,
+          onRangeChanged: (start, end, label) {
+            setState(() {
+              _startDate = start;
+              _endDate = end;
+              _period = label;
+            });
             _load();
           },
         ),
