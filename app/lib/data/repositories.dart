@@ -5338,6 +5338,47 @@ class Repository {
     await _enqueueSync(businessId, entity: 'staff', entityId: id, op: 'delete');
   }
 
+  Future<StaffMember?> findStaffByPhone(String phone, {int? businessId}) async {
+    final db = await _database;
+    final cleanPhone = phone.trim().replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleanPhone.isEmpty) return null;
+    final last10 = cleanPhone.length >= 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+
+    final where = businessId != null
+        ? '(phone LIKE ? OR phone LIKE ?) AND business_id = ? AND is_active = 1'
+        : '(phone LIKE ? OR phone LIKE ?) AND is_active = 1';
+    final args = businessId != null
+        ? ['%$last10%', '%$cleanPhone%', businessId]
+        : ['%$last10%', '%$cleanPhone%'];
+
+    final rows = await db.query('staff_members', where: where, whereArgs: args, limit: 1);
+    if (rows.isNotEmpty) {
+      return StaffMember.fromMap(rows.first);
+    }
+    return null;
+  }
+
+  Future<void> seedDemoStaffIfEmpty(int businessId) async {
+    final existing = await staffMembers(businessId);
+    if (existing.isNotEmpty) return;
+    final cashier = StaffMember(
+      businessId: businessId,
+      name: 'Ramesh (Cashier)',
+      phone: '9876500001',
+      role: UserRole.cashier,
+      pin: '1234',
+    );
+    final salesman = StaffMember(
+      businessId: businessId,
+      name: 'Priya (Salesman)',
+      phone: '9876500002',
+      role: UserRole.salesman,
+      pin: '1234',
+    );
+    await upsertStaffMember(cashier);
+    await upsertStaffMember(salesman);
+  }
+
   Future<InvoiceCustomizationSettings> getInvoiceCustomizationSettings(int businessId) async {
     final db = await _database;
     final rows = await db.query(

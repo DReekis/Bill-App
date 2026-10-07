@@ -79,7 +79,11 @@ class Session extends ChangeNotifier {
 
   Locale get locale => Locale(localeCode);
 
+  int? staffMemberId;
+
   UserRole get role => UserRole.fromString(currentRole);
+
+  bool get isStaff => role != UserRole.owner && role != UserRole.admin;
 
   bool get canViewCosts =>
       role == UserRole.owner || role == UserRole.admin || role == UserRole.accountant;
@@ -91,6 +95,11 @@ class Session extends ChangeNotifier {
       role == UserRole.owner || role == UserRole.admin || role == UserRole.accountant;
 
   bool get canManageStaff => role == UserRole.owner || role == UserRole.admin;
+
+  bool get canManageBusinessSettings => role == UserRole.owner || role == UserRole.admin;
+
+  bool get canViewAuditTrail =>
+      role == UserRole.owner || role == UserRole.admin || role == UserRole.accountant;
 
   bool get canExportTally =>
       role == UserRole.owner || role == UserRole.admin || role == UserRole.accountant;
@@ -161,6 +170,7 @@ class Session extends ChangeNotifier {
   static const _kCloudAvatarUrl = 'session.cloudAvatarUrl';
   static const _kCloudProvider = 'session.cloudProvider';
   static const _kCloudBusinessId = 'session.cloudBusinessId';
+  static const _kStaffId = 'session.staffId';
 
   bool get hasPin => (_prefs?.getString(_kPinHash) ?? '').isNotEmpty;
   bool get locked => _locked && hasPin;
@@ -175,6 +185,7 @@ class Session extends ChangeNotifier {
     businessId = _prefs!.getInt(_kBusinessId);
     currentUser = _prefs!.getString(_kCurrentUser) ?? 'Owner';
     currentRole = _prefs!.getString(_kCurrentRole) ?? 'Owner';
+    staffMemberId = _prefs!.getInt(_kStaffId);
     localeCode = _prefs!.getString(_kLocaleCode) ?? 'en';
     flagSecureEnabled = _prefs!.getBool(_kFlagSecure) ?? false;
     biometricEnabled = _prefs!.getBool(_kBiometric) ?? false;
@@ -338,11 +349,51 @@ class Session extends ChangeNotifier {
     await _prefs!.remove(_kBusinessId);
     await _prefs!.remove(_kOnboarded);
     await _prefs!.remove(_kCurrentUser);
+    await _prefs!.remove(_kCurrentRole);
+    await _prefs!.remove(_kStaffId);
     mobile = null;
     token = null;
     businessId = null;
     currentUser = 'Owner';
+    currentRole = 'Owner';
+    staffMemberId = null;
     _locked = false;
+    notifyListeners();
+  }
+
+  Future<void> switchStaffSession({
+    required int businessId,
+    required String name,
+    required UserRole role,
+    required String phone,
+    int? staffId,
+  }) async {
+    _prefs ??= await SharedPreferences.getInstance();
+    this.businessId = businessId;
+    currentUser = name;
+    currentRole = role.label;
+    mobile = phone;
+    staffMemberId = staffId;
+    await _prefs!.setInt(_kBusinessId, businessId);
+    await _prefs!.setString(_kCurrentUser, name);
+    await _prefs!.setString(_kCurrentRole, role.label);
+    await _prefs!.setString(_kMobile, phone);
+    if (staffId != null) {
+      await _prefs!.setInt(_kStaffId, staffId);
+    } else {
+      await _prefs!.remove(_kStaffId);
+    }
+    notifyListeners();
+  }
+
+  Future<void> switchOwnerSession({String? name}) async {
+    _prefs ??= await SharedPreferences.getInstance();
+    currentUser = name ?? 'Owner';
+    currentRole = 'Owner';
+    staffMemberId = null;
+    await _prefs!.setString(_kCurrentUser, currentUser);
+    await _prefs!.setString(_kCurrentRole, 'Owner');
+    await _prefs!.remove(_kStaffId);
     notifyListeners();
   }
 

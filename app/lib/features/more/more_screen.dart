@@ -82,7 +82,9 @@ class _MoreTabState extends State<MoreTab> {
             label: Text(l10n.text('lock')),
           ),
       ]),
-      const SizedBox(height: 6),
+      const SizedBox(height: 10),
+      _buildActivePersonaCard(context, session),
+      const SizedBox(height: 12),
       InkWell(
         onTap: () => showBusinessSwitcher(context).then((changed) {
           if (changed == true) _load();
@@ -101,11 +103,12 @@ class _MoreTabState extends State<MoreTab> {
                     style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
               ]),
             ),
-            IconButton(
-              icon: const Icon(Icons.settings_outlined, size: 20, color: StitchColors.textTertiary),
-              tooltip: 'Edit Business Profile',
-              onPressed: () => nav(const BusinessEditScreen()),
-            ),
+            if (session.canManageBusinessSettings)
+              IconButton(
+                icon: const Icon(Icons.settings_outlined, size: 20, color: StitchColors.textTertiary),
+                tooltip: 'Edit Business Profile',
+                onPressed: () => nav(const BusinessEditScreen()),
+              ),
             const Icon(Icons.unfold_more_rounded, color: StitchColors.primary),
           ]),
         ),
@@ -113,22 +116,28 @@ class _MoreTabState extends State<MoreTab> {
       const SizedBox(height: 12),
       _buildCloudAccountTile(context, session),
       const SizedBox(height: 18),
-      _menuTile(context, Icons.swap_horiz_rounded, t('Switch business', 'व्यापार बदलें', 'ব্যবসা পরিবর্তন'), () => showBusinessSwitcher(context).then((changed) {
-        if (changed == true) _load();
-      })),
+      if (session.canManageBusinessSettings)
+        _menuTile(context, Icons.swap_horiz_rounded, t('Switch business', 'व्यापार बदलें', 'ব্যবসা পরিবর্তন'), () => showBusinessSwitcher(context).then((changed) {
+          if (changed == true) _load();
+        })),
       _menuTile(context, Icons.receipt_long_outlined, t('All Transactions', 'सभी लेन-देन', 'সকল লেনদেন'), () => nav(const TransactionListScreen())),
-      _menuTile(context, Icons.account_balance_outlined, t('GST Compliance Center', 'जीएसटी केंद्र', 'জিএসটি কেন্দ্র'), () => nav(const GstCenterScreen())),
-      _menuTile(context, Icons.account_balance_wallet_outlined, t('Cash & Bank Accounts Hub', 'कैश व बैंक खाते', 'ক্যাশ ও ব্যাংক অ্যাকাউন্ট'), () => nav(const CashBankHubScreen())),
+      if (session.canManageBusinessSettings || session.canExportTally)
+        _menuTile(context, Icons.account_balance_outlined, t('GST Compliance Center', 'जीएसटी केंद्र', 'জিএসটি কেন্দ্র'), () => nav(const GstCenterScreen())),
+      if (session.canViewBankBalances)
+        _menuTile(context, Icons.account_balance_wallet_outlined, t('Cash & Bank Accounts Hub', 'कैश व बैंक खाते', 'ক্যাশ ও ব্যাংক অ্যাকাউন্ট'), () => nav(const CashBankHubScreen())),
       _menuTile(context, Icons.bar_chart_rounded, t('Reports & analytics', 'रिपोर्ट्स', 'রিপোর্ট ও বিশ্লেষণ'), () => nav(const ReportsScreen())),
-      _menuTile(context, Icons.upload_file_rounded, t('Bulk import', 'डेटा आयात', 'বাল্ক আমদানি'), () => nav(const ImportScreen())),
-      _menuTile(context, Icons.history_rounded, t('MCA Audit Trail', 'ऑडिट लॉग', 'অডিট লগ'), () => nav(const AuditTrailScreen())),
+      if (session.canManageBusinessSettings)
+        _menuTile(context, Icons.upload_file_rounded, t('Bulk import', 'डेटा आयात', 'বাল্ক আমদানি'), () => nav(const ImportScreen())),
+      if (session.canViewAuditTrail)
+        _menuTile(context, Icons.history_rounded, t('MCA Audit Trail', 'ऑडिट लॉग', 'অডিট লগ'), () => nav(const AuditTrailScreen())),
       _menuTile(context, Icons.cloud_sync_rounded, t('Data sync', 'डेटा सिंक', 'ডাটা সিঙ্ক'), () => _syncMenu(context, sync), trailing: sync.pendingCount > 0
           ? Text('${sync.pendingCount} ${t('pending', 'बाकी', 'বাকি')}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.warning))
           : null),
-      _menuTile(
-        context,
-        Icons.cloud_upload_outlined,
-        t('Cloud Backup & Restore', 'क्लाउड बैकअप व रिस्टोर', 'ক্লাউড ব্যাকআপ ও রিস্টোর'),
+      if (session.canManageBusinessSettings)
+        _menuTile(
+          context,
+          Icons.cloud_upload_outlined,
+          t('Cloud Backup & Restore', 'क्लाउड बैकअप व रिस्टोर', 'ক্লাউড ব্যাকআপ ও রিস্টোর'),
         () => CloudBackupSheet.show(context),
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -148,7 +157,8 @@ class _MoreTabState extends State<MoreTab> {
           ),
         ),
       ),
-      _menuTile(context, Icons.backup_outlined, t('Data Export & Archive', 'डेटा निर्यात व संग्रह', 'ডাটা এক্সপোর্ট ও আর্কাইভ'), () => nav(const BackupExportScreen())),
+      if (session.canManageBusinessSettings || session.canExportTally)
+        _menuTile(context, Icons.backup_outlined, t('Data Export & Archive', 'डेटा निर्यात व संग्रह', 'ডাটা এক্সপোর্ট ও আর্কাইভ'), () => nav(const BackupExportScreen())),
       _menuTile(
         context,
         Icons.translate_rounded,
@@ -176,11 +186,13 @@ class _MoreTabState extends State<MoreTab> {
             onChanged: (val) => session.setBiometricEnabled(val),
           ),
         ),
-      _menuTile(context, Icons.tune_rounded, t('Invoice settings', 'बिल सेटिंग्स', 'ইনভয়েস সেটিংস'), () => nav(const InvoiceSettingsScreen())),
-      _menuTile(
-        context,
-        Icons.gpp_good_rounded,
-        t('GSTIN Autofill API Key', 'GSTIN ऑटो-फिल API कुंजी', 'GSTIN অটো-ফিল API কি'),
+      if (session.canManageBusinessSettings)
+        _menuTile(context, Icons.tune_rounded, t('Invoice settings', 'बिल सेटिंग्स', 'ইনভয়েস সেটিংস'), () => nav(const InvoiceSettingsScreen())),
+      if (session.canManageBusinessSettings)
+        _menuTile(
+          context,
+          Icons.gpp_good_rounded,
+          t('GSTIN Autofill API Key', 'GSTIN ऑटो-फिल API कुंजी', 'GSTIN অটো-ফিল API কি'),
         () => _showGstnApiKeyDialog(context, session),
         trailing: session.gstnApiKey.isNotEmpty
             ? const Icon(Icons.check_circle_rounded, color: StitchColors.success, size: 18)
@@ -194,10 +206,11 @@ class _MoreTabState extends State<MoreTab> {
             : t('App lock (set PIN)', 'ऐप लॉक (पिन सेट करें)', 'অ্যাপ লক (পিন সেট করুন)'),
         () => _pinSettings(context),
       ),
-      _menuTile(
-        context,
-        Icons.badge_outlined,
-        t('Staff & Role Permissions', 'स्टाफ व अनुमतियां', 'কর্মী ও অনুমতি'),
+      if (session.canManageStaff)
+        _menuTile(
+          context,
+          Icons.badge_outlined,
+          t('Staff & Role Permissions', 'स्टाफ व अनुमतियां', 'কর্মী ও অনুমতি'),
         () => nav(const StaffListScreen()),
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -217,6 +230,167 @@ class _MoreTabState extends State<MoreTab> {
         child: Text('Billket • local-first', style: TextStyle(fontSize: 11, color: StitchColors.textTertiary)),
       ),
     ]);
+  }
+
+  Widget _buildActivePersonaCard(BuildContext context, Session session) {
+    final isBn = session.localeCode == 'bn';
+    final isHi = session.localeCode == 'hi';
+    String t(String en, String hi, String bn) {
+      if (isBn) return bn;
+      if (isHi) return hi;
+      return en;
+    }
+
+    final isStaff = session.isStaff;
+    final role = session.role;
+
+    Color roleColor;
+    IconData roleIcon;
+    switch (role) {
+      case UserRole.owner:
+        roleColor = const Color(0xFF7C3AED);
+        roleIcon = Icons.workspace_premium_rounded;
+      case UserRole.admin:
+        roleColor = const Color(0xFF4F46E5);
+        roleIcon = Icons.admin_panel_settings_rounded;
+      case UserRole.cashier:
+        roleColor = const Color(0xFF0F766E);
+        roleIcon = Icons.point_of_sale_rounded;
+      case UserRole.salesman:
+        roleColor = const Color(0xFFD97706);
+        roleIcon = Icons.storefront_rounded;
+      case UserRole.deliveryBoy:
+        roleColor = const Color(0xFF16A34A);
+        roleIcon = Icons.two_wheeler_rounded;
+      case UserRole.accountant:
+        roleColor = const Color(0xFF2563EB);
+        roleIcon = Icons.account_balance_rounded;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isStaff ? roleColor.withValues(alpha: 0.05) : const Color(0xFFFAF5FF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isStaff ? roleColor.withValues(alpha: 0.25) : const Color(0xFFE9D5FF),
+          width: 1.2,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: isStaff ? roleColor.withValues(alpha: 0.15) : const Color(0xFFEDE9FE),
+              shape: BoxShape.circle,
+              border: Border.all(color: roleColor.withValues(alpha: 0.3)),
+            ),
+            child: Icon(roleIcon, color: roleColor, size: 24),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: roleColor,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        session.currentRole,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        isStaff
+                            ? t('Staff Session', 'स्टाफ सत्र', 'কর্মী সেশন')
+                            : t('Owner Session', 'मालिक सत्र', 'মালিক সেশন'),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: roleColor,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  session.currentUser,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  isStaff
+                      ? t('Access limited to owner permissions', 'मालिक द्वारा दी गई अनुमतियों तक सीमित', 'মালিক দ্বারা অনুমোদিত সীমা অনুযায়ী')
+                      : t('Full administrative & profit control', 'पूर्ण प्रशासनिक व लाभ नियंत्रण', 'সম্পূর্ণ প্রশাসনিক ও লাভ নিয়ন্ত্রণ'),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LoginScreen(
+                    isModal: true,
+                    initialStaffMode: !isStaff,
+                  ),
+                ),
+              ).then((_) => _load());
+            },
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              side: BorderSide(color: roleColor, width: 1.2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.swap_horiz_rounded, size: 16, color: roleColor),
+                const SizedBox(width: 4),
+                Text(
+                  isStaff
+                      ? t('Owner Login', 'मालिक लॉगिन', 'মালিক লগইন')
+                      : t('Staff Login', 'स्टाफ लॉगिन', 'স্টাফ লগইন'),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: roleColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _menuTile(BuildContext context, IconData icon, String title, VoidCallback onTap, {Widget? trailing}) => Padding(
@@ -529,20 +703,22 @@ class _MoreTabState extends State<MoreTab> {
                   showAppMessage(context, 'Sync initiated');
                 },
               ),
-              const Divider(height: 1),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.logout_rounded, color: StitchColors.error),
-                title: const Text('Disconnect Cloud Account', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: StitchColors.error)),
-                subtitle: const Text('Local SQLite billing and records stay completely safe on device'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await session.unlinkCloudSession();
-                  if (context.mounted) {
-                    showAppMessage(context, 'Cloud account disconnected');
-                  }
-                },
-              ),
+              if (session.canManageBusinessSettings) ...[
+                const Divider(height: 1),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.logout_rounded, color: StitchColors.error),
+                  title: const Text('Disconnect Cloud Account', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: StitchColors.error)),
+                  subtitle: const Text('Local SQLite billing and records stay completely safe on device'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await session.unlinkCloudSession();
+                    if (context.mounted) {
+                      showAppMessage(context, 'Cloud account disconnected');
+                    }
+                  },
+                ),
+              ],
             ],
           ),
         ),

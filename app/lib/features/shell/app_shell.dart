@@ -22,6 +22,7 @@ import '../sales/sales_order_builder_screen.dart';
 import '../sales/delivery_challan_builder_screen.dart';
 import '../purchases/purchase_order_builder_screen.dart';
 import '../suppliers/supplier_form.dart';
+import '../auth/login_screen.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/stitch_theme.dart';
 
@@ -220,9 +221,38 @@ class _AppShellState extends State<AppShell> {
                   icon: const Icon(Icons.notifications_none_rounded),
                 ),
                 const SizedBox(width: 4),
-                const Padding(
-                  padding: EdgeInsets.only(right: 12),
-                  child: InitialsAvatar('Owner'),
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => _showUserSessionSwitcher(context, session),
+                    child: Tooltip(
+                      message: '${session.currentUser} (${session.currentRole})',
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          InitialsAvatar(session.currentUser, size: 36),
+                          Positioned(
+                            bottom: -2,
+                            right: -2,
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: session.isStaff ? const Color(0xFF0F766E) : const Color(0xFF7C3AED),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 1.5),
+                              ),
+                              child: Icon(
+                                session.isStaff ? Icons.badge_rounded : Icons.workspace_premium_rounded,
+                                size: 10,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -292,6 +322,152 @@ class _AppShellState extends State<AppShell> {
                   icon: Icon(_icons[i]),
                   label: titles[i],
                 )),
+      ),
+    );
+  }
+
+  void _showUserSessionSwitcher(BuildContext context, Session session) {
+    final isStaff = session.isStaff;
+    final role = session.role;
+    Color roleColor;
+    IconData roleIcon;
+    switch (role) {
+      case UserRole.owner:
+        roleColor = const Color(0xFF7C3AED);
+        roleIcon = Icons.workspace_premium_rounded;
+      case UserRole.admin:
+        roleColor = const Color(0xFF4F46E5);
+        roleIcon = Icons.admin_panel_settings_rounded;
+      case UserRole.cashier:
+        roleColor = const Color(0xFF0F766E);
+        roleIcon = Icons.point_of_sale_rounded;
+      case UserRole.salesman:
+        roleColor = const Color(0xFFD97706);
+        roleIcon = Icons.storefront_rounded;
+      case UserRole.deliveryBoy:
+        roleColor = const Color(0xFF16A34A);
+        roleIcon = Icons.two_wheeler_rounded;
+      case UserRole.accountant:
+        roleColor = const Color(0xFF2563EB);
+        roleIcon = Icons.account_balance_rounded;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: roleColor.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: roleColor.withValues(alpha: 0.3)),
+                    ),
+                    child: Icon(roleIcon, color: roleColor, size: 26),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(color: roleColor, borderRadius: BorderRadius.circular(6)),
+                              child: Text(
+                                session.currentRole,
+                                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: Colors.white),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              isStaff ? 'Staff Account' : 'Business Owner',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: roleColor),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          session.currentUser,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.swap_horiz_rounded, color: Color(0xFF2563EB), size: 22),
+                ),
+                title: Text(
+                  isStaff ? 'Switch to Owner Login' : 'Switch to Staff / Cashier Login',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+                subtitle: Text(
+                  isStaff ? 'Log in with Owner phone / credentials' : 'Log in as Cashier, Salesman or Delivery agent',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFF94A3B8)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => LoginScreen(
+                        isModal: true,
+                        initialStaffMode: !isStaff,
+                      ),
+                    ),
+                  ).then((_) => _reloadTabs());
+                },
+              ),
+              if (session.hasPin) ...[
+                const Divider(height: 1),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.lock_rounded, color: Color(0xFFDC2626), size: 20),
+                  ),
+                  title: const Text('Lock App Now', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  subtitle: const Text('Requires 4-digit PIN or biometrics to unlock', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    session.lock();
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

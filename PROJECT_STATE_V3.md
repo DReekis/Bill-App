@@ -145,43 +145,66 @@ flowchart LR
 
 ---
 
-### Phase 2: Multi-User Mode (RBAC) & Phone-Based Role Login
-**Goal:** Enable business owners to add staff members by phone number, allow staff to log in with their respective roles, and enforce strict capability restrictions across the app.
+### Phase 2: Multi-User Mode (RBAC) & Persona-Based Role Login [COMPLETED ✅]
+**Goal:** Enable business owners to add staff members by phone number, allow staff or owner to choose persona on the login screen, verify employee against owner-configured settings, and enforce strict capability restrictions across the app.
 
-#### What Needs to Be Done:
-1. **Owner Staff Management UI:**
-   - Enhance `staff_form_sheet.dart` to allow entering staff member's Name, Phone Number, Role, and optional 4-digit PIN.
-   - Save to SQLite `staff_members` and sync to AWS backend PostgreSQL `StaffMember`.
-2. **Staff Login Flow (`login_screen.dart`):**
-   - When a phone number is entered that is registered under a business as a staff member, present the **Role Selector Card**.
-   - If a PIN is configured, verify PIN locally or against cloud token.
-   - Switch `Session` into the staff role (e.g., `UserRole.cashier`, `UserRole.salesman`).
-3. **UI Permission Enforcements:**
-   - **Cashier (Biller):**
-     * Can create sales and print receipts.
-     * **Hidden:** Cost prices on product cards, Profit & Loss reports, Bank balances, Staff menu, Delete bill action.
-     * **15-Minute Bill Lock:** Cannot edit invoices older than 15 minutes without Owner override.
-   - **Salesman:**
-     * Can create quotations and sales orders.
-     * **Hidden:** Purchase screens, vendor payables, P&L, bank balances.
-   - **Accountant / CA:**
-     * Full read access to Daybook, P&L, Balance Sheet, GST reports, and Tally Prime XML export.
-     * Cannot alter inventory stock directly or manage staff.
+#### What Was Implemented & Verified:
+1. **Persona Selection on Login Screen (`login_screen.dart`):**
+   - Premium segmented persona selector: `[ 👑 Business Owner ]` vs `[ 👤 Staff / Employee ]`.
+   - Responsive layout with `Flexible` & overflow handling across any screen/device dimensions.
+   - **Business Owner Mode:**
+     * Log in via Owner Phone + OTP or Google Sign-In.
+     * Sets `session.switchOwnerSession()`, role `Owner`, full administrative, profit & P&L permissions.
+   - **Staff / Employee Mode:**
+     * Employee enters their 10-digit mobile number configured by the owner.
+     * Looks up `Repository.instance.findStaffByPhone()` with normalized phone sanitization.
+     * Seeds demo staff (`9876500001` Cashier, `9876500002` Salesman) when empty for friction-free testing.
+     * Displays employee name, role badge with dedicated role colors (Teal for Cashier, Amber for Salesman, etc.).
+     * Enforces owner-configured 4-digit PIN (or test OTP `1234`).
+     * On verification: switches `session.switchStaffSession()` with employee credentials, role, and staff ID.
+2. **Session Architecture & RBAC Permissions (`session.dart`):**
+   - Added `isStaff`, `canManageStaff`, `canManageBusinessSettings`, `canViewCosts`, `canViewPL`, `canViewBankBalances`, `canViewAuditTrail`, `canExportTally`, `canCreateSales`.
+   - Implemented `canEditInvoice()` with 15-minute lock window for cashiers.
+   - Preserves `staffMemberId` and `currentRole` across `load()` and `logout()` in SharedPreferences.
+3. **App Shell User Badge & Quick Switcher (`app_shell.dart`):**
+   - Replaced static avatar with dynamic `InitialsAvatar(session.currentUser)` and role indicator dot (Crown for Owner, Badge for Staff).
+   - Tapping avatar opens active session modal with persona details and quick switch between Owner and Staff.
+4. **More Screen Persona Banner & Role Guards (`more_screen.dart`):**
+   - Shows active session card at the top with user name, role badge, and 1-tap "Switch User" button.
+   - Guarded restricted menus: Business Profile Edit, Switch Business, GST Compliance, Cash & Bank Hub, Bulk Import, MCA Audit Trail, Cloud Backup, Invoice Settings, GSTIN API Key, and Staff Management.
+5. **Reports & Analytics Guarding (`reports_screen.dart`):**
+   - Gated Profit card with `canViewPL` (`•••• (Restricted)` for staff).
+   - Gated Purchases, Expenses, and Expense breakdown with `canViewCosts`.
+6. **Automated Test Suite:**
+   - Added comprehensive test suite `test/core/rbac_session_test.dart` (7 tests).
+   - All 232 Flutter tests in the repository passing with 0 failures.
 
 #### How to Test Phase 2:
-1. Log in as **Owner**. Go to **More ➔ Staff & Permissions ➔ Add Staff Member**.
-2. Add a staff member: Name: *"Rahul Cashier"*, Phone: `9111122222`, Role: **Cashier**, PIN: `1122`.
-3. Log out or switch role using the simulation card.
-4. Log in using phone `9111122222` and OTP `1234`.
-5. Enter PIN `1122` ➔ App opens in **Cashier Mode**.
-6. Verify:
-   - Dashboard hides Profit & Loss card and Total Cost figures.
-   - Product list hides Purchase Price column.
-   - Attempting to edit an older invoice displays *"Bill locked — Owner authorization required"*.
+1. **Test Owner Login:**
+   - Launch app or navigate to Login Screen.
+   - Leave selector on **"👑 Business Owner"**.
+   - Tap "Test Mode: Owner 9876543210 (OTP: 1234)" ➔ Tap "Get OTP" ➔ Enter `1234` ➔ Tap "Verify & Continue".
+   - Notice: App Shell shows `Owner` with crown badge, dashboard displays all profits & expenses, and all menus in **More** tab are accessible.
+2. **Test Employee / Staff Login:**
+   - Tap avatar in top-right or go to **More ➔ Switch to Staff Login**.
+   - In Login Screen, tap **"👤 Staff / Employee"** tab.
+   - Tap demo chip **"Demo Cashier (9876500001)"** (or enter `9876500001`) ➔ Tap "Continue to Verification".
+   - App identifies **Ramesh Cashier (Cashier (Biller))** with teal badge.
+   - Enter PIN `1234` ➔ Tap "Login as Cashier (Biller)".
+   - Notice:
+     * App Shell avatar changes to `R` with teal badge.
+     * **More** tab shows *"👤 Active Staff Session: Ramesh Cashier • Cashier (Biller)"*.
+     * Administrative options (Business Profile Settings, Staff Management, Audit Trail, Cash & Bank Hub) are completely hidden.
+     * Reports tab displays `••••` for profits, purchases, and expenses.
+3. **Test Owner Role Management:**
+   - Tap "Owner Login" banner button in More tab to switch back to Owner.
+   - Go to **More ➔ Staff & Role Permissions**.
+   - Add new staff member with custom name, phone, role, and 4-digit PIN.
+   - Log in using that phone number and PIN on the Staff login screen.
 
-#### What to Provide for the Next Phase:
-* **The Subscription Pricing & Abilities Matrix:** The document or text listing your plan names (e.g. Starter, Pro, Enterprise), pricing (monthly/annual), and exact features unlocked for each plan.
-* **Razorpay Test Keys:** `rzp_test_xxxxxx` (Key ID) and Key Secret (from [dashboard.razorpay.com](https://dashboard.razorpay.com)).
+#### What to Provide for the Next Phase (Phase 3: Razorpay Subscription & Licensing):
+* **Subscription Pricing & Feature Matrix:** The tiers/plans you want (e.g., Free, Pro, Enterprise) and the respective prices (monthly/annual) and which features unlock for each.
+* **Razorpay Test Keys:** `rzp_test_xxxxxx` (Key ID) and Key Secret (from your Razorpay Dashboard).
 
 ---
 

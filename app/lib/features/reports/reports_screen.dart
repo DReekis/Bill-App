@@ -60,6 +60,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<Session>();
+    final canViewCosts = session.canViewCosts;
+    final canViewPL = session.canViewPL;
     final t = totals;
     final content = RefreshIndicator(
       onRefresh: _load,
@@ -97,33 +100,55 @@ class _ReportsScreenState extends State<ReportsScreen> {
             childAspectRatio: 1.8,
             children: [
               StatCard(label: 'Sales', value: formatPaise(t['sales']!), icon: Icons.trending_up_rounded, color: StitchColors.success),
-              StatCard(label: 'Profit', value: formatPaise(t['profit']!), icon: Icons.savings_outlined, color: t['profit']! >= 0 ? StitchColors.success : StitchColors.error),
-              StatCard(label: 'Purchases', value: formatPaise(t['purchases']!), icon: Icons.local_shipping_rounded, color: StitchColors.error),
-              StatCard(label: 'Expenses', value: formatPaise(t['expenses']!), icon: Icons.currency_rupee_rounded, color: StitchColors.error),
-              StatCard(label: 'Tax collected', value: formatPaise(_taxPaise(t)), icon: Icons.account_balance_rounded, color: StitchColors.warning),
+              StatCard(
+                label: 'Profit',
+                value: canViewPL ? formatPaise(t['profit']!) : '••••',
+                icon: Icons.savings_outlined,
+                color: (canViewPL && t['profit']! >= 0) ? StitchColors.success : StitchColors.error,
+              ),
+              StatCard(
+                label: 'Purchases',
+                value: canViewCosts ? formatPaise(t['purchases']!) : '••••',
+                icon: Icons.local_shipping_rounded,
+                color: StitchColors.error,
+              ),
+              StatCard(
+                label: 'Expenses',
+                value: canViewCosts ? formatPaise(t['expenses']!) : '••••',
+                icon: Icons.currency_rupee_rounded,
+                color: StitchColors.error,
+              ),
+              StatCard(
+                label: 'Tax collected',
+                value: canViewPL ? formatPaise(_taxPaise(t)) : '••••',
+                icon: Icons.account_balance_rounded,
+                color: StitchColors.warning,
+              ),
               StatCard(label: 'Collected', value: formatPaise(t['collected']!), icon: Icons.savings_rounded, color: StitchColors.success),
             ],
           ),
-        const SizedBox(height: 20),
-        const Text('Expense breakdown', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 10),
-        if (expenses == null)
-          const Center(child: CircularProgressIndicator(strokeWidth: 2))
-        else if (expenses!.isEmpty)
-          const AppEmptyState(icon: Icons.pie_chart_outline_rounded, title: 'No expenses this period')
-        else
-          ...expenses!.map((e) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: AppCard(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                  child: Row(children: [
-                    Expanded(
-                      child: Text(e.$1, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                    ),
-                    Text(formatPaise(e.$2), style: moneyStyle(fontSize: 13)),
-                  ]),
-                ),
-              )),
+        if (canViewCosts) ...[
+          const SizedBox(height: 20),
+          const Text('Expense breakdown', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          if (expenses == null)
+            const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          else if (expenses!.isEmpty)
+            const AppEmptyState(icon: Icons.pie_chart_outline_rounded, title: 'No expenses this period')
+          else
+            ...expenses!.map((e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: AppCard(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                    child: Row(children: [
+                      Expanded(
+                        child: Text(e.$1, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      ),
+                      Text(formatPaise(e.$2), style: moneyStyle(fontSize: 13)),
+                    ]),
+                  ),
+                )),
+        ],
         if (products != null && products!.isNotEmpty) ...[
           const SizedBox(height: 20),
           const Text('Top selling products', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
