@@ -9,6 +9,8 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 
 class CashBankHubScreen extends StatefulWidget {
   const CashBankHubScreen({super.key});
@@ -58,6 +60,22 @@ class _CashBankHubScreenState extends State<CashBankHubScreen> with SingleTicker
   }
 
   void _showAddBankAccountSheet([BankAccount? existing]) {
+    if (!SubscriptionService.instance.canAccessBankManagement) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Bank Accounts Hub',
+        description:
+            'Managing business bank accounts, digital UPI accounts, and automated ledger balancing is available on Silver and higher plans.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Multiple bank accounts & real-time balance tracking',
+          'Cheque inward/outward clearance lifecycle',
+          'Seamless Tally XML export integration',
+        ],
+      );
+      return;
+    }
+
     final nameCtrl = TextEditingController(text: existing?.bankName ?? '');
     final acctNameCtrl = TextEditingController(text: existing?.accountName ?? '');
     final numCtrl = TextEditingController(text: existing?.accountNumber ?? '');

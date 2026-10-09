@@ -10,6 +10,7 @@ import 'core/models.dart';
 import 'core/session.dart';
 import 'data/repositories.dart';
 import 'l10n/app_localizations.dart';
+import 'core/subscription_service.dart';
 import 'sync/sync_engine.dart';
 import 'features/auth/auth_flow.dart';
 import 'features/auth/pin_lock_screen.dart';
@@ -19,6 +20,7 @@ import 'theme/stitch_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Repository.instance.session.load();
+  await SubscriptionService.instance.init(businessId: Repository.instance.session.businessId);
   runApp(const BillApp());
 }
 
@@ -30,6 +32,7 @@ class BillApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider.value(value: Repository.instance.session),
         ChangeNotifierProvider.value(value: SyncEngine.instance),
+        ChangeNotifierProvider.value(value: SubscriptionService.instance),
       ],
       child: Consumer<Session>(
         builder: (context, session, _) => MaterialApp(

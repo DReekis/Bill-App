@@ -33,6 +33,13 @@ import {
   getTenantBackup,
   deleteTenantBackup,
 } from './services/backup.js';
+import {
+  SUBSCRIPTION_PLANS,
+  createSubscriptionOrder,
+  verifySubscriptionPayment,
+  handleRazorpayWebhook,
+  getBusinessSubscriptionStatus,
+} from './services/subscriptionService.js';
 
 export const app = Fastify({ logger: config.nodeEnv !== 'production' });
 
@@ -801,7 +808,10 @@ app.addHook('preHandler', async (request, reply) => {
     url === '/api/v1/admin/login' ||
     url.startsWith('/admin') ||
     url === '/' ||
-    url.startsWith('/public');
+    url.startsWith('/public') ||
+    url === '/api/v1/subscription/plans' ||
+    url === '/api/v1/subscription/webhook' ||
+    url.startsWith('/api/v1/subscription/status');
 
   if (isPublicRoute) return;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -1774,6 +1784,90 @@ app.get('/api/v1/admin/audit-logs', async (request, reply) => {
   const limit = Math.min(Number((request.query as any)?.limit ?? 100), 500);
   const logs = await getAuditLogs(limit, businessId);
   return reply.send(logs);
+});
+
+// Subscriptions & Razorpay Payment Gateway API
+const createOrderSchema = z.object({
+  businessId: z.string().min(1),
+  tier: z.string().min(1),
+});
+
+const verifyPaymentSchema = z.object({
+  businessId: z.string().min(1),
+  orderId: z.string().min(1),
+  paymentId: z.string().min(1),
+  signature: z.string().min(1),
+});
+
+app.get('/api/v1/subscription/plans', async (_request, reply) => {
+  return reply.send({
+    plans: Object.values(SUBSCRIPTION_PLANS),
+  });
+});
+
+app.get('/api/v1/subscription/status/:businessId', async (request, reply) => {
+  const { businessId } = request.params as { businessId: string };
+  try {
+    const status = await getBusinessSubscriptionStatus(businessId);
+    return reply.send(status);
+  } catch (err: any) {
+    return reply.code(404).send({ error: err.message || 'Business not found' });
+  }
+});
+
+app.post('/api/v1/subscription/create-order', async (request, reply) => {
+  const parsed = createOrderSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'Invalid order request', details: parsed.error.issues });
+  }
+
+  const userId = (request as any).user?.sub;
+  try {
+    const orderData = await createSubscriptionOrder({
+      businessId: parsed.data.businessId,
+      tier: parsed.data.tier,
+      userId,
+    });
+    return reply.code(201).send(orderData);
+  } catch (err: any) {
+    return reply.code(400).send({ error: err.message || 'Failed to create subscription order' });
+  }
+});
+
+app.post('/api/v1/subscription/verify-payment', async (request, reply) => {
+  const parsed = verifyPaymentSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'Invalid verification request', details: parsed.error.issues });
+  }
+
+  const userId = (request as any).user?.sub;
+  try {
+    const verification = await verifySubscriptionPayment({
+      businessId: parsed.data.businessId,
+      orderId: parsed.data.orderId,
+      paymentId: parsed.data.paymentId,
+      signature: parsed.data.signature,
+      userId,
+    });
+    return reply.send(verification);
+  } catch (err: any) {
+    return reply.code(400).send({ error: err.message || 'Payment verification failed' });
+  }
+});
+
+app.post('/api/v1/subscription/webhook', async (request, reply) => {
+  const signature = request.headers['x-razorpay-signature'] as string;
+  if (!signature) {
+    return reply.code(400).send({ error: 'Missing x-razorpay-signature header' });
+  }
+
+  try {
+    const rawBody = typeof request.body === 'string' ? request.body : JSON.stringify(request.body);
+    const result = await handleRazorpayWebhook({ rawBody, signature });
+    return reply.send(result);
+  } catch (err: any) {
+    return reply.code(400).send({ error: err.message || 'Webhook processing failed' });
+  }
 });
 
 const start = async () => {

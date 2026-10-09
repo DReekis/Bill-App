@@ -69,6 +69,7 @@ model Business {
   ledger             LedgerEntry[]
   syncQueue          SyncQueueItem[]
   auditLogs          AuditLog[]
+  subscriptionOrders SubscriptionOrder[]
 }
 
 model Customer {
@@ -548,3 +549,21 @@ model Cheque {
   notes         String?
   createdAt     DateTime  @default(now())
 }
+
+model SubscriptionOrder {
+  id             String    @id @default(cuid())
+  businessId     String
+  business       Business  @relation(fields: [businessId], references: [id])
+  orderId        String    @unique
+  tier           String
+  amount         Int
+  currency       String    @default("INR")
+  status         String    @default("created")
+  paymentId      String?   @unique
+  signature      String?
+  receipt        String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  paidAt         DateTime?
+}
+

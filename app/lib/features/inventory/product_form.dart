@@ -8,6 +8,8 @@ import '../../core/units.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 
 class ProductFormSheet extends StatefulWidget {
   const ProductFormSheet({
@@ -119,6 +121,29 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
     }
     setState(() => saving = true);
     try {
+      if (widget.product == null) {
+        final currentCount = await Repository.instance.getProductsCount(widget.businessId);
+        if (!SubscriptionService.instance.canAddItem(currentCount)) {
+          setState(() => saving = false);
+          if (mounted) {
+            UpgradePaywallSheet.show(
+              context,
+              featureName: 'Product Catalog Limit Reached',
+              description:
+                  'You have added $currentCount items. Upgrade your plan to expand your catalog and enable barcode tools.',
+              requiredTier: SubscriptionTier.starter,
+              bulletPoints: const [
+                'Starter: Up to 1,000 Items',
+                'Silver: Up to 5,000 Items + Barcode Scanning',
+                'Gold: Up to 25,000 Items Catalog',
+                'Business Pro: Unlimited Items',
+              ],
+            );
+          }
+          return;
+        }
+      }
+
       final currentStock = widget.product?.stock ?? 0;
       final addedStock = int.tryParse(_addStock.text.trim()) ?? 0;
       final openingStock = int.tryParse(_openingStock.text.trim()) ?? 0;

@@ -17,6 +17,8 @@ import '../customers/customer_form.dart';
 import '../inventory/product_form.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import 'barcode_scanner_screen.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 
 class InvoiceBuilderScreen extends StatefulWidget {
   const InvoiceBuilderScreen({super.key, this.customerId, this.existingInvoiceId});
@@ -1421,6 +1423,26 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
               : await Repository.instance.nextInvoiceNumber(businessId, biz.invoicePrefix));
 
       if (widget.existingInvoiceId == null) {
+        final currentCount = await Repository.instance.getInvoicesCount(businessId);
+        if (!SubscriptionService.instance.canCreateSalesInvoice(currentCount)) {
+          setState(() => saving = false);
+          if (mounted) {
+            UpgradePaywallSheet.show(
+              context,
+              featureName: 'Free Plan Invoice Limit Reached',
+              description:
+                  'You have created $currentCount sales invoices. The Free tier includes 10 sales invoices per year.\n\nUpgrade to Starter or Silver for unlimited billing.',
+              requiredTier: SubscriptionTier.starter,
+              bulletPoints: const [
+                'Unlimited Sales & Purchase Invoices',
+                'Sales & Purchase Returns + Quotes',
+                '500 Customers & 1,000 Items Catalog',
+              ],
+            );
+          }
+          return;
+        }
+
         final isAvail = await Repository.instance.isInvoiceNumberAvailable(businessId, number);
         if (!isAvail) {
           final freshNumber = await Repository.instance.peekNextInvoiceNumber(businessId, biz.invoicePrefix);

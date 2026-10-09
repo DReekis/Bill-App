@@ -21,6 +21,7 @@ node_modules/
 backend/node_modules/
 dist/
 backend/dist/
+qa/
 backend/prisma/*.db
 backend/prisma/*.db-journal
 backend/prisma/*.db-wal
@@ -37,6 +38,7 @@ yarn-error.log*
 
 # Flutter / Dart Build & Tooling
 .dart_tool/
+app/.lib/
 app/.dart_tool/
 .packages
 .pub-cache/

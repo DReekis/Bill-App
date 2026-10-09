@@ -10,6 +10,8 @@ class ApiClient {
     defaultValue: 'http://43.204.237.49',
   );
 
+  static final ApiClient instance = ApiClient();
+
   ApiClient({String? baseUrl})
       : _explicitBaseUrl = baseUrl != null,
         _baseUrl = baseUrl ?? _cachedBaseUrl ?? defaultBaseUrl {
@@ -115,25 +117,35 @@ class ApiClient {
   Future<http.Response> post(
     String path,
     Map<String, dynamic> body, {
+    String? token,
     Map<String, String>? headers,
     Duration timeout = const Duration(seconds: 20),
   }) async {
     await ensureReady();
+    final effectiveHeaders = _headers(extra: headers);
+    if (token != null && token.isNotEmpty) {
+      effectiveHeaders['Authorization'] = 'Bearer $token';
+    }
     final uri = Uri.parse('$_baseUrl$path');
     return await http
-        .post(uri, headers: _headers(extra: headers), body: jsonEncode(body))
+        .post(uri, headers: effectiveHeaders, body: jsonEncode(body))
         .timeout(timeout);
   }
 
   Future<http.Response> get(
     String path, {
+    String? token,
     Map<String, String>? headers,
     Duration timeout = const Duration(seconds: 20),
   }) async {
     await ensureReady();
+    final effectiveHeaders = _headers(extra: headers);
+    if (token != null && token.isNotEmpty) {
+      effectiveHeaders['Authorization'] = 'Bearer $token';
+    }
     final uri = Uri.parse('$_baseUrl$path');
     return await http
-        .get(uri, headers: _headers(extra: headers))
+        .get(uri, headers: effectiveHeaders)
         .timeout(timeout);
   }
 

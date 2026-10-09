@@ -25,6 +25,8 @@ import '../staff/staff_list_screen.dart';
 import '../auth/login_screen.dart';
 import '../backup/cloud_backup_sheet.dart';
 import 'import_screen.dart';
+import '../subscription/subscription_plans_screen.dart';
+import '../../core/subscription_service.dart';
 import '../../l10n/app_localizations.dart';
 
 export '../customers/parties_tab.dart' show PartiesTab;
@@ -115,7 +117,30 @@ class _MoreTabState extends State<MoreTab> {
       ),
       const SizedBox(height: 12),
       _buildCloudAccountTile(context, session),
+      const SizedBox(height: 12),
+      _buildSubscriptionBannerCard(context),
       const SizedBox(height: 18),
+      _menuTile(
+        context,
+        Icons.workspace_premium_rounded,
+        t('Subscription & Plans', 'सब्सक्रिप्शन और प्लान', 'সাবস্ক্রিপশন ও প্ল্যান'),
+        () => nav(const SubscriptionPlansScreen()),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            SubscriptionService.instance.currentTier.displayName,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF2563EB),
+            ),
+          ),
+        ),
+      ),
       if (session.canManageBusinessSettings)
         _menuTile(context, Icons.swap_horiz_rounded, t('Switch business', 'व्यापार बदलें', 'ব্যবসা পরিবর্তন'), () => showBusinessSwitcher(context).then((changed) {
           if (changed == true) _load();
@@ -386,6 +411,127 @@ class _MoreTabState extends State<MoreTab> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionBannerCard(BuildContext context) {
+    final subService = SubscriptionService.instance;
+    final tier = subService.currentTier;
+    final isFree = tier == SubscriptionTier.free;
+    final isExpired = subService.isExpired;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isFree
+              ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+              : [const Color(0xFF1E3A8A), const Color(0xFF2563EB)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.workspace_premium_rounded,
+              color: Colors.amber,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      tier.displayName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isExpired
+                            ? Colors.red
+                            : (isFree ? Colors.white24 : Colors.green),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        isExpired ? 'EXPIRED' : (isFree ? 'FREE TIER' : 'ACTIVE'),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isFree
+                      ? 'Upgrade for unlimited invoices & orders'
+                      : (isExpired
+                          ? 'Renew now to restore full access'
+                          : '${subService.daysRemaining} days remaining in cycle'),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.85),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF0F172A),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: const Size(0, 36),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SubscriptionPlansScreen(),
+                ),
+              ).then((_) => _load());
+            },
+            child: Text(
+              isFree ? 'Upgrade' : 'Manage',
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+              ),
             ),
           ),
         ],

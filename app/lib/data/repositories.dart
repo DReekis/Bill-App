@@ -1947,6 +1947,42 @@ class Repository {
     return rows.map(Invoice.fromMap).toList();
   }
 
+  Future<int> getInvoicesCount(int businessId) async {
+    final db = await _database;
+    final res = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM invoices WHERE business_id = ?',
+      [businessId],
+    );
+    return res.isNotEmpty ? (res.first['cnt'] as int? ?? 0) : 0;
+  }
+
+  Future<int> getCustomersCount(int businessId) async {
+    final db = await _database;
+    final res = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM customers WHERE business_id = ?',
+      [businessId],
+    );
+    return res.isNotEmpty ? (res.first['cnt'] as int? ?? 0) : 0;
+  }
+
+  Future<int> getSuppliersCount(int businessId) async {
+    final db = await _database;
+    final res = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM suppliers WHERE business_id = ?',
+      [businessId],
+    );
+    return res.isNotEmpty ? (res.first['cnt'] as int? ?? 0) : 0;
+  }
+
+  Future<int> getProductsCount(int businessId) async {
+    final db = await _database;
+    final res = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM products WHERE business_id = ?',
+      [businessId],
+    );
+    return res.isNotEmpty ? (res.first['cnt'] as int? ?? 0) : 0;
+  }
+
   Future<Invoice?> invoice(int businessId, int id) async {
     final db = await _database;
     final rows = await db.query('invoices',

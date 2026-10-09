@@ -12,6 +12,8 @@ import '../purchases/purchase_order_builder_screen.dart';
 import '../purchases/purchase_order_detail_screen.dart';
 import '../sales/sales_order_builder_screen.dart';
 import '../sales/sales_order_detail_screen.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key, this.initialTab = 0});
@@ -338,6 +340,22 @@ class _OrdersScreenState extends State<OrdersScreen> with SingleTickerProviderSt
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
+          if (!SubscriptionService.instance.canAccessSalesOrders) {
+            UpgradePaywallSheet.show(
+              context,
+              featureName: isSaleOrderTab ? 'Sales Orders' : 'Purchase Orders',
+              description:
+                  'Booking Sales and Purchase Orders with automatic inventory reservation is unlocked on Silver and higher plans.',
+              requiredTier: SubscriptionTier.silver,
+              bulletPoints: const [
+                'Sales & Purchase Orders lifecycle',
+                'Delivery Challan integration',
+                'Government E-Invoice IRN & E-Way Bills',
+              ],
+            );
+            return;
+          }
+
           if (isSaleOrderTab) {
             Navigator.push(
               context,

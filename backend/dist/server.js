@@ -14,6 +14,7 @@ import { prisma } from './services/db.js';
 import { getAdminOverview, listAdminBusinesses, getAdminBusinessDetail, updateBusinessSubscription, listAdminUsers, updateUserRole, createDatabaseBackup, listDatabaseBackups, getSystemHealthTelemetry, getSyncQueueInspector, retrySyncQueueItem, getAuditLogs, bootstrapAdminUser, } from './services/admin.js';
 import { adminLoginLimiter } from './lib/rate_limiter.js';
 import { uploadTenantBackup, listTenantBackups, getTenantBackup, deleteTenantBackup, } from './services/backup.js';
+import { SUBSCRIPTION_PLANS, createSubscriptionOrder, verifySubscriptionPayment, handleRazorpayWebhook, getBusinessSubscriptionStatus, } from './services/subscriptionService.js';
 export const app = Fastify({ logger: config.nodeEnv !== 'production' });
 await app.register(fastifyCors, {
     origin: true,
@@ -37,6 +38,7 @@ const authRegisterSchema = z.object({
     name: z.string().min(2),
     email: z.string().email(),
     password: z.string().min(6),
+    businessName: z.string().optional(),
 });
 const authLoginSchema = z.object({
     email: z.string().email(),
@@ -585,96 +587,135 @@ app.get('/api/v1/gst/lookup/:gstin', async (request, reply) => {
             isOnlineFetched: true,
         };
     }
-    // Live lookup query to public GST directory if API key is present or available
-    const apiKey = process.env.GST_API_KEY;
-    if (config.nodeEnv !== 'test' && apiKey) {
+    // Live lookup query to public GST directory (genuine live lookup via jamku / gstincheck)
+    if (config.nodeEnv !== 'test' && isValidFormat) {
+        // 1. Try public live GST portal endpoint (no key required, returns real registered tradeName & address)
         try {
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 2500);
-            const res = await fetch(`https://sheet.gstincheck.co.in/check/${apiKey}/${gstin}`, {
+            const timeout = setTimeout(() => controller.abort(), 4000);
+            const res = await fetch(`https://gst.jamku.app/api/gstin/${gstin}`, {
                 signal: controller.signal,
+                headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                },
             });
             clearTimeout(timeout);
             if (res.ok) {
                 const json = await res.json();
-                if (json?.flag === true && json?.data) {
+                if (json?.success === true && json?.data) {
                     const d = json.data;
-                    const addr = d.pradr?.addr;
-                    const tradeName = d.tradeNam?.trim() || null;
-                    const legalName = d.lgnm?.trim() || null;
-                    const city = addr?.dst || addr?.city || capital.city;
-                    const pinCode = addr?.pncd || capital.pinCode;
-                    const addressParts = [addr?.bno, addr?.bnm, addr?.st, addr?.loc, city, addr?.stcd, pinCode]
-                        .filter(Boolean)
-                        .join(', ');
-                    return {
-                        gstin,
-                        valid: true,
-                        businessName: tradeName || legalName,
-                        tradeName,
-                        legalName,
-                        ownerName: legalName,
-                        pan,
-                        stateCode,
-                        state,
-                        city,
-                        address: addressParts,
-                        pinCode,
-                        constitution: d.ctb || constitution,
-                        industry,
-                        isComposition: String(d.dty || '').toLowerCase().includes('composition'),
-                        status: d.sts || 'Active',
-                        registrationDate: d.rgdt || null,
-                        isOnlineFetched: true,
-                    };
+                    const tradeName = (d.tradeName || d.lgnm || '').trim();
+                    const legalName = (d.lgnm || d.tradeName || '').trim();
+                    const fullAddress = (d.adr || '').trim();
+                    const pinMatch = fullAddress.match(/\b([1-9][0-9]{5})\b/);
+                    const pinCode = d.pincode || (pinMatch ? pinMatch[1] : capital.pinCode);
+                    let city = capital.city;
+                    if (fullAddress) {
+                        const parts = fullAddress.split(',').map((s) => s.trim()).filter(Boolean);
+                        if (parts.length >= 3) {
+                            const potentialCity = parts[parts.length - 3];
+                            if (potentialCity && potentialCity.length > 2 && !/\d/.test(potentialCity)) {
+                                city = potentialCity;
+                            }
+                        }
+                    }
+                    if (tradeName.length > 0 || legalName.length > 0 || fullAddress.length > 0) {
+                        return {
+                            gstin,
+                            valid: true,
+                            businessName: tradeName || legalName,
+                            tradeName: tradeName || legalName,
+                            legalName: legalName || tradeName,
+                            ownerName: legalName,
+                            pan,
+                            stateCode,
+                            state,
+                            city,
+                            address: fullAddress,
+                            pinCode,
+                            constitution: d.ctb || constitution,
+                            industry,
+                            isComposition: String(d.dty || '').toLowerCase().includes('composition'),
+                            status: d.sts || 'Active',
+                            registrationDate: d.rgdt || null,
+                            isOnlineFetched: true,
+                        };
+                    }
                 }
             }
         }
         catch {
-            // Network lookup timed out or failed, return deterministic fallback
+            // Primary live lookup timed out or failed, try secondary if key is present
+        }
+        // 2. Try sheet.gstincheck.co.in if private API key is configured
+        const apiKey = process.env.GST_API_KEY;
+        if (apiKey) {
+            try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 3000);
+                const res = await fetch(`https://sheet.gstincheck.co.in/check/${apiKey}/${gstin}`, {
+                    signal: controller.signal,
+                });
+                clearTimeout(timeout);
+                if (res.ok) {
+                    const json = await res.json();
+                    if (json?.flag === true && json?.data) {
+                        const d = json.data;
+                        const addr = d.pradr?.addr;
+                        const tradeName = d.tradeNam?.trim() || null;
+                        const legalName = d.lgnm?.trim() || null;
+                        const city = addr?.dst || addr?.city || capital.city;
+                        const pinCode = addr?.pncd || capital.pinCode;
+                        const addressParts = [addr?.bno, addr?.bnm, addr?.st, addr?.loc, city, addr?.stcd, pinCode]
+                            .filter(Boolean)
+                            .join(', ');
+                        return {
+                            gstin,
+                            valid: true,
+                            businessName: tradeName || legalName,
+                            tradeName,
+                            legalName,
+                            ownerName: legalName,
+                            pan,
+                            stateCode,
+                            state,
+                            city,
+                            address: addressParts,
+                            pinCode,
+                            constitution: d.ctb || constitution,
+                            industry,
+                            isComposition: String(d.dty || '').toLowerCase().includes('composition'),
+                            status: d.sts || 'Active',
+                            registrationDate: d.rgdt || null,
+                            isOnlineFetched: true,
+                        };
+                    }
+                }
+            }
+            catch {
+                // Secondary network lookup timed out or failed
+            }
         }
     }
-    // Intelligent deterministic fallback so business name, city, and address are NEVER blank
-    const entityChar = pan.length >= 4 ? pan[3] : 'P';
-    const nameInitial = pan.length >= 5 ? pan[4] : 'A';
-    let defaultBusinessName = `${nameInitial}-Star Enterprises`;
-    let defaultLegalName = `${nameInitial} Commercial Proprietorship`;
-    if (entityChar === 'C') {
-        defaultBusinessName = `${nameInitial} Corp Commercial Pvt Ltd`;
-        defaultLegalName = `${nameInitial} Corp Commercial Private Limited`;
-    }
-    else if (entityChar === 'F') {
-        defaultBusinessName = `${nameInitial} & Sons Trading LLP`;
-        defaultLegalName = `${nameInitial} & Associates LLP`;
-    }
-    else if (entityChar === 'H') {
-        defaultBusinessName = `${nameInitial} Family Provisions (HUF)`;
-        defaultLegalName = `${nameInitial} Family HUF`;
-    }
-    else if (entityChar === 'T' || entityChar === 'A') {
-        defaultBusinessName = `${nameInitial} Trust Commercial Agency`;
-        defaultLegalName = `${nameInitial} Commercial Trust`;
-    }
-    const defaultAddress = isValidFormat
-        ? `Shop No. 12, Commercial Market, Main Road, ${capital.city}, ${state} - ${capital.pinCode}`
-        : '';
+    // Clean, honest fallback: state and PAN are accurately derived; no fake placeholder names/addresses
     return {
         gstin,
         valid: isValidFormat,
-        businessName: isValidFormat ? defaultBusinessName : '',
-        tradeName: isValidFormat ? defaultBusinessName : '',
-        legalName: isValidFormat ? defaultLegalName : '',
-        ownerName: isValidFormat ? defaultLegalName : '',
+        businessName: '',
+        tradeName: '',
+        legalName: '',
+        ownerName: '',
         pan,
         stateCode,
         state,
-        city: isValidFormat ? capital.city : '',
-        address: defaultAddress,
-        pinCode: isValidFormat ? capital.pinCode : '',
+        city: '',
+        address: '',
+        pinCode: '',
         constitution,
         industry,
         isComposition: false,
-        status: 'Active',
+        status: isValidFormat ? 'Format Valid' : 'Invalid',
         isOnlineFetched: false,
     };
 });
@@ -687,7 +728,10 @@ app.addHook('preHandler', async (request, reply) => {
         url === '/api/v1/admin/login' ||
         url.startsWith('/admin') ||
         url === '/' ||
-        url.startsWith('/public');
+        url.startsWith('/public') ||
+        url === '/api/v1/subscription/plans' ||
+        url === '/api/v1/subscription/webhook' ||
+        url.startsWith('/api/v1/subscription/status');
     if (isPublicRoute)
         return;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -1583,6 +1627,84 @@ app.get('/api/v1/admin/audit-logs', async (request, reply) => {
     const limit = Math.min(Number(request.query?.limit ?? 100), 500);
     const logs = await getAuditLogs(limit, businessId);
     return reply.send(logs);
+});
+// Subscriptions & Razorpay Payment Gateway API
+const createOrderSchema = z.object({
+    businessId: z.string().min(1),
+    tier: z.string().min(1),
+});
+const verifyPaymentSchema = z.object({
+    businessId: z.string().min(1),
+    orderId: z.string().min(1),
+    paymentId: z.string().min(1),
+    signature: z.string().min(1),
+});
+app.get('/api/v1/subscription/plans', async (_request, reply) => {
+    return reply.send({
+        plans: Object.values(SUBSCRIPTION_PLANS),
+    });
+});
+app.get('/api/v1/subscription/status/:businessId', async (request, reply) => {
+    const { businessId } = request.params;
+    try {
+        const status = await getBusinessSubscriptionStatus(businessId);
+        return reply.send(status);
+    }
+    catch (err) {
+        return reply.code(404).send({ error: err.message || 'Business not found' });
+    }
+});
+app.post('/api/v1/subscription/create-order', async (request, reply) => {
+    const parsed = createOrderSchema.safeParse(request.body);
+    if (!parsed.success) {
+        return reply.code(400).send({ error: 'Invalid order request', details: parsed.error.issues });
+    }
+    const userId = request.user?.sub;
+    try {
+        const orderData = await createSubscriptionOrder({
+            businessId: parsed.data.businessId,
+            tier: parsed.data.tier,
+            userId,
+        });
+        return reply.code(201).send(orderData);
+    }
+    catch (err) {
+        return reply.code(400).send({ error: err.message || 'Failed to create subscription order' });
+    }
+});
+app.post('/api/v1/subscription/verify-payment', async (request, reply) => {
+    const parsed = verifyPaymentSchema.safeParse(request.body);
+    if (!parsed.success) {
+        return reply.code(400).send({ error: 'Invalid verification request', details: parsed.error.issues });
+    }
+    const userId = request.user?.sub;
+    try {
+        const verification = await verifySubscriptionPayment({
+            businessId: parsed.data.businessId,
+            orderId: parsed.data.orderId,
+            paymentId: parsed.data.paymentId,
+            signature: parsed.data.signature,
+            userId,
+        });
+        return reply.send(verification);
+    }
+    catch (err) {
+        return reply.code(400).send({ error: err.message || 'Payment verification failed' });
+    }
+});
+app.post('/api/v1/subscription/webhook', async (request, reply) => {
+    const signature = request.headers['x-razorpay-signature'];
+    if (!signature) {
+        return reply.code(400).send({ error: 'Missing x-razorpay-signature header' });
+    }
+    try {
+        const rawBody = typeof request.body === 'string' ? request.body : JSON.stringify(request.body);
+        const result = await handleRazorpayWebhook({ rawBody, signature });
+        return reply.send(result);
+    }
+    catch (err) {
+        return reply.code(400).send({ error: err.message || 'Webhook processing failed' });
+    }
 });
 const start = async () => {
     try {

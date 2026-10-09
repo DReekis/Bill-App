@@ -20,6 +20,11 @@ export const config = {
       process.env.GOOGLE_IOS_CLIENT_ID ||
       '1088562819881-sfbc09v1khbn6188ps24o2kd5qmp39hu.apps.googleusercontent.com',
   },
+  razorpay: {
+    keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_TlVBcJ5F1D187V',
+    keySecret: process.env.RAZORPAY_KEY_SECRET || 'wEQAJKA0T1iJNITsDV9jRRI3',
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || 'wEQAJKA0T1iJNITsDV9jRRI3',
+  },
 };
 
 export const ALLOWED_GOOGLE_CLIENT_IDS = [

@@ -246,6 +246,27 @@ class AppDatabase {
     await _addColumnIfNotExists(db, 'invoice_customization_settings', 'show_declaration', 'INTEGER NOT NULL DEFAULT 1');
     await _addColumnIfNotExists(db, 'invoice_customization_settings', 'bank_qr_placement', "TEXT NOT NULL DEFAULT 'left'");
     await _addColumnIfNotExists(db, 'invoice_customization_settings', 'signature_placement', "TEXT NOT NULL DEFAULT 'right'");
+
+    await _addColumnIfNotExists(db, 'businesses', 'subscription_tier', "TEXT DEFAULT 'free'");
+    await _addColumnIfNotExists(db, 'businesses', 'subscription_status', "TEXT DEFAULT 'active'");
+    await _addColumnIfNotExists(db, 'businesses', 'subscription_expires_at', 'TEXT');
+
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS subscription_orders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id TEXT NOT NULL UNIQUE,
+          tier TEXT NOT NULL,
+          amount INTEGER NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'INR',
+          status TEXT NOT NULL DEFAULT 'created',
+          payment_id TEXT UNIQUE,
+          signature TEXT,
+          created_at TEXT NOT NULL,
+          paid_at TEXT
+        );
+      ''');
+    } catch (_) {}
   }
 
   /// Lets tests drive the real repository against an in-memory database.
@@ -295,7 +316,10 @@ class AppDatabase {
         quotation_prefix TEXT DEFAULT 'EST',
         quotation_sequence INTEGER DEFAULT 0,
         purchase_prefix TEXT DEFAULT 'PUR',
-        purchase_sequence INTEGER DEFAULT 0
+        purchase_sequence INTEGER DEFAULT 0,
+        subscription_tier TEXT DEFAULT 'free',
+        subscription_status TEXT DEFAULT 'active',
+        subscription_expires_at TEXT
       )
     ''');
 

@@ -3,23 +3,56 @@ import { signAccessToken } from '../lib/jwt.js';
 import { prisma } from './db.js';
 import { config, ALLOWED_GOOGLE_CLIENT_IDS } from '../config.js';
 export async function registerUser(input) {
-    const existing = await prisma.user.findUnique({ where: { email: input.email } });
+    const cleanEmail = input.email.trim().toLowerCase();
+    const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (existing) {
         throw new Error('USER_EXISTS');
     }
     const user = await prisma.user.create({
         data: {
-            name: input.name,
-            email: input.email,
+            name: input.name.trim(),
+            email: cleanEmail,
             passwordHash: await hashPassword(input.password),
             role: 'owner',
         },
     });
-    const token = signAccessToken({ sub: user.id, email: user.email, role: user.role });
-    return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+    // Provision dedicated tenant space for the new user
+    const business = await prisma.business.create({
+        data: {
+            name: input.businessName?.trim() || `${user.name}'s Business`,
+            ownerName: user.name,
+            email: cleanEmail,
+            ownerId: user.id,
+        },
+    });
+    const token = signAccessToken({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        businessId: business.id,
+    });
+    return {
+        token,
+        user: {
+            id: user.id,
+            name: user.name,
+            displayName: user.name,
+            email: user.email,
+            role: user.role,
+            provider: 'emailPassword',
+        },
+        business: {
+            id: business.id,
+            name: business.name,
+        },
+    };
 }
 export async function loginUser(input) {
-    const user = await prisma.user.findUnique({ where: { email: input.email } });
+    const cleanEmail = input.email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+        where: { email: cleanEmail },
+        include: { businesses: true },
+    });
     if (!user) {
         throw new Error('INVALID_CREDENTIALS');
     }
@@ -27,8 +60,39 @@ export async function loginUser(input) {
     if (!valid) {
         throw new Error('INVALID_CREDENTIALS');
     }
-    const token = signAccessToken({ sub: user.id, email: user.email, role: user.role });
-    return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+    // Ensure default business tenant space exists
+    let business = user.businesses[0];
+    if (!business) {
+        business = await prisma.business.create({
+            data: {
+                name: `${user.name}'s Business`,
+                ownerName: user.name,
+                email: user.email,
+                ownerId: user.id,
+            },
+        });
+    }
+    const token = signAccessToken({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        businessId: business.id,
+    });
+    return {
+        token,
+        user: {
+            id: user.id,
+            name: user.name,
+            displayName: user.name,
+            email: user.email,
+            role: user.role,
+            provider: 'emailPassword',
+        },
+        business: {
+            id: business.id,
+            name: business.name,
+        },
+    };
 }
 export async function verifyGoogleIdToken(idToken, fallback) {
     // Test / Mock deterministic bypass for automated test suites and simulation
@@ -113,9 +177,9 @@ export async function googleAuth(input) {
     if (!business) {
         business = await prisma.business.create({
             data: {
-                name: input.businessName || `${input.name}'s Business`,
-                ownerName: input.name,
-                email: input.email,
+                name: input.businessName || `${name}'s Business`,
+                ownerName: name,
+                email,
                 ownerId: user.id,
             },
         });
@@ -134,7 +198,9 @@ export async function googleAuth(input) {
             displayName: user.name,
             email: user.email,
             role: user.role,
-            avatarUrl: input.avatarUrl,
+            avatarUrl: avatarUrl ?? input.avatarUrl,
+            photoUrl: avatarUrl ?? input.avatarUrl,
+            display_name: user.name,
             provider: 'google',
         },
         business: {

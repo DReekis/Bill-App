@@ -42,6 +42,9 @@ class Business {
     this.quotationSequence = 0,
     this.purchasePrefix = 'PUR',
     this.purchaseSequence = 0,
+    this.subscriptionTier = 'free',
+    this.subscriptionStatus = 'active',
+    this.subscriptionExpiresAt,
   });
 
   final int? id;
@@ -83,6 +86,9 @@ class Business {
   int quotationSequence;
   String purchasePrefix;
   int purchaseSequence;
+  String subscriptionTier;
+  String subscriptionStatus;
+  String? subscriptionExpiresAt;
 
   int get nextSequence => invoiceSequence + 1;
   int get nextQuotationSequence => quotationSequence + 1;
@@ -146,6 +152,9 @@ class Business {
     int? quotationSequence,
     String? purchasePrefix,
     int? purchaseSequence,
+    String? subscriptionTier,
+    String? subscriptionStatus,
+    String? subscriptionExpiresAt,
   }) =>
       Business(
         id: id ?? this.id,
@@ -187,6 +196,9 @@ class Business {
         quotationSequence: quotationSequence ?? this.quotationSequence,
         purchasePrefix: purchasePrefix ?? this.purchasePrefix,
         purchaseSequence: purchaseSequence ?? this.purchaseSequence,
+        subscriptionTier: subscriptionTier ?? this.subscriptionTier,
+        subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
+        subscriptionExpiresAt: subscriptionExpiresAt ?? this.subscriptionExpiresAt,
       );
 
   Map<String, Object?> toMap() => {
@@ -227,6 +239,9 @@ class Business {
         'quotation_sequence': quotationSequence,
         'purchase_prefix': purchasePrefix,
         'purchase_sequence': purchaseSequence,
+        'subscription_tier': subscriptionTier,
+        'subscription_status': subscriptionStatus,
+        'subscription_expires_at': subscriptionExpiresAt,
       };
 
   static Business fromMap(Map<String, Object?> map) => Business(
@@ -268,6 +283,9 @@ class Business {
         quotationSequence: (map['quotation_sequence'] as num?)?.toInt() ?? 0,
         purchasePrefix: map['purchase_prefix'] as String? ?? 'PUR',
         purchaseSequence: (map['purchase_sequence'] as num?)?.toInt() ?? 0,
+        subscriptionTier: map['subscription_tier'] as String? ?? 'free',
+        subscriptionStatus: map['subscription_status'] as String? ?? 'active',
+        subscriptionExpiresAt: map['subscription_expires_at'] as String?,
       );
 }
 

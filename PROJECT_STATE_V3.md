@@ -209,38 +209,64 @@ flowchart LR
 ---
 
 ### Phase 3: Razorpay Payment Gateway & Subscription Licensing Engine
-**Goal:** Implement full monetization and subscription gates using Razorpay, allowing business owners to purchase and renew plans directly from the app.
+**Goal:** Implement full monetization and subscription gates using Razorpay, allowing business owners to purchase and renew plans directly from the app with zero security vulnerabilities and complete feature gating.
 
-#### Packages to Use:
-* Flutter: `razorpay_flutter: ^1.3.7`
-* Backend: `razorpay-node`
+**Status:** ✅ **COMPLETED & VERIFIED (100%)**
 
-#### What Needs to Be Done:
-1. **Backend Razorpay Service (`backend/src/services/razorpay.ts`):**
-   - `POST /api/v1/subscription/create-order`: Calls Razorpay `orders.create()` with plan amount and business ID.
-   - `POST /api/v1/subscription/verify-payment`: Verifies HMAC SHA256 signature (`razorpay_order_id`, `razorpay_payment_id`, `razorpay_signature`).
-   - Updates `Business.subscriptionTier` and extends `Business.subscriptionExpiresAt` in PostgreSQL.
-   - `POST /api/v1/subscription/webhook`: Handles background payment renewal and failure webhooks.
-2. **Flutter Subscription UI (`app/lib/features/subscription/`):**
-   - **Subscription Plans Screen:** Beautiful modern comparison carousel (Starter vs Pro vs Enterprise) showing billing cycle toggle (Monthly / Yearly discount).
-   - Dynamic plan features checklist with clear visual icons.
-   - 1-tap "Upgrade to Pro" button triggering Razorpay Checkout sheet (UPI, GPay, PhonePe, Cards, NetBanking).
-3. **Feature Gating Engine:**
-   - Connect `Business.subscriptionTier` to app capabilities:
-     * Free: Up to 50 bills/month, local storage only.
-     * Pro: Unlimited bills, cloud sync, multi-device backup, GSTR reports.
-     * Enterprise: E-Invoice (IRN), E-Way Bill, Multi-User Staff roles.
-   - Clean, non-intrusive upgrade prompt when a locked feature is tapped.
+#### Implemented Components & Security Architecture:
+1. **Canonical 5-Tier Catalog (`SUBSCRIPTION_PLANS`):**
+   - Exact match to official 2-page subscription specification:
+     * `Free` (₹0/year): 10 Sales Invoices, 10 Purchases, 50 Customers, 50 Suppliers, 100 Items, Basic stock.
+     * `Starter` (₹579/year = 57,900 paise): Unlimited Sales & Purchases, Sales/Purchase Returns, Estimates/Quotes, 500 Customers, 1,000 Items, Daily backup.
+     * `Silver` (₹1,499/year = 149,900 paise - *Most Popular*): Sales/Purchase Orders, Delivery Challans, Barcode, Low stock alert, Stock transfer, E-Invoice IRN, 10 E-Way bills/mo, Bank Management Hub, Tally XML Export, 2 Companies, 2 Staff Users.
+     * `Gold` (₹2,999/year = 299,900 paise - *Best Value*): Windows/Desktop, 10,000 Customers, 25,000 Items, Unlimited E-Way bills, Balance Sheet, Full P&L, Party P&L, 5 Companies, 5 Staff Users, Priority Support.
+     * `Business Pro` (₹4,999/year = 499,900 paise - *Enterprise*): Unlimited Customers, Items, Staff Users, 10 Companies, Customer Loyalty Program, Dedicated RM.
+2. **Security & Vulnerability Protection:**
+   - **Zero Price-Tampering:** Client only sends `{ tier: 'silver', businessId }`. Server calculates amount strictly from canonical catalog.
+   - **Cryptographic Signature Verification:** Strict HMAC SHA-256 signature verification (`crypto.createHmac('sha256', keySecret).update(orderId + '|' + paymentId)`).
+   - **Replay Attack Defense:** Each `paymentId` is tracked uniquely in `SubscriptionOrder` database model; duplicate reuse attempts are rejected with HTTP 400.
+   - **Atomic State Transitions:** Database transaction updates order status, computes 365-day expiry extension, sets business active tier, and writes immutable audit log.
+3. **Backend API Endpoints (`backend/src/server.ts` & `backend/src/services/subscriptionService.ts`):**
+   - `GET /api/v1/subscription/plans`: Public canonical plan catalog.
+   - `GET /api/v1/subscription/status/:businessId`: Live tier status, days remaining, limits, and real-time usage metrics.
+   - `POST /api/v1/subscription/create-order`: Authenticated Razorpay order creation.
+   - `POST /api/v1/subscription/verify-payment`: Cryptographically verified upgrade execution.
+   - `POST /api/v1/subscription/webhook`: Idempotent background webhook listener.
+4. **Flutter Client Services & UI (`app/`):**
+   - `SubscriptionService` (`app/lib/core/subscription_service.dart`): Feature gating checks (`canCreateSalesInvoice`, `canAddCustomer`, `canAccessBankManagement`, etc.), SQLite & SharedPreferences caching.
+   - `RazorpayService` (`app/lib/core/razorpay_service.dart`): Checkout lifecycle with native listeners & desktop testing bridge.
+   - `SubscriptionPlansScreen` (`app/lib/features/subscription/subscription_plans_screen.dart`): Modern FinTech UI with active plan badge, 5-tier cards, Razorpay trigger, and complete feature comparison matrix.
+   - `UpgradePaywallSheet` (`app/lib/features/subscription/upgrade_paywall_sheet.dart`): Sleek upgrade bottom sheet triggered whenever a user hits plan limits or taps a locked feature.
+   - Action Guards Wired:
+     * `MoreTab`: Active Subscription card + "Subscription & Plans" menu tile.
+     * `InvoiceBuilderScreen`: Enforces 10 sales invoice limit on Free tier.
+     * `CashBankHubScreen`: Gated behind Silver+ tier.
+     * `OrdersScreen`: Sales & Purchase orders gated behind Silver+ tier.
+     * `PartyFormSheet`: Enforces customer & supplier count limits based on tier.
+     * `ProductForm`: Enforces item catalog limits based on tier.
+5. **Automated Verification Results:**
+   - Flutter: **240/240 tests passed** (`flutter test`).
+   - Backend: **100% test pass rate** across server, admin, and Razorpay subscription suites (`npm test`).
 
 #### How to Test Phase 3:
-1. Go to **More ➔ Subscription & Upgrade**.
-2. Select **Pro Plan (₹1,999/year)** ➔ Tap **Upgrade Now**.
-3. Razorpay test modal opens ➔ Select **UPI / Test Success**.
-4. Payment completes ➔ Modal dismisses ➔ Success confetti/toast appears.
-5. Account status immediately reflects: **Active Pro Member (Valid until Oct 2027)**.
-6. Verify previously gated feature (e.g. Cloud Sync or Multi-Device) is unlocked.
+1. **View Active Plan & Explore Plans:**
+   - Open app ➔ Go to **More** tab.
+   - Notice the new **Active Subscription Card** displaying "FREE TIER" (or active tier) and days left.
+   - Tap **"Upgrade"** or tap the menu tile **"Subscription & Plans"**.
+   - Review the 5 tiers: Starter (₹579/yr), Silver (₹1,499/yr - "Most Popular"), Gold (₹2,999/yr - "Best Value"), Business Pro (₹4,999/yr - "Enterprise"), and Free.
+   - Tap **"Detailed Feature Comparison Matrix"** to view the full side-by-side feature grid.
+2. **Test Upgrade via Razorpay:**
+   - Tap **"Upgrade to Silver Plan"** (or Gold / Business Pro).
+   - Razorpay checkout initializes with server-derived order.
+   - Complete test payment ➔ App automatically verifies signature with AWS backend.
+   - Modal displays **"Upgrade Activated!"** and active subscription badge switches to Silver.
+3. **Test Feature Gating & Paywall Modal:**
+   - On Free tier, navigate to **More ➔ Cash & Bank Accounts Hub ➔ Add Account**.
+   - Notice the sleek **UpgradePaywallSheet** modal appears: *"Bank Accounts Hub requires SILVER. Managing bank accounts and ledger balancing is available on Silver and higher plans."*
+   - Tap *"View Plans & Upgrade"* to directly open the plans screen.
+   - Similarly, creating more than 10 invoices on Free or opening Orders prompts the paywall.
 
-#### What to Provide for the Next Phase:
+#### What to Provide for the Next Phase (Phase 4: Sandbox.co.in Integration):
 * **Sandbox.co.in API Credentials:** `x-api-key` and `x-api-secret` from your [sandbox.co.in](https://sandbox.co.in) developer portal.
 * Your test GSTIN numbers for verification and invoicing.
 

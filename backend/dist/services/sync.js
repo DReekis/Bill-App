@@ -6,6 +6,12 @@ export async function enqueueSync(input) {
             where: { idempotencyKey: input.idempotencyKey },
         });
         if (existing) {
+            if (existing.status === 'failed') {
+                try {
+                    await processSyncItem(existing.id);
+                }
+                catch { }
+            }
             return existing;
         }
     }
@@ -73,69 +79,108 @@ export async function processSyncItem(queueItemId) {
         throw error;
     }
 }
+function toScopedId(businessId, entityId) {
+    if (entityId.startsWith(`${businessId}_`))
+        return entityId;
+    return `${businessId}_${entityId}`;
+}
+function fromScopedId(businessId, id) {
+    if (id.startsWith(`${businessId}_`)) {
+        return id.substring(businessId.length + 1);
+    }
+    return id;
+}
 async function handleDelete(entity, entityId, businessId) {
+    const scopedId = toScopedId(businessId, entityId);
     switch (entity.toLowerCase()) {
         case 'customer':
         case 'customers':
-            await prisma.customer.deleteMany({ where: { id: entityId, businessId } });
+            await prisma.customer.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
         case 'supplier':
         case 'suppliers':
-            await prisma.supplier.deleteMany({ where: { id: entityId, businessId } });
+            await prisma.supplier.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
         case 'product':
         case 'products':
-            await prisma.product.deleteMany({ where: { id: entityId, businessId } });
+            await prisma.product.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
         case 'invoice':
         case 'invoices':
-            await prisma.invoice.deleteMany({ where: { id: entityId, businessId } });
+            await prisma.invoice.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
         case 'payment':
         case 'payments':
-            await prisma.payment.deleteMany({ where: { id: entityId, businessId } });
+            await prisma.payment.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
         case 'expense':
         case 'expenses':
-            await prisma.expense.deleteMany({ where: { id: entityId, businessId } });
+        case 'purchase':
+        case 'purchases':
+            await prisma.expense.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
         case 'quotation':
         case 'quotations':
-            await prisma.quotation.deleteMany({ where: { id: entityId, businessId } });
+            await prisma.quotation.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
         case 'order':
         case 'orders':
         case 'sales_order':
         case 'sales_orders':
-            await prisma.salesOrder.deleteMany({ where: { id: entityId, businessId } });
+            await prisma.salesOrder.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
         case 'purchase_order':
         case 'purchase_orders':
-            await prisma.purchaseOrder.deleteMany({ where: { id: entityId, businessId } });
+            await prisma.purchaseOrder.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
         case 'delivery_challan':
         case 'delivery_challans':
-            await prisma.deliveryChallan.deleteMany({ where: { id: entityId, businessId } });
+            await prisma.deliveryChallan.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
         case 'bank_account':
         case 'bank_accounts':
-            await prisma.bankAccount.deleteMany({ where: { id: entityId, businessId } });
+            await prisma.bankAccount.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
         case 'cheque':
         case 'cheques':
-            await prisma.cheque.deleteMany({ where: { id: entityId, businessId } });
+            await prisma.cheque.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
             break;
     }
 }
 async function handleUpsert(entity, entityId, businessId, data) {
+    const scopedId = toScopedId(businessId, entityId);
     switch (entity.toLowerCase()) {
         case 'customer':
         case 'customers': {
             const name = data.name ?? 'Unknown Customer';
             await prisma.customer.upsert({
-                where: { id: entityId },
+                where: { id: scopedId },
                 create: {
-                    id: entityId,
+                    id: scopedId,
                     businessId,
                     name,
                     phone: data.phone ?? null,
@@ -154,6 +199,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
                     notes: data.notes ?? null,
                 },
                 update: {
+                    businessId,
                     name,
                     phone: data.phone ?? undefined,
                     whatsapp: data.whatsapp ?? undefined,
@@ -173,9 +219,9 @@ async function handleUpsert(entity, entityId, businessId, data) {
         case 'suppliers': {
             const name = data.name ?? 'Unknown Supplier';
             await prisma.supplier.upsert({
-                where: { id: entityId },
+                where: { id: scopedId },
                 create: {
-                    id: entityId,
+                    id: scopedId,
                     businessId,
                     name,
                     phone: data.phone ?? null,
@@ -190,6 +236,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
                     notes: data.notes ?? null,
                 },
                 update: {
+                    businessId,
                     name,
                     phone: data.phone ?? undefined,
                     whatsapp: data.whatsapp ?? undefined,
@@ -205,9 +252,9 @@ async function handleUpsert(entity, entityId, businessId, data) {
         case 'products': {
             const name = data.name ?? 'Item';
             await prisma.product.upsert({
-                where: { id: entityId },
+                where: { id: scopedId },
                 create: {
-                    id: entityId,
+                    id: scopedId,
                     businessId,
                     name,
                     sku: data.sku ?? null,
@@ -227,6 +274,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
                     description: data.description ?? null,
                 },
                 update: {
+                    businessId,
                     name,
                     sku: data.sku ?? undefined,
                     barcode: data.barcode ?? undefined,
@@ -247,7 +295,10 @@ async function handleUpsert(entity, entityId, businessId, data) {
             let verifiedCustomerId = null;
             const rawCustId = data.customer_id ? String(data.customer_id) : (data.customerId ? String(data.customerId) : null);
             if (rawCustId) {
-                const cust = await prisma.customer.findUnique({ where: { id: rawCustId } });
+                const scopedCustId = toScopedId(businessId, rawCustId);
+                const cust = await prisma.customer.findFirst({
+                    where: { OR: [{ id: scopedCustId }, { id: rawCustId, businessId }] },
+                });
                 if (cust) {
                     verifiedCustomerId = cust.id;
                 }
@@ -273,7 +324,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
                 status: data.status ?? 'Finalized',
                 notes: data.notes ?? null,
             };
-            const invId = existing ? existing.id : entityId;
+            const invId = existing ? existing.id : scopedId;
             if (existing) {
                 await prisma.invoice.update({
                     where: { id: existing.id },
@@ -283,7 +334,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
             else {
                 await prisma.invoice.create({
                     data: {
-                        id: entityId,
+                        id: scopedId,
                         ...invoiceData,
                     },
                 });
@@ -291,9 +342,13 @@ async function handleUpsert(entity, entityId, businessId, data) {
             if (Array.isArray(data.items) && data.items.length > 0) {
                 try {
                     await prisma.invoiceItem.deleteMany({ where: { invoiceId: invId } });
-                    for (const it of data.items) {
+                    for (let idx = 0; idx < data.items.length; idx++) {
+                        const it = data.items[idx];
+                        const rawItemId = it.id ? String(it.id) : `item_${idx}_${Date.now()}`;
+                        const scopedItemId = toScopedId(businessId, `${invId}_${rawItemId}`);
                         await prisma.invoiceItem.create({
                             data: {
+                                id: scopedItemId,
                                 invoiceId: invId,
                                 name: it.name ?? 'Item',
                                 hsn: it.hsn ?? null,
@@ -315,9 +370,9 @@ async function handleUpsert(entity, entityId, businessId, data) {
         case 'payment':
         case 'payments': {
             await prisma.payment.upsert({
-                where: { id: entityId },
+                where: { id: scopedId },
                 create: {
-                    id: entityId,
+                    id: scopedId,
                     businessId,
                     partyType: data.party_type ?? data.partyType ?? 'customer',
                     partyId: data.party_id ? String(data.party_id) : (data.partyId ?? null),
@@ -332,6 +387,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
                     notes: data.notes ?? null,
                 },
                 update: {
+                    businessId,
                     amount: Number(data.amount ?? 0),
                     mode: data.mode ?? undefined,
                     date: data.date ? new Date(data.date) : undefined,
@@ -341,20 +397,23 @@ async function handleUpsert(entity, entityId, businessId, data) {
             break;
         }
         case 'expense':
-        case 'expenses': {
+        case 'expenses':
+        case 'purchase':
+        case 'purchases': {
             await prisma.expense.upsert({
-                where: { id: entityId },
+                where: { id: scopedId },
                 create: {
-                    id: entityId,
+                    id: scopedId,
                     businessId,
-                    category: data.category ?? 'General',
+                    category: data.category ?? (entity.toLowerCase().startsWith('purchase') ? 'Purchase' : 'General'),
                     amount: Number(data.amount ?? 0),
-                    mode: data.mode ?? 'Cash',
+                    mode: data.mode ?? (entity.toLowerCase().startsWith('purchase') ? 'Credit' : 'Cash'),
                     date: data.date ? new Date(data.date) : new Date(),
                     description: data.description ?? null,
                     vendor: data.vendor ?? null,
                 },
                 update: {
+                    businessId,
                     category: data.category ?? undefined,
                     amount: Number(data.amount ?? 0),
                     mode: data.mode ?? undefined,
@@ -366,9 +425,9 @@ async function handleUpsert(entity, entityId, businessId, data) {
         case 'bank_account':
         case 'bank_accounts': {
             await prisma.bankAccount.upsert({
-                where: { id: entityId },
+                where: { id: scopedId },
                 create: {
-                    id: entityId,
+                    id: scopedId,
                     businessId,
                     bankName: data.bank_name ?? data.bankName ?? 'Bank',
                     accountName: data.account_name ?? data.accountName ?? null,
@@ -376,6 +435,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
                     openingBalance: Number(data.opening_balance ?? data.openingBalance ?? 0),
                 },
                 update: {
+                    businessId,
                     bankName: data.bank_name ?? data.bankName ?? undefined,
                     accountName: data.account_name ?? data.accountName ?? undefined,
                     openingBalance: data.opening_balance !== undefined ? Number(data.opening_balance) : undefined,
@@ -388,15 +448,18 @@ async function handleUpsert(entity, entityId, businessId, data) {
             let verifiedBankAccountId = null;
             const rawBankId = data.bank_account_id ? String(data.bank_account_id) : (data.bankAccountId ? String(data.bankAccountId) : null);
             if (rawBankId) {
-                const bank = await prisma.bankAccount.findUnique({ where: { id: rawBankId } });
+                const scopedBankId = toScopedId(businessId, rawBankId);
+                const bank = await prisma.bankAccount.findFirst({
+                    where: { OR: [{ id: scopedBankId }, { id: rawBankId, businessId }] },
+                });
                 if (bank) {
                     verifiedBankAccountId = bank.id;
                 }
             }
             await prisma.cheque.upsert({
-                where: { id: entityId },
+                where: { id: scopedId },
                 create: {
-                    id: entityId,
+                    id: scopedId,
                     businessId,
                     chequeNumber: data.cheque_number ?? data.chequeNumber ?? 'CHQ',
                     bankName: data.bank_name ?? data.bankName ?? null,
@@ -411,6 +474,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
                     notes: data.notes ?? null,
                 },
                 update: {
+                    businessId,
                     status: data.status ?? undefined,
                     clearingDate: data.clearing_date ? new Date(data.clearing_date) : undefined,
                     bounceReason: data.bounce_reason ?? data.bounceReason ?? undefined,
@@ -420,20 +484,23 @@ async function handleUpsert(entity, entityId, businessId, data) {
         }
         case 'stock_move':
         case 'stock_moves': {
-            const productId = String(data.product_id ?? data.productId ?? entityId);
+            const rawProdId = String(data.product_id ?? data.productId ?? entityId);
+            const scopedProdId = toScopedId(businessId, rawProdId);
             const changeQty = Number(data.change_qty ?? data.changeQty ?? 0);
             const qtyAfter = Number(data.qty_after ?? data.qtyAfter ?? 0);
             const moveType = String(data.move_type ?? data.moveType ?? 'adjustment');
             const refType = data.ref_type ?? data.refType ?? null;
             const refId = data.ref_id ? String(data.ref_id) : (data.refId ? String(data.refId) : null);
             const date = data.date ? new Date(data.date) : new Date();
-            const productExists = await prisma.product.findUnique({ where: { id: productId } });
-            if (productExists) {
+            const product = await prisma.product.findFirst({
+                where: { OR: [{ id: scopedProdId }, { id: rawProdId, businessId }] },
+            });
+            if (product) {
                 await prisma.stockMove.create({
                     data: {
-                        id: entityId,
+                        id: scopedId,
                         businessId,
-                        productId,
+                        productId: product.id,
                         changeQty,
                         qtyAfter,
                         moveType,
@@ -443,7 +510,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
                     },
                 });
                 await prisma.product.update({
-                    where: { id: productId },
+                    where: { id: product.id },
                     data: { stock: { increment: changeQty } },
                 });
             }
@@ -502,7 +569,7 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
     for (const c of customers) {
         changes.push({
             entity: 'customer',
-            entityId: c.id,
+            entityId: fromScopedId(businessId, c.id),
             op: 'upsert',
             payload: JSON.stringify(c),
             timestamp: c.createdAt.toISOString(),
@@ -511,7 +578,7 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
     for (const p of products) {
         changes.push({
             entity: 'product',
-            entityId: p.id,
+            entityId: fromScopedId(businessId, p.id),
             op: 'upsert',
             payload: JSON.stringify(p),
             timestamp: p.createdAt.toISOString(),
@@ -520,7 +587,7 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
     for (const inv of invoices) {
         changes.push({
             entity: 'invoice',
-            entityId: inv.id,
+            entityId: fromScopedId(businessId, inv.id),
             op: 'upsert',
             payload: JSON.stringify(inv),
             timestamp: inv.createdAt.toISOString(),
@@ -529,7 +596,7 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
     for (const pay of payments) {
         changes.push({
             entity: 'payment',
-            entityId: pay.id,
+            entityId: fromScopedId(businessId, pay.id),
             op: 'upsert',
             payload: JSON.stringify(pay),
             timestamp: pay.createdAt.toISOString(),
@@ -538,7 +605,7 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
     for (const exp of expenses) {
         changes.push({
             entity: 'expense',
-            entityId: exp.id,
+            entityId: fromScopedId(businessId, exp.id),
             op: 'upsert',
             payload: JSON.stringify(exp),
             timestamp: exp.createdAt.toISOString(),
@@ -547,7 +614,7 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
     for (const ba of bankAccounts) {
         changes.push({
             entity: 'bank_account',
-            entityId: ba.id,
+            entityId: fromScopedId(businessId, ba.id),
             op: 'upsert',
             payload: JSON.stringify(ba),
             timestamp: ba.createdAt.toISOString(),
@@ -556,7 +623,7 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
     for (const chq of cheques) {
         changes.push({
             entity: 'cheque',
-            entityId: chq.id,
+            entityId: fromScopedId(businessId, chq.id),
             op: 'upsert',
             payload: JSON.stringify(chq),
             timestamp: chq.createdAt.toISOString(),
@@ -565,7 +632,7 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
     for (const sm of stockMoves) {
         changes.push({
             entity: 'stock_move',
-            entityId: sm.id,
+            entityId: fromScopedId(businessId, sm.id),
             op: 'upsert',
             payload: JSON.stringify(sm),
             timestamp: sm.createdAt.toISOString(),

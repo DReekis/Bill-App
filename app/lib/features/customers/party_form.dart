@@ -8,6 +8,8 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 
 class PartyFormSheet extends StatefulWidget {
   const PartyFormSheet({
@@ -210,6 +212,29 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
           : (_shippingAddress.text.trim().isEmpty ? null : _shippingAddress.text.trim());
 
       if (_partyType == 'customer') {
+        if (widget.customer?.id == null) {
+          final count = await Repository.instance.getCustomersCount(widget.businessId);
+          if (!SubscriptionService.instance.canAddCustomer(count)) {
+            setState(() => _saving = false);
+            if (mounted) {
+              UpgradePaywallSheet.show(
+                context,
+                featureName: 'Customer Limit Reached',
+                description:
+                    'You have reached your limit of $count customers. Upgrade your tier to add more customers.',
+                requiredTier: SubscriptionTier.starter,
+                bulletPoints: const [
+                  'Starter: Up to 500 Customers',
+                  'Silver: Up to 2,500 Customers',
+                  'Gold: Up to 10,000 Customers',
+                  'Business Pro: Unlimited Customers',
+                ],
+              );
+            }
+            return;
+          }
+        }
+
         final customer = Customer(
           id: widget.customer?.id,
           name: partyName,
@@ -246,6 +271,29 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
         );
         widget.onSavedParty?.call(savedCustomer);
       } else {
+        if (widget.supplier?.id == null) {
+          final count = await Repository.instance.getSuppliersCount(widget.businessId);
+          if (!SubscriptionService.instance.canAddSupplier(count)) {
+            setState(() => _saving = false);
+            if (mounted) {
+              UpgradePaywallSheet.show(
+                context,
+                featureName: 'Supplier Limit Reached',
+                description:
+                    'You have reached your limit of $count suppliers. Upgrade your plan to add more suppliers.',
+                requiredTier: SubscriptionTier.starter,
+                bulletPoints: const [
+                  'Starter: Up to 500 Suppliers',
+                  'Silver: Up to 2,500 Suppliers',
+                  'Gold: Up to 10,000 Suppliers',
+                  'Business Pro: Unlimited Suppliers',
+                ],
+              );
+            }
+            return;
+          }
+        }
+
         final supplier = Supplier(
           id: widget.supplier?.id,
           name: partyName,
