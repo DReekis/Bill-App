@@ -406,7 +406,7 @@ class SubscriptionService extends ChangeNotifier {
   }) async {
     try {
       final res = await ApiClient.instance.get(
-        '/subscription/status/$cloudBusinessId',
+        '/api/v1/subscription/status/$cloudBusinessId',
         token: token,
       );
 
