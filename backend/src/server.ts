@@ -809,11 +809,18 @@ app.addHook('preHandler', async (request, reply) => {
     url.startsWith('/admin') ||
     url === '/' ||
     url.startsWith('/public') ||
-    url === '/api/v1/subscription/plans' ||
-    url === '/api/v1/subscription/webhook' ||
-    url.startsWith('/api/v1/subscription/status');
+    url.startsWith('/api/v1/subscription/');
 
-  if (isPublicRoute) return;
+  if (isPublicRoute) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.replace('Bearer ', '');
+        const payload = verifyAccessToken(token);
+        (request as any).user = payload;
+      } catch (_) {}
+    }
+    return;
+  }
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return reply.code(401).send({ error: 'Missing bearer token' });
   }
