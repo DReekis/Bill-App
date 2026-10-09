@@ -39,6 +39,8 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-1088562819881-tesapmissm77nd7o5maom90nh4sjv87h.apps.googleusercontent.com}
       GOOGLE_ANDROID_CLIENT_ID: ${GOOGLE_ANDROID_CLIENT_ID:-1088562819881-rv6kpg40eqnlsaqp196g5ligiqeujunr.apps.googleusercontent.com}
       GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-1088562819881-sfbc09v1khbn6188ps24o2kd5qmp39hu.apps.googleusercontent.com}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_TlVBcJ5F1D187V}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-wEQAJKA0T1iJNITsDV9jRRI3}
     ports:
       - "80:4000"
       - "4000:4000"
