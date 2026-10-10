@@ -10,6 +10,8 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../sync/sync_engine.dart';
 import '../../utils/widgets.dart';
+import '../shell/app_shell.dart';
+import 'business_setup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({
@@ -133,8 +135,38 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _busy = false);
     showAppMessage(context, successMessage);
     widget.onSuccess?.call();
+
+    // Check if the business needs first-time setup or is a newly registered account
+    final bizList = await Repository.instance.allBusinesses();
+    final bool isUnconfigured = bizList.isEmpty ||
+        (bizList.length == 1 &&
+            (bizList.first.name.contains("'s Business") ||
+                bizList.first.name.startsWith('User ') ||
+                bizList.first.name == 'Demo Mart' ||
+                (bizList.first.gstin == null && bizList.first.address == null)));
+
+    if (isUnconfigured || result.isNewUser) {
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => BusinessSetupScreen(
+              phone: result.user.phone ?? _phoneController.text.trim(),
+            ),
+          ),
+          (route) => false,
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
     if (Navigator.canPop(context)) {
       Navigator.pop(context, true);
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AppShell()),
+        (route) => false,
+      );
     }
   }
 
@@ -363,11 +395,172 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (!mounted) return;
-    showAppMessage(context, 'Signed in as ${staff.name} (${staff.role.label})');
+
+    // If staff has default name or missing personal PIN, prompt for basic details
+    if (staff.name.isEmpty ||
+        staff.name.toLowerCase().contains('cashier') ||
+        staff.name.toLowerCase().contains('salesman') ||
+        staff.name.startsWith('Demo') ||
+        staff.pin == null ||
+        staff.pin == '1234') {
+      await _showStaffDetailsConfirmation(staff);
+      if (!mounted) return;
+    }
+
+    showAppMessage(context, 'Signed in as ${session.currentUser} (${staff.role.label})');
     widget.onSuccess?.call();
     if (Navigator.canPop(context)) {
       Navigator.pop(context, true);
+    } else {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AppShell()),
+        (route) => false,
+      );
     }
+  }
+
+  Future<void> _showStaffDetailsConfirmation(StaffMember staff) async {
+    final nameCtrl = TextEditingController(text: staff.name.contains('Demo') ? '' : staff.name);
+    final pinCtrl = TextEditingController(text: staff.pin == '1234' ? '' : (staff.pin ?? ''));
+    final formKey = GlobalKey<FormState>();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: _getStaffRoleColor(staff.role),
+                      foregroundColor: Colors.white,
+                      child: Text(
+                        staff.name.isNotEmpty ? staff.name[0].toUpperCase() : 'S',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Staff Basic Details',
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: _getStaffRoleColor(staff.role).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  staff.role.label,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: _getStaffRoleColor(staff.role),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text('+91 ${staff.phone}', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Full Name',
+                    hintText: 'Enter your name',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Please enter your name' : null,
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: pinCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(4),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: '4-Digit Security PIN',
+                    hintText: 'e.g. 4321',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  validator: (v) => (v == null || v.trim().length < 4) ? 'Enter a 4-digit PIN' : null,
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    onPressed: () async {
+                      if (!formKey.currentState!.validate()) return;
+                      final updated = staff.copyWith(
+                        name: nameCtrl.text.trim(),
+                        pin: pinCtrl.text.trim(),
+                      );
+                      await Repository.instance.upsertStaffMember(updated);
+                      if (!ctx.mounted) return;
+                      final s = ctx.read<Session>();
+                      await s.switchStaffSession(
+                        businessId: updated.businessId,
+                        name: updated.name,
+                        role: updated.role,
+                        phone: updated.phone,
+                        staffId: updated.id,
+                      );
+                      if (ctx.mounted) Navigator.of(ctx).pop();
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Save & Enter Store', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Color _getStaffRoleColor(UserRole role) {

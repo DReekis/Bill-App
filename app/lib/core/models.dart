@@ -2489,6 +2489,29 @@ class StaffMember {
         isActive: (map['is_active'] as int? ?? 1) == 1,
         createdAt: map['created_at'] as String? ?? '',
       );
+
+  StaffMember copyWith({
+    int? id,
+    int? businessId,
+    String? name,
+    String? phone,
+    String? email,
+    UserRole? role,
+    String? pin,
+    bool? isActive,
+    String? createdAt,
+  }) =>
+      StaffMember(
+        id: id ?? this.id,
+        businessId: businessId ?? this.businessId,
+        name: name ?? this.name,
+        phone: phone ?? this.phone,
+        email: email ?? this.email,
+        role: role ?? this.role,
+        pin: pin ?? this.pin,
+        isActive: isActive ?? this.isActive,
+        createdAt: createdAt ?? this.createdAt,
+      );
 }
 
 class CashflowEntry {
