@@ -198,21 +198,26 @@ class ApiClient {
   Future<AuthSessionResult> loginWithPhone({
     required String phone,
     required String otp,
+    String? sessionId,
     String? name,
   }) async {
     final res = await post('/api/v1/auth/phone/verify', {
       'phone': phone,
       'otp': otp,
+      if (sessionId != null) 'sessionId': sessionId,
       if (name != null) 'name': name,
     });
 
     return _parseAuth(res, 'Phone verification failed');
   }
 
-  Future<void> requestPhoneOtp(String phone) async {
-    try {
-      await post('/api/v1/auth/phone/otp', {'phone': phone});
-    } catch (_) {}
+  Future<Map<String, dynamic>> requestPhoneOtp(String phone) async {
+    final res = await post('/api/v1/auth/phone/otp', {'phone': phone});
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+    final dynamic body = jsonDecode(res.body);
+    throw Exception(body is Map && body['error'] != null ? body['error'] : 'Failed to send OTP');
   }
 
   Future<Map<String, dynamic>> uploadBackup({

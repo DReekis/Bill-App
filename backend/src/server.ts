@@ -41,6 +41,7 @@ import {
   getBusinessSubscriptionStatus,
 } from './services/subscriptionService.js';
 import { sandboxService } from './services/sandboxService.js';
+import { TwoFactorService } from './services/twoFactorService.js';
 
 export const app = Fastify({ logger: config.nodeEnv !== 'production' });
 
@@ -391,8 +392,27 @@ app.post('/api/v1/auth/google', async (request, reply) => {
   }
 });
 
+app.post('/api/v1/auth/phone/otp', async (request, reply) => {
+  const body = request.body as { phone?: string };
+  if (!body?.phone) {
+    return reply.code(400).send({ error: 'Phone number is required' });
+  }
+
+  const result = await TwoFactorService.getInstance().sendOtp(body.phone);
+  if (!result.success) {
+    return reply.code(400).send({ error: result.message || 'Failed to send OTP' });
+  }
+
+  return reply.code(200).send({
+    success: true,
+    message: result.message || 'OTP sent successfully',
+    sessionId: result.sessionId,
+    isTestMode: result.isTestMode,
+  });
+});
+
 app.post('/api/v1/auth/phone/verify', async (request, reply) => {
-  const body = request.body as { phone?: string; otp?: string; name?: string };
+  const body = request.body as { phone?: string; otp?: string; sessionId?: string; name?: string };
   if (!body?.phone || !body?.otp) {
     return reply.code(400).send({ error: 'Phone and OTP are required' });
   }
@@ -401,14 +421,13 @@ app.post('/api/v1/auth/phone/verify', async (request, reply) => {
     const result = await phoneAuth({
       phone: body.phone,
       otp: body.otp,
+      sessionId: body.sessionId,
       name: body.name,
     });
     return reply.code(200).send(result);
-  } catch (error) {
-    if (error instanceof Error && error.message === 'INVALID_OTP') {
-      return reply.code(401).send({ error: 'Invalid or expired OTP' });
-    }
-    return reply.code(500).send({ error: 'Phone verification failed' });
+  } catch (error: any) {
+    const msg = error?.message || 'Phone verification failed';
+    return reply.code(401).send({ error: msg });
   }
 });
 

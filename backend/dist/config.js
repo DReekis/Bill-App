@@ -26,6 +26,10 @@ export const config = {
         apiSecret: process.env.SANDBOX_API_SECRET || 'secret_live_a36390af553441d5907967ddb7c14ad8',
         baseUrl: process.env.SANDBOX_BASE_URL || 'https://api.sandbox.co.in',
     },
+    twoFactor: {
+        apiKey: process.env.TWOFACTOR_API_KEY || '26423af7-c270-11f1-af74-0200cd936042',
+        baseUrl: process.env.TWOFACTOR_BASE_URL || 'https://2factor.in/API/V1',
+    },
 };
 export const ALLOWED_GOOGLE_CLIENT_IDS = [
     config.google.clientId,

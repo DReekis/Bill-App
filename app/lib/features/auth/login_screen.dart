@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -37,6 +38,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final _otpController = TextEditingController();
   bool _otpSent = false;
   bool _phoneBusy = false;
+  String? _sessionId;
+  Timer? _resendTimer;
+  int _resendCountdown = 0;
 
   final _staffPhoneController = TextEditingController();
   final _staffPinController = TextEditingController();
@@ -56,6 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _phoneController.dispose();
     _otpController.dispose();
     _staffPhoneController.dispose();
@@ -180,13 +185,32 @@ class _LoginScreenState extends State<LoginScreen> {
     final apiClient = SyncEngine.instance.apiClient;
     try {
       await apiClient.ensureReady();
-      await _authService.requestPhoneOtp(phone, apiClient: apiClient);
+      final res = await _authService.requestPhoneOtp(phone, apiClient: apiClient);
       if (!mounted) return;
+      _sessionId = res['sessionId'] as String?;
       setState(() {
         _phoneBusy = false;
         _otpSent = true;
+        _resendCountdown = 30;
       });
-      showAppMessage(context, 'OTP sent! (Use 1234 or 0000 in test mode)');
+
+      _resendTimer?.cancel();
+      _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        setState(() {
+          if (_resendCountdown > 1) {
+            _resendCountdown--;
+          } else {
+            _resendCountdown = 0;
+            timer.cancel();
+          }
+        });
+      });
+
+      showAppMessage(context, 'OTP sent to +91 $phone');
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -204,7 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     if (otp.length < 4) {
-      setState(() => _errorMessage = 'Please enter the 4-digit OTP (Use 1234 in test mode).');
+      setState(() => _errorMessage = 'Please enter the OTP sent to your phone.');
       return;
     }
 
@@ -220,8 +244,10 @@ class _LoginScreenState extends State<LoginScreen> {
       final result = await _authService.signInWithPhone(
         phone: phone,
         otp: otp,
+        sessionId: _sessionId,
         apiClient: apiClient,
       );
+      _resendTimer?.cancel();
       await _finishLogin(result, 'Signed in as ${result.user.displayName}');
     } catch (e) {
       if (!mounted) return;
@@ -927,45 +953,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
 
                           if (!_otpSent) ...[
-                            const SizedBox(height: 10),
-                            // Quick Test Mode Auto-Fill Chip
-                            InkWell(
-                              borderRadius: BorderRadius.circular(8),
-                              onTap: () {
-                                _phoneController.text = '9876543210';
-                                _otpController.text = '1234';
-                                setState(() => _otpSent = true);
-                              },
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFEF3C7),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: const Color(0xFFFDE68A)),
-                                ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.bolt_rounded, size: 15, color: Color(0xFFB45309)),
-                                    SizedBox(width: 6),
-                                    Flexible(
-                                      child: Text(
-                                        'Test Mode: Owner 9876543210 (OTP: 1234)',
-                                        style: TextStyle(
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF92400E),
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 16),
                             SizedBox(
                               width: double.infinity,
                               height: 48,
@@ -988,26 +976,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ] else ...[
-                            const SizedBox(height: 14),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  isBn ? '৪-সংখ্যার ওটিপি লিখুন' : isHi ? '4-अंकीय ओटीपी दर्ज करें' : 'Enter 4-Digit OTP',
-                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF334155)),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFDCFCE7),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Text(
-                                    'Test OTP: 1234',
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(height: 16),
+                            Text(
+                              isBn ? 'ওটিপি লিখুন' : isHi ? 'ओटीपी दर्ज करें' : 'Enter 6-Digit OTP',
+                              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF334155)),
                             ),
                             const SizedBox(height: 8),
                             TextField(
@@ -1025,7 +997,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 LengthLimitingTextInputFormatter(6),
                               ],
                               decoration: InputDecoration(
-                                hintText: '••••',
+                                hintText: '••••••',
                                 hintStyle: const TextStyle(letterSpacing: 8, color: Color(0xFF94A3B8)),
                                 contentPadding: const EdgeInsets.symmetric(vertical: 12),
                                 border: OutlineInputBorder(
@@ -1072,7 +1044,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 TextButton(
-                                  onPressed: _phoneBusy ? null : () => setState(() => _otpSent = false),
+                                  onPressed: _phoneBusy
+                                      ? null
+                                      : () {
+                                          _resendTimer?.cancel();
+                                          setState(() {
+                                            _otpSent = false;
+                                            _resendCountdown = 0;
+                                          });
+                                        },
                                   style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
                                   child: Text(
                                     isBn ? 'নম্বর পরিবর্তন' : isHi ? 'नंबर बदलें' : 'Change number',
@@ -1080,11 +1060,17 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                                 TextButton(
-                                  onPressed: _phoneBusy ? null : _handleRequestOtp,
+                                  onPressed: (_phoneBusy || _resendCountdown > 0) ? null : _handleRequestOtp,
                                   style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
                                   child: Text(
-                                    isBn ? 'পুনরায় ওটিপি পাঠান' : isHi ? 'पुनः ओटीपी भेजें' : 'Resend OTP',
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4F46E5)),
+                                    _resendCountdown > 0
+                                        ? 'Resend in ${_resendCountdown}s'
+                                        : (isBn ? 'পুনরায় ওটিপি পাঠান' : isHi ? 'पुनः ओटीपी भेजें' : 'Resend OTP'),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: _resendCountdown > 0 ? const Color(0xFF94A3B8) : const Color(0xFF4F46E5),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1345,27 +1331,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  _identifiedStaff!.pin != null && _identifiedStaff!.pin!.isNotEmpty
-                                      ? (isBn ? '৪-সংখ্যার কাউন্টার পিন দিন' : isHi ? '4-अंकीय काउंटर पिन दर्ज करें' : 'Enter 4-Digit Security PIN')
-                                      : (isBn ? '৪-সংখ্যার ওটিপি লিখুন' : isHi ? '4-अंकीय ओटीपी दर्ज करें' : 'Enter 4-Digit OTP'),
-                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF334155)),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFDCFCE7),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    'Test: ${_identifiedStaff!.pin ?? "1234"}',
-                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF15803D)),
-                                  ),
-                                ),
-                              ],
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                _identifiedStaff!.pin != null && _identifiedStaff!.pin!.isNotEmpty
+                                    ? (isBn ? '৪-সংখ্যার কাউন্টার পিন দিন' : isHi ? '4-अंकीय काउंटर पिन दर्ज करें' : 'Enter 4-Digit Security PIN')
+                                    : (isBn ? '৪-সংখ্যার ওটিপি লিখুন' : isHi ? '4-अंकीय ओटीपी दर्ज करें' : 'Enter 4-Digit OTP'),
+                                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF334155)),
+                              ),
                             ),
                             const SizedBox(height: 8),
                             TextField(
@@ -1531,40 +1504,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 24),
-
-                  // Trust & Privacy Note
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.shield_outlined, size: 16, color: Color(0xFF64748B)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            isBn
-                                ? 'প্রতিটি ব্যবহারকারীর ডেটা ক্লাউডে সুরক্ষিত ও পৃথক থাকে। রিয়েল টাইমে ডিভাইস সিঙ্ক হয়।'
-                                : isHi
-                                    ? 'प्रत्येक उपयोगकर्ता का डेटा क्लाउड पर अलग और सुरक्षित रहता है। सभी डिवाइस तुरंत सिंक होते हैं।'
-                                    : 'Each user account has its own isolated database space on AWS Cloud. Multi-device sync happens automatically in real time.',
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF64748B),
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),

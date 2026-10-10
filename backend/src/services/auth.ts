@@ -2,6 +2,7 @@ import { hashPassword, verifyPassword } from '../lib/crypto.js';
 import { signAccessToken } from '../lib/jwt.js';
 import { prisma } from './db.js';
 import { config, ALLOWED_GOOGLE_CLIENT_IDS } from '../config.js';
+import { TwoFactorService } from './twoFactorService.js';
 
 export async function registerUser(input: {
   name: string;
@@ -268,15 +269,25 @@ export async function googleAuth(input: {
 export async function phoneAuth(input: {
   phone: string;
   otp: string;
+  sessionId?: string;
   name?: string;
 }) {
-  // Upgradable hook: In test/mock mode or default setup, accept OTP '1234' or valid verification
-  if (input.otp !== '1234' && input.otp !== '0000') {
-    throw new Error('INVALID_OTP');
+  const cleanPhone = TwoFactorService.getInstance().cleanPhone(input.phone);
+  if (!TwoFactorService.getInstance().isValidIndianPhone(cleanPhone)) {
+    throw new Error('INVALID_PHONE_NUMBER');
   }
 
-  const cleanPhone = input.phone.trim();
-  const dummyEmail = `${cleanPhone.replace(/[^0-9]/g, '')}@phone.billapp.in`;
+  const verifyResult = await TwoFactorService.getInstance().verifyOtp(
+    cleanPhone,
+    input.otp,
+    input.sessionId,
+  );
+
+  if (!verifyResult.success) {
+    throw new Error(verifyResult.message || 'INVALID_OTP');
+  }
+
+  const dummyEmail = `${cleanPhone}@phone.billapp.in`;
 
   let user = await prisma.user.findUnique({
     where: { email: dummyEmail },

@@ -16,6 +16,7 @@ import { adminLoginLimiter } from './lib/rate_limiter.js';
 import { uploadTenantBackup, listTenantBackups, getTenantBackup, deleteTenantBackup, } from './services/backup.js';
 import { SUBSCRIPTION_PLANS, createSubscriptionOrder, verifySubscriptionPayment, handleRazorpayWebhook, getBusinessSubscriptionStatus, } from './services/subscriptionService.js';
 import { sandboxService } from './services/sandboxService.js';
+import { TwoFactorService } from './services/twoFactorService.js';
 export const app = Fastify({ logger: config.nodeEnv !== 'production' });
 await app.register(fastifyCors, {
     origin: true,
@@ -325,6 +326,22 @@ app.post('/api/v1/auth/google', async (request, reply) => {
         return reply.code(500).send({ error: 'Google authentication failed' });
     }
 });
+app.post('/api/v1/auth/phone/otp', async (request, reply) => {
+    const body = request.body;
+    if (!body?.phone) {
+        return reply.code(400).send({ error: 'Phone number is required' });
+    }
+    const result = await TwoFactorService.getInstance().sendOtp(body.phone);
+    if (!result.success) {
+        return reply.code(400).send({ error: result.message || 'Failed to send OTP' });
+    }
+    return reply.code(200).send({
+        success: true,
+        message: result.message || 'OTP sent successfully',
+        sessionId: result.sessionId,
+        isTestMode: result.isTestMode,
+    });
+});
 app.post('/api/v1/auth/phone/verify', async (request, reply) => {
     const body = request.body;
     if (!body?.phone || !body?.otp) {
@@ -334,15 +351,14 @@ app.post('/api/v1/auth/phone/verify', async (request, reply) => {
         const result = await phoneAuth({
             phone: body.phone,
             otp: body.otp,
+            sessionId: body.sessionId,
             name: body.name,
         });
         return reply.code(200).send(result);
     }
     catch (error) {
-        if (error instanceof Error && error.message === 'INVALID_OTP') {
-            return reply.code(401).send({ error: 'Invalid or expired OTP' });
-        }
-        return reply.code(500).send({ error: 'Phone verification failed' });
+        const msg = error?.message || 'Phone verification failed';
+        return reply.code(401).send({ error: msg });
     }
 });
 const gstStateCodes = {

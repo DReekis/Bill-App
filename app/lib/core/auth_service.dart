@@ -106,8 +106,8 @@ class AuthSessionResult {
 /// without modifying the core session or UI contracts.
 abstract class AuthService {
   Future<AuthSessionResult> signInWithGoogle({ApiClient? apiClient, String? businessName});
-  Future<AuthSessionResult> signInWithPhone({required String phone, required String otp, ApiClient? apiClient});
-  Future<void> requestPhoneOtp(String phone, {ApiClient? apiClient});
+  Future<AuthSessionResult> signInWithPhone({required String phone, required String otp, String? sessionId, ApiClient? apiClient});
+  Future<Map<String, dynamic>> requestPhoneOtp(String phone, {ApiClient? apiClient});
   Future<AuthSessionResult> register({
     required String name,
     required String email,
@@ -244,16 +244,17 @@ class CloudAuthService implements AuthService {
   Future<AuthSessionResult> signInWithPhone({
     required String phone,
     required String otp,
+    String? sessionId,
     ApiClient? apiClient,
   }) async {
     if (apiClient != null) {
       await apiClient.ensureReady();
-      return await apiClient.loginWithPhone(phone: phone, otp: otp);
+      return await apiClient.loginWithPhone(phone: phone, otp: otp, sessionId: sessionId);
     }
 
     // Default mock verification: '1234' or '0000'
     if (otp != '1234' && otp != '0000') {
-      throw Exception('INVALID_OTP: Please enter the 4-digit code (Use 1234 for testing).');
+      throw Exception('INVALID_OTP: Please enter the valid code.');
     }
 
     final cleanPhone = phone.trim();
@@ -271,10 +272,11 @@ class CloudAuthService implements AuthService {
   }
 
   @override
-  Future<void> requestPhoneOtp(String phone, {ApiClient? apiClient}) async {
+  Future<Map<String, dynamic>> requestPhoneOtp(String phone, {ApiClient? apiClient}) async {
     if (apiClient != null) {
-      await apiClient.requestPhoneOtp(phone);
+      return await apiClient.requestPhoneOtp(phone);
     }
+    return {'success': true, 'isTestMode': true};
   }
 
   @override

@@ -245,14 +245,39 @@ test('POST /api/v1/auth/google verifies idToken and prevents unauthenticated acc
 });
 
 
-test('POST /api/v1/auth/phone/verify supports upgradable mobile number auth', async () => {
+test('POST /api/v1/auth/phone/otp sends OTP and POST /api/v1/auth/phone/verify validates token', async () => {
   const phone = '9876543210';
+
+  // 1. Request OTP
+  const otpRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/phone/otp',
+    payload: { phone },
+  });
+  assert.equal(otpRes.statusCode, 200);
+  const otpBody = otpRes.json() as { success: boolean; sessionId?: string };
+  assert.equal(otpBody.success, true);
+  assert.ok(otpBody.sessionId);
+
+  // 2. Reject incorrect OTP
+  const badOtpRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/phone/verify',
+    payload: {
+      phone,
+      otp: '999999',
+    },
+  });
+  assert.equal(badOtpRes.statusCode, 401);
+
+  // 3. Verify with valid test OTP
   const res = await app.inject({
     method: 'POST',
     url: '/api/v1/auth/phone/verify',
     payload: {
       phone,
       otp: '1234',
+      sessionId: otpBody.sessionId,
       name: 'Mobile Merchant',
     },
   });
