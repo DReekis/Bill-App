@@ -882,7 +882,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      isBn ? 'মালিক হিসাবে প্রবেশ' : isHi ? 'मालिक के रूप में लॉगिन' : 'Business Owner Login',
+                                      isBn ? 'লগইন বা সাইন আপ' : isHi ? 'लॉगिन या साइन अप' : 'Login or Sign Up',
                                       style: const TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.w800,
@@ -892,10 +892,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                     const SizedBox(height: 2),
                                     Text(
                                       isBn
-                                          ? 'সম্পূর্ণ নিয়ন্ত্রণ ও রিপোর্ট সুবিধা'
+                                          ? 'নতুন নম্বর স্বয়ংক্রিয়ভাবে নিবন্ধিত হবে'
                                           : isHi
-                                              ? 'पूर्ण नियंत्रण और रिपोर्ट सुविधा'
-                                              : 'Full access to profits, staff & settings',
+                                              ? 'नया नंबर अपने आप रजिस्टर हो जाएगा'
+                                              : 'Enter phone number. New users are automatically registered.',
                                       style: const TextStyle(
                                         fontSize: 12,
                                         color: Color(0xFF64748B),
