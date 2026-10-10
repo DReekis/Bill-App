@@ -132,5 +132,30 @@ void main() {
       expect(part.constitution, 'Partnership / LLP');
       expect(part.state, 'Karnataka');
     });
+
+    test('GstBusinessInfo parses Billbook format shippingAddress from JSON', () {
+      final json = {
+        'gstin': '27AAACR5055K1Z7',
+        'valid': true,
+        'businessName': 'RELIANCE INDUSTRIES LIMITED',
+        'tradeName': 'RELIANCE INDUSTRIES LIMITED',
+        'legalName': 'RELIANCE INDUSTRIES LIMITED',
+        'address': '5, 5, TTC Industrial Area, Reliance Corporate Park, Thane Belapur Road, Ghansoli, Navi Mumbai, Thane, Maharashtra, 400701',
+        'shippingAddress': 'RELIANCE INDUSTRIES LIMITED, 5, 5, TTC Industrial Area, Reliance Corporate Park, Thane Belapur Road, Ghansoli, Navi Mumbai, Thane, Maharashtra, 400701',
+        'city': 'Thane',
+        'state': 'Maharashtra',
+        'pinCode': '400701',
+        'status': 'Active',
+        'isOnlineFetched': true,
+      };
+
+      final info = GstBusinessInfo.fromJson(json);
+      expect(info.gstin, '27AAACR5055K1Z7');
+      expect(info.address, '5, 5, TTC Industrial Area, Reliance Corporate Park, Thane Belapur Road, Ghansoli, Navi Mumbai, Thane, Maharashtra, 400701');
+      expect(info.shippingAddress, 'RELIANCE INDUSTRIES LIMITED, 5, 5, TTC Industrial Area, Reliance Corporate Park, Thane Belapur Road, Ghansoli, Navi Mumbai, Thane, Maharashtra, 400701');
+      expect(info.city, 'Thane');
+      expect(info.state, 'Maharashtra');
+      expect(info.pinCode, '400701');
+    });
   });
 }

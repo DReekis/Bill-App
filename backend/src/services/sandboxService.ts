@@ -13,6 +13,7 @@ export interface GstLookupResult {
   state: string;
   city: string;
   address: string;
+  shippingAddress?: string;
   pinCode: string;
   constitution: string;
   industry: string;
@@ -390,6 +391,7 @@ export class SandboxService {
         headers: {
           'x-api-key': apiKey,
           'x-api-secret': apiSecret,
+          'x-api-version': '1.0',
           'Content-Type': 'application/json',
         },
       });
@@ -397,8 +399,9 @@ export class SandboxService {
 
       if (res.ok) {
         const json: any = await res.json();
-        if (json?.access_token) {
-          this.cachedToken = json.access_token;
+        const token = json?.access_token || json?.data?.access_token;
+        if (token) {
+          this.cachedToken = token;
           // Sandbox JWT tokens are valid for 24h; refresh after 23h
           this.tokenExpiresAt = Date.now() + 23 * 60 * 60 * 1000;
           return this.cachedToken;
@@ -443,6 +446,8 @@ export class SandboxService {
     // 1. Direct hit for verified profiles
     if (demoProfiles[gstin]) {
       const p = demoProfiles[gstin]!;
+      const addr = p.address || `${capital.city}, ${state} - ${capital.pinCode}`;
+      const party = p.tradeName || p.businessName || p.legalName || 'Business Entity';
       return {
         gstin,
         valid: true,
@@ -454,7 +459,8 @@ export class SandboxService {
         stateCode,
         state,
         city: p.city || capital.city,
-        address: p.address || `${capital.city}, ${state} - ${capital.pinCode}`,
+        address: addr,
+        shippingAddress: `${party}, ${addr}`,
         pinCode: p.pinCode || capital.pinCode,
         constitution: p.constitution || constitution,
         industry: p.industry || industry,
@@ -479,6 +485,7 @@ export class SandboxService {
         state,
         city: capital.city,
         address: '',
+        shippingAddress: '',
         pinCode: capital.pinCode,
         constitution,
         industry,
@@ -495,7 +502,7 @@ export class SandboxService {
     if (token) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 4500);
+        const timeout = setTimeout(() => controller.abort(), 6000);
         const res = await fetch(`${config.sandbox.baseUrl}/gst/compliance/public/gstin/search`, {
           method: 'POST',
           signal: controller.signal,
@@ -509,25 +516,34 @@ export class SandboxService {
         });
         clearTimeout(timeout);
 
+        if (res.status === 401 || res.status === 403) {
+          this.cachedToken = null;
+        }
+
         if (res.ok) {
           const json: any = await res.json();
-          const d = json?.data;
+          const d = json?.data?.data || json?.data;
           if (d) {
-            const tradeName = (d.trade_name || d.tradeNam || d.trade_name_of_business || '').trim();
-            const legalName = (d.legal_name_of_business || d.lgnm || '').trim();
+            const tradeName = (d.tradeNam || d.trade_name || d.tradeName || d.trade_name_of_business || d.lgnm || '').trim();
+            const legalName = (d.lgnm || d.legal_name_of_business || d.tradeNam || d.trade_name || '').trim();
             const addrObj = d.principal_place_of_business_fields || d.pradr?.addr || {};
 
             const bno = (addrObj.door_number || addrObj.bno || '').trim();
+            const flno = (addrObj.floor_number || addrObj.flno || '').trim();
             const bnm = (addrObj.building_name || addrObj.bnm || '').trim();
             const st = (addrObj.street || addrObj.st || '').trim();
             const loc = (addrObj.location || addrObj.loc || '').trim();
+            const locality = (addrObj.locality || '').trim();
+            const landMark = (addrObj.landMark || addrObj.landmark || '').trim();
             const dst = (addrObj.district || addrObj.dst || '').trim();
             const stcd = (addrObj.state || addrObj.stcd || '').trim();
             const pncd = (addrObj.pincode || addrObj.pncd || '').trim();
 
-            const addrParts = [bno, bnm, st, loc, dst, stcd, pncd].filter(Boolean);
+            const addrParts = [bno, flno, bnm, st, loc, locality, landMark, dst, stcd, pncd].filter(Boolean);
             const fullAddress = addrParts.join(', ');
-            const city = loc || dst || capital.city;
+            const city = dst || loc || capital.city;
+            const partyName = tradeName || legalName;
+            const shippingAddress = partyName && fullAddress ? `${partyName}, ${fullAddress}` : fullAddress;
 
             const ctb = (d.constitution_of_business || d.ctb || '').trim();
             const dty = (d.taxpayer_type || d.dty || '').trim();
@@ -546,6 +562,7 @@ export class SandboxService {
               state: stcd || state,
               city,
               address: fullAddress || `${capital.city}, ${state} - ${capital.pinCode}`,
+              shippingAddress: shippingAddress || (fullAddress || `${capital.city}, ${state} - ${capital.pinCode}`),
               pinCode: pncd || capital.pinCode,
               constitution: ctb || constitution,
               industry,
@@ -597,6 +614,9 @@ export class SandboxService {
               }
             }
 
+            const partyName = tradeName || legalName;
+            const shippingAddress = partyName && fullAddress ? `${partyName}, ${fullAddress}` : fullAddress;
+
             if (tradeName.length > 0 || legalName.length > 0 || fullAddress.length > 0) {
               return {
                 gstin,
@@ -610,6 +630,7 @@ export class SandboxService {
                 state,
                 city,
                 address: fullAddress,
+                shippingAddress,
                 pinCode,
                 constitution: d.ctb || constitution,
                 industry,
@@ -628,18 +649,21 @@ export class SandboxService {
     }
 
     // 4. Guaranteed deterministic resolution
+    const defName = `Enterprise ${pan.slice(0, 5)}`;
+    const defAddr = `${capital.city}, ${state} - ${capital.pinCode}`;
     return {
       gstin,
       valid: true,
-      businessName: `Enterprise ${pan.slice(0, 5)}`,
-      tradeName: `Enterprise ${pan.slice(0, 5)}`,
-      legalName: `Enterprise ${pan.slice(0, 5)}`,
+      businessName: defName,
+      tradeName: defName,
+      legalName: defName,
       ownerName: `Proprietor ${pan.slice(0, 5)}`,
       pan,
       stateCode,
       state,
       city: capital.city,
-      address: `${capital.city}, ${state} - ${capital.pinCode}`,
+      address: defAddr,
+      shippingAddress: `${defName}, ${defAddr}`,
       pinCode: capital.pinCode,
       constitution,
       industry,

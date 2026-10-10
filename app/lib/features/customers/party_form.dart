@@ -165,8 +165,23 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
               if (_billingAddress.text.trim().isEmpty || force || _billingAddress.text == prevAutoAddress) {
                 _billingAddress.text = info.address!;
               }
+            }
+
+            final effectiveShipping = (info.shippingAddress != null && info.shippingAddress!.isNotEmpty)
+                ? info.shippingAddress!
+                : (info.effectiveName.isNotEmpty && info.address != null && info.address!.isNotEmpty
+                    ? '${info.effectiveName}, ${info.address!}'
+                    : (info.address ?? ''));
+
+            if (effectiveShipping.isNotEmpty) {
               if (_sameAsBilling || _shippingAddress.text.trim().isEmpty || force || _shippingAddress.text == prevAutoAddress) {
-                _shippingAddress.text = info.address!;
+                _shippingAddress.text = effectiveShipping;
+              }
+              // In Billbook, shipping address starts with party name.
+              // When shipping address has the prepended party name, uncheck _sameAsBilling
+              // so both fields are clearly visible and saved properly.
+              if (_shippingAddress.text.isNotEmpty && _shippingAddress.text != _billingAddress.text) {
+                _sameAsBilling = false;
               }
             }
             _showAutofillSuccessBanner = true;

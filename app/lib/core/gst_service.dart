@@ -19,6 +19,7 @@ class GstBusinessInfo {
     this.state,
     this.city,
     this.address,
+    this.shippingAddress,
     this.pinCode,
     this.constitution,
     this.industry,
@@ -39,6 +40,7 @@ class GstBusinessInfo {
   final String? state;
   final String? city;
   final String? address;
+  final String? shippingAddress;
   final String? pinCode;
   final String? constitution;
   final String? industry;
@@ -79,6 +81,7 @@ class GstBusinessInfo {
       state: json['state'] as String?,
       city: json['city'] as String?,
       address: json['address'] as String?,
+      shippingAddress: json['shippingAddress'] as String?,
       pinCode: json['pinCode'] as String?,
       constitution: json['constitution'] as String?,
       industry: json['industry'] as String?,
@@ -101,6 +104,7 @@ class GstBusinessInfo {
         'state': state,
         'city': city,
         'address': address,
+        'shippingAddress': shippingAddress,
         'pinCode': pinCode,
         'constitution': constitution,
         'industry': industry,
@@ -343,6 +347,8 @@ class GstService {
     // Check directory first
     final cached = enterpriseProfiles[clean];
     if (cached != null) {
+      final addr = cached['address'];
+      final party = cached['tradeName'] ?? cached['businessName'] ?? cached['legalName'];
       return GstBusinessInfo(
         gstin: clean,
         valid: true,
@@ -354,7 +360,8 @@ class GstService {
         stateCode: stateCode,
         state: stateName,
         city: cached['city'],
-        address: cached['address'],
+        address: addr,
+        shippingAddress: (party != null && addr != null) ? '$party, $addr' : addr,
         pinCode: cached['pinCode'],
         constitution: cached['constitution'] ?? 'Business Entity',
         industry: cached['industry'] ?? 'Retail',
@@ -548,6 +555,7 @@ class GstService {
     final sts = (d['sts'] as String?)?.trim() ?? 'Active';
 
     final effectiveName = (tradeName?.isNotEmpty == true ? tradeName : legalName) ?? '';
+    final shipping = effectiveName.isNotEmpty && adr != null && adr.isNotEmpty ? '$effectiveName, $adr' : adr;
 
     return GstBusinessInfo(
       gstin: gstin,
@@ -561,6 +569,7 @@ class GstService {
       state: state,
       city: city,
       address: adr,
+      shippingAddress: shipping,
       pinCode: pin,
       constitution: constitution,
       industry: fallback.industry,
@@ -572,7 +581,7 @@ class GstService {
   }
 
   /// Parses the gstincheck.co.in / standard GST portal JSON response.
-  /// Address format produced: "09, Dharamnagar, Dharamnagar, North Tripura, Tripura, 799250"
+  /// Address format produced: matches Billbook standard field ordering: bno, flno, bnm, st, loc, dst, stcd, pncd
   GstBusinessInfo _parseGstinCheckResponse(
     String gstin,
     Map<String, dynamic> d,
@@ -584,27 +593,26 @@ class GstService {
     final tradeName = (d['tradeNam'] as String?)?.trim();
     final legalName = (d['lgnm'] as String?)?.trim();
 
-    // Build address parts in natural reading order — match Billbook format
+    // Build address parts in standard Billbook order
     final bno   = (addr?['bno']  as String?)?.trim();   // building/door number
-    final bnm   = (addr?['bnm']  as String?)?.trim();   // building name
     final flno  = (addr?['flno'] as String?)?.trim();   // floor number
+    final bnm   = (addr?['bnm']  as String?)?.trim();   // building name
     final st    = (addr?['st']   as String?)?.trim();   // street
     final loc   = (addr?['loc']  as String?)?.trim();   // locality
     final dst   = (addr?['dst']  as String?)?.trim();   // district
     final stcd  = (addr?['stcd'] as String?)?.trim();   // state name from GST
     final pncd  = (addr?['pncd'] as String?)?.trim();   // pin code
 
-    // Determine best city: locality or district
-    final city = loc?.isNotEmpty == true ? loc : dst;
+    // Determine best city: district or locality
+    final city = dst?.isNotEmpty == true ? dst : loc;
 
-    // Build the address string in a clean, natural order
+    // Build the address string in Billbook order
     final addressParts = <String>[];
     if (bno != null && bno.isNotEmpty) addressParts.add(bno);
-    if (bnm != null && bnm.isNotEmpty) addressParts.add(bnm);
     if (flno != null && flno.isNotEmpty) addressParts.add(flno);
+    if (bnm != null && bnm.isNotEmpty) addressParts.add(bnm);
     if (st != null && st.isNotEmpty) addressParts.add(st);
     if (loc != null && loc.isNotEmpty) addressParts.add(loc);
-    // Only add district if it differs from locality
     if (dst != null && dst.isNotEmpty && dst != loc) addressParts.add(dst);
     if (stcd != null && stcd.isNotEmpty) addressParts.add(stcd);
     if (pncd != null && pncd.isNotEmpty) addressParts.add(pncd);
@@ -615,6 +623,7 @@ class GstService {
     final dty = d['dty'] as String? ?? 'Regular';
 
     final effectiveName = (tradeName?.isNotEmpty == true ? tradeName : legalName) ?? '';
+    final shipping = effectiveName.isNotEmpty && address != null ? '$effectiveName, $address' : address;
 
     return GstBusinessInfo(
       gstin: gstin,
@@ -628,6 +637,7 @@ class GstService {
       state: stcd?.isNotEmpty == true ? stcd : fallback.state,
       city: city,
       address: address,
+      shippingAddress: shipping,
       pinCode: pncd,
       constitution: d['ctb'] as String? ?? fallback.constitution,
       industry: fallback.industry,

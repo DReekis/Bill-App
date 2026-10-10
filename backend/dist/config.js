@@ -22,8 +22,8 @@ export const config = {
         webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || 'wEQAJKA0T1iJNITsDV9jRRI3',
     },
     sandbox: {
-        apiKey: process.env.SANDBOX_API_KEY || 'key_live_23b25d5294db404da8ff74be13354c73',
-        apiSecret: process.env.SANDBOX_API_SECRET || '',
+        apiKey: process.env.SANDBOX_API_KEY || 'key_live_6000130d928043638b3d70dd31d79f6c',
+        apiSecret: process.env.SANDBOX_API_SECRET || 'secret_live_a36390af553441d5907967ddb7c14ad8',
         baseUrl: process.env.SANDBOX_BASE_URL || 'https://api.sandbox.co.in',
     },
 };

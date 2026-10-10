@@ -23,6 +23,7 @@ test('Sandbox Service & Compliance Engine Endpoints', async (t) => {
     assert.strictEqual(body.taxpayerType, 'Regular');
     assert.strictEqual(body.isComposition, false);
     assert.strictEqual(body.status, 'Active');
+    assert.strictEqual(body.shippingAddress, 'Modern Retail Store, 104, MG Road, Brigade Junction, Bengaluru, Karnataka - 560001');
 
     // 2. Deterministic fallback for any valid Indian GSTIN
     const res2 = await app.inject({
@@ -36,6 +37,7 @@ test('Sandbox Service & Compliance Engine Endpoints', async (t) => {
     assert.strictEqual(body2.stateCode, '27');
     assert.strictEqual(body2.state, 'Maharashtra');
     assert.strictEqual(body2.constitution, 'Partnership / LLP');
+    assert.ok(body2.shippingAddress && body2.shippingAddress.includes('Enterprise ABCFE'));
   });
 
   await t.test('POST /api/v1/einvoice/generate generates compliant IRN, Ack and Signed QR Code', async () => {
