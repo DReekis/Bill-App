@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'money.dart';
 import 'session.dart';
 
@@ -296,7 +297,8 @@ class Customer {
     this.phone,
     this.whatsapp,
     this.email,
-    this.billingAddress,
+    String? address,
+    String? billingAddress,
     this.shippingAddress,
     this.gstin,
     this.pan,
@@ -311,7 +313,7 @@ class Customer {
     this.notes,
     this.loyaltyPoints = 0,
     this.inactive = false,
-  });
+  }) : billingAddress = billingAddress ?? address;
   final int? id;
   String name;
   String? phone;
@@ -332,6 +334,8 @@ class Customer {
   String? notes;
   int loyaltyPoints = 0;
   bool inactive;
+
+  String? get address => billingAddress ?? shippingAddress;
 
   Map<String, Object?> toMap() => {
         'name': name,
@@ -798,6 +802,27 @@ class Invoice {
   Money get outstanding => Money(total - amountPaid);
 
   bool get isCredit => status == 'Unpaid' || status == 'Partially paid';
+
+  Map<String, dynamic> get customFields {
+    try {
+      final decoded = jsonDecode(customFieldsJson);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } catch (_) {}
+    return {};
+  }
+
+  String? get ackNo => customFields['ack_no'] as String?;
+  String? get ackDate => customFields['ack_date'] as String?;
+  String? get signedQrCode => customFields['signed_qr_code'] as String?;
+  String? get einvoiceStatus => customFields['einvoice_status'] as String?;
+  bool get hasEInvoice => irn != null && irn!.trim().isNotEmpty && einvoiceStatus != 'CNL';
+
+  String? get ewbDate => customFields['ewb_date'] as String?;
+  String? get ewbValidUntil => customFields['ewb_valid_until'] as String?;
+  String? get ewbStatus => customFields['ewb_status'] as String?;
+  String? get transporterName => customFields['transporter_name'] as String?;
+  int? get distanceKm => (customFields['distance_km'] as num?)?.toInt();
+  bool get hasEWayBill => ewayBillNumber != null && ewayBillNumber!.trim().isNotEmpty && ewbStatus != 'CNL';
 
   Map<String, Object?> toMap() => {
         'business_id': businessId,

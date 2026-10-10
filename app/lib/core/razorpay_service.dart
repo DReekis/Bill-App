@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'api_client.dart';
@@ -246,7 +245,7 @@ class RazorpayService {
   }) async {
     // In desktop test environment, we directly invoke verify-payment with mock test token
     final fakePaymentId = 'pay_sim_${DateTime.now().millisecondsSinceEpoch}';
-    final fakeSignature = 'sim_test_sig';
+    const fakeSignature = 'sim_test_sig';
 
     try {
       final res = await ApiClient.instance.post(
@@ -277,7 +276,7 @@ class RazorpayService {
           message: 'Subscription upgraded to ${tier.displayName}',
         );
       } else {
-        return RazorpayCheckoutResult(
+        return const RazorpayCheckoutResult(
           success: false,
           message: 'Test checkout requires valid Razorpay native interface.',
         );

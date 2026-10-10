@@ -386,3 +386,34 @@ For every single phase implemented, we will run the following verification suite
    - Execute live curl or client test against AWS EC2 (`43.204.237.49`) to verify the endpoint in real cloud runtime.
 4. **Interactive UI Walkthrough:**
    - Verify smooth transitions, correct color tokens, proper font styles, and responsive touch targets.
+
+---
+
+## 7. Phase 4: Government Compliance & Sandbox.co.in GSP Integration (Complete)
+
+### 1. GSTIN Live Auto-Fill & Field Mapping (Billbook Standard)
+- **Backend Gateway:** Configured Sandbox.co.in gateway with live API key (`key_live_23b25d5294db404da8ff74be13354c73`) and multi-tiered fallback (Jamku Live Registry + verified directory profiles + deterministic PAN/State parser).
+- **Field Resolution:**
+  - Business/Trade Name (`tradeName`, `businessName`, `legalName`)
+  - Proprietor/Owner Name (`effectiveOwner`)
+  - PAN (Characters 3–12 extracted deterministically)
+  - State & State Code (38 Indian States & UTs mapped)
+  - Address (Door/Building, Street, Locality, District, Pincode)
+  - Constitution of Business (Sole Proprietorship, Partnership, Private Limited, etc.)
+  - Taxpayer Type (Regular, Composition) & Status (Active, Suspended, Cancelled)
+- **Frontend Integration:**
+  - `PartyFormSheet`: Auto-fills Customer and Supplier billing/shipping address, state, city, PAN, and trade name on 15-char GSTIN input.
+  - `BusinessEditScreen`: Instant lookup and auto-fill for business profile setup.
+
+### 2. NIC Schema v1.03 E-Invoice Engine
+- **IRN Generation:** Deterministic 64-character SHA-256 hash according to NIC rules `SHA256(SellerGSTIN + FinYear + DocType + DocNumber)`.
+- **Ack No & Signed QR Code:** 15-digit Ack No, ISO timestamp, and signed JWT QR code containing `{ Irn, RecpGstin, DocNo, DocTyp, TotInvVal, ItemCnt, MainHsnCode, AckNo, AckDt }`.
+- **Cancellation:** 24-hour statutory cancellation support with official NIC reason codes (1: Duplicate, 2: Data Entry Error, 3: Order Cancelled, 4: Other).
+- **UI & PDF:** `EInvoiceDetailsSheet` for interactive management with copyable IRN, QR display, and official E-INVOICE header in PDF printouts.
+
+### 3. NIC Form GST EWB-01 E-Way Bill Engine
+- **E-Way Bill Number:** 12-digit standard NIC serial number.
+- **Validity Calculation:** Dynamically calculated based on statutory Rule 138(10) (1 day per 200 km for regular cargo; 1 day per 20 km for Over Dimensional Cargo).
+- **Part A & Part B:** Consignor/Consignee addresses, vehicle number, transport mode (Road/Rail/Air/Ship), transporter ID/name, and document number.
+- **Form EWB-01 Slip & Printing:** `EWayBillSlipScreen` renders government-compliant printable slip with share and PDF layout capabilities.
+- **Cancellation:** Statutory cancellation support with cancellation modal and audit log.

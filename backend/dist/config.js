@@ -21,6 +21,11 @@ export const config = {
         keySecret: process.env.RAZORPAY_KEY_SECRET || 'wEQAJKA0T1iJNITsDV9jRRI3',
         webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || 'wEQAJKA0T1iJNITsDV9jRRI3',
     },
+    sandbox: {
+        apiKey: process.env.SANDBOX_API_KEY || 'key_live_23b25d5294db404da8ff74be13354c73',
+        apiSecret: process.env.SANDBOX_API_SECRET || '',
+        baseUrl: process.env.SANDBOX_BASE_URL || 'https://api.sandbox.co.in',
+    },
 };
 export const ALLOWED_GOOGLE_CLIENT_IDS = [
     config.google.clientId,

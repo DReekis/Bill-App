@@ -14,8 +14,6 @@ class SubscriptionPlansScreen extends StatefulWidget {
 
 class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
   bool _loading = false;
-  SubscriptionTier _selectedTier = SubscriptionTier.silver;
-  bool _showComparisonTable = false;
 
   @override
   void initState() {

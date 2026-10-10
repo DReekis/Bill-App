@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -113,6 +114,7 @@ Future<Uint8List> buildDocumentPdf({
   String? lrRrNumber,
   bool reverseCharge = false,
   String? customFieldsJson,
+  String? irn,
 }) async {
   final doc = pw.Document();
   final regular = pw.Font.helvetica();
@@ -127,6 +129,20 @@ Future<Uint8List> buildDocumentPdf({
   const lightGrey = PdfColor.fromInt(0xFFF1F5F9);
 
   String money(int paise) => formatPaisePdf(paise, prefixRs: true);
+
+  Map<String, dynamic> customData = {};
+  try {
+    if (customFieldsJson != null && customFieldsJson.isNotEmpty) {
+      final decoded = jsonDecode(customFieldsJson);
+      if (decoded is Map<String, dynamic>) customData = decoded;
+    }
+  } catch (_) {}
+
+  final effectiveIrn = irn;
+  final ackNo = customData['ack_no']?.toString();
+  final ackDate = customData['ack_date']?.toString();
+  final signedQr = customData['signed_qr_code']?.toString();
+  final hasEinvoice = effectiveIrn != null && effectiveIrn.trim().isNotEmpty && customData['einvoice_status'] != 'CNL';
 
   // Pre-load images safely if present
   pw.MemoryImage? logoImage;
@@ -273,6 +289,68 @@ Future<Uint8List> buildDocumentPdf({
         ),
       ),
       build: (context) => [
+        if (hasEinvoice) ...[
+          pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 6),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              border: pw.Border.all(color: borderGrey, width: 0.6),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+            ),
+            child: pw.Row(
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Row(
+                        children: [
+                          pw.Text('e-Invoice IRN: ', style: pw.TextStyle(font: bold, fontSize: 7, color: slateDark)),
+                          pw.Expanded(
+                            child: pw.Text(
+                              effectiveIrn,
+                              style: pw.TextStyle(font: bold, fontSize: 6.5, color: primaryColor),
+                              maxLines: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Row(
+                        children: [
+                          if (ackNo != null) ...[
+                            pw.Text('Ack No: ', style: pw.TextStyle(font: bold, fontSize: 6.5, color: slateDark)),
+                            pw.Text(ackNo, style: pw.TextStyle(font: regular, fontSize: 6.5)),
+                            pw.SizedBox(width: 8),
+                          ],
+                          if (ackDate != null) ...[
+                            pw.Text('Ack Date: ', style: pw.TextStyle(font: bold, fontSize: 6.5, color: slateDark)),
+                            pw.Text(ackDate, style: pw.TextStyle(font: regular, fontSize: 6.5)),
+                          ],
+                          if (ewayBillNumber != null && ewayBillNumber.isNotEmpty) ...[
+                            pw.SizedBox(width: 8),
+                            pw.Text('E-Way Bill: ', style: pw.TextStyle(font: bold, fontSize: 6.5, color: slateDark)),
+                            pw.Text(ewayBillNumber, style: pw.TextStyle(font: bold, fontSize: 6.5)),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (signedQr != null && signedQr.isNotEmpty) ...[
+                  pw.SizedBox(width: 6),
+                  pw.BarcodeWidget(
+                    barcode: pw.Barcode.qrCode(),
+                    data: signedQr,
+                    width: 32,
+                    height: 32,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
         // ==========================================
         // 1. TOP HEADER & BRANDING (CLASSIC GRID)
         // ==========================================
@@ -405,6 +483,22 @@ Future<Uint8List> buildDocumentPdf({
                         pw.Text(reverseCharge ? 'YES' : 'NO', style: pw.TextStyle(font: bold, fontSize: 7.5, color: reverseCharge ? PdfColors.red800 : slateDark)),
                       ],
                     ),
+                    if (ewayBillNumber != null && ewayBillNumber.isNotEmpty)
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.end,
+                        children: [
+                          pw.Text('E-Way Bill: ', style: pw.TextStyle(font: bold, fontSize: 7.5)),
+                          pw.Text(ewayBillNumber, style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
+                        ],
+                      ),
+                    if (vehicleNumber != null && vehicleNumber.isNotEmpty)
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.end,
+                        children: [
+                          pw.Text('Vehicle No: ', style: pw.TextStyle(font: bold, fontSize: 7.5)),
+                          pw.Text(vehicleNumber, style: pw.TextStyle(font: regular, fontSize: 7.5)),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -1130,6 +1224,7 @@ Future<Uint8List> buildInvoicePdf({
     lrRrNumber: invoice.lrRrNumber,
     reverseCharge: invoice.reverseCharge,
     customFieldsJson: invoice.customFieldsJson,
+    irn: invoice.irn,
   );
 }
 

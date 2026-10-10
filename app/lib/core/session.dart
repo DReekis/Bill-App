@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/app_database.dart';
+import 'api_client.dart';
 import 'auth_service.dart';
 import 'security_service.dart';
 
@@ -59,6 +60,9 @@ class Session extends ChangeNotifier {
   String? mobile;
   String? token;
   int? businessId;
+
+  ApiClient get client => token != null ? (ApiClient()..setToken(token!)) : ApiClient();
+  ApiClient get apiClient => client;
   String currentUser = 'Owner';
   String currentRole = 'Owner';
   String localeCode = 'en';

@@ -15,6 +15,7 @@ import { getAdminOverview, listAdminBusinesses, getAdminBusinessDetail, updateBu
 import { adminLoginLimiter } from './lib/rate_limiter.js';
 import { uploadTenantBackup, listTenantBackups, getTenantBackup, deleteTenantBackup, } from './services/backup.js';
 import { SUBSCRIPTION_PLANS, createSubscriptionOrder, verifySubscriptionPayment, handleRazorpayWebhook, getBusinessSubscriptionStatus, } from './services/subscriptionService.js';
+import { sandboxService } from './services/sandboxService.js';
 export const app = Fastify({ logger: config.nodeEnv !== 'production' });
 await app.register(fastifyCors, {
     origin: true,
@@ -399,325 +400,67 @@ const panEntityTypes = {
 };
 app.get('/api/v1/gst/lookup/:gstin', async (request, reply) => {
     const gstin = (request.params?.gstin ?? '').trim().toUpperCase();
-    const isValidFormat = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstin);
     if (gstin.length < 2) {
         return reply.code(400).send({ error: 'Invalid GSTIN length' });
     }
-    const stateCode = gstin.substring(0, 2);
-    const state = gstStateCodes[stateCode] || 'Unknown State';
-    let pan = '';
-    let constitution = 'Business Entity';
-    let industry = 'Retail';
-    if (gstin.length >= 12) {
-        pan = gstin.substring(2, 12);
-        const entityChar = pan.length >= 4 ? pan[3] : '';
-        constitution = panEntityTypes[entityChar] || 'Business Entity';
-        if (entityChar === 'P')
-            industry = 'Retail';
-        else if (entityChar === 'C')
-            industry = 'Manufacturing';
-        else if (entityChar === 'F')
-            industry = 'Wholesale';
-        else if (entityChar === 'T' || entityChar === 'A')
-            industry = 'Services';
-    }
-    const stateCommercialCapitals = {
-        '01': { city: 'Srinagar', pinCode: '190001' },
-        '02': { city: 'Shimla', pinCode: '171001' },
-        '03': { city: 'Ludhiana', pinCode: '141001' },
-        '04': { city: 'Chandigarh', pinCode: '160017' },
-        '05': { city: 'Dehradun', pinCode: '248001' },
-        '06': { city: 'Gurugram', pinCode: '122001' },
-        '07': { city: 'New Delhi', pinCode: '110001' },
-        '08': { city: 'Jaipur', pinCode: '302001' },
-        '09': { city: 'Lucknow', pinCode: '226001' },
-        '10': { city: 'Patna', pinCode: '800001' },
-        '11': { city: 'Gangtok', pinCode: '737101' },
-        '12': { city: 'Itanagar', pinCode: '791111' },
-        '13': { city: 'Dimapur', pinCode: '797112' },
-        '14': { city: 'Imphal', pinCode: '795001' },
-        '15': { city: 'Aizawl', pinCode: '796001' },
-        '16': { city: 'Agartala', pinCode: '799001' },
-        '17': { city: 'Shillong', pinCode: '793001' },
-        '18': { city: 'Guwahati', pinCode: '781001' },
-        '19': { city: 'Kolkata', pinCode: '700001' },
-        '20': { city: 'Ranchi', pinCode: '834001' },
-        '21': { city: 'Bhubaneswar', pinCode: '751001' },
-        '22': { city: 'Raipur', pinCode: '492001' },
-        '23': { city: 'Indore', pinCode: '452001' },
-        '24': { city: 'Ahmedabad', pinCode: '380001' },
-        '26': { city: 'Silvassa', pinCode: '396230' },
-        '27': { city: 'Mumbai', pinCode: '400001' },
-        '28': { city: 'Vijayawada', pinCode: '520001' },
-        '29': { city: 'Bengaluru', pinCode: '560001' },
-        '30': { city: 'Panaji', pinCode: '403001' },
-        '31': { city: 'Kavaratti', pinCode: '682555' },
-        '32': { city: 'Kochi', pinCode: '682001' },
-        '33': { city: 'Chennai', pinCode: '600001' },
-        '34': { city: 'Puducherry', pinCode: '605001' },
-        '35': { city: 'Port Blair', pinCode: '744101' },
-        '36': { city: 'Hyderabad', pinCode: '500001' },
-        '37': { city: 'Visakhapatnam', pinCode: '530001' },
-        '38': { city: 'Leh', pinCode: '194101' },
-        '97': { city: 'Special Economic Zone', pinCode: '999999' },
-        '99': { city: 'Central Jurisdiction', pinCode: '110001' },
-    };
-    const capital = stateCommercialCapitals[stateCode] || { city: 'Commercial Hub', pinCode: '110001' };
-    // Pre-configured verified Indian enterprise directory
-    const demoProfiles = {
-        '29AAAAA0000A1Z5': {
-            businessName: 'Modern Retail Store',
-            tradeName: 'Modern Retail Store',
-            legalName: 'Modern Retail Enterprises Pvt Ltd',
-            ownerName: 'Ramesh Kumar',
-            city: 'Bengaluru',
-            address: '104, MG Road, Brigade Junction, Bengaluru, Karnataka - 560001',
-            pinCode: '560001',
-            industry: 'Retail',
-            constitution: 'Private Limited Company',
-            isComposition: false,
-        },
-        '27AAPFU0939F1ZV': {
-            businessName: 'Apex Electronics & Trade',
-            tradeName: 'Apex Electronics',
-            legalName: 'Apex Electronics & Trade LLP',
-            ownerName: 'Sunil Patil',
-            city: 'Mumbai',
-            address: 'Shop 12, Lamington Road, Grant Road East, Mumbai, Maharashtra - 400007',
-            pinCode: '400007',
-            industry: 'Wholesale',
-            constitution: 'Partnership / LLP',
-            isComposition: false,
-        },
-        '07AAACW8734P1Z3': {
-            businessName: 'Delhi Central Provisions',
-            tradeName: 'Delhi Central Provisions',
-            legalName: 'Delhi Central Enterprises Ltd',
-            ownerName: 'Vikram Sharma',
-            city: 'New Delhi',
-            address: 'Plot 45, Connaught Circus, New Delhi, Delhi - 110001',
-            pinCode: '110001',
-            industry: 'Manufacturing',
-            constitution: 'Company',
-            isComposition: false,
-        },
-        '27AAACR4545P1ZS': {
-            businessName: 'Reliance Retail Limited',
-            tradeName: 'Reliance Retail',
-            legalName: 'Reliance Retail Limited',
-            ownerName: 'Mukesh Ambani',
-            city: 'Mumbai',
-            address: 'Reliance Corporate Park, Thane-Belapur Road, Mumbai, Maharashtra - 400701',
-            pinCode: '400701',
-            industry: 'Retail',
-            constitution: 'Company',
-            isComposition: false,
-        },
-        '27AAACT2727Q1ZW': {
-            businessName: 'Tata Consumer Products',
-            tradeName: 'Tata Consumer',
-            legalName: 'Tata Consumer Products Limited',
-            ownerName: 'Natarajan Chandrasekaran',
-            city: 'Mumbai',
-            address: 'Bombay House, 24 Homi Mody Street, Fort, Mumbai, Maharashtra - 400001',
-            pinCode: '400001',
-            industry: 'Manufacturing',
-            constitution: 'Company',
-            isComposition: false,
-        },
-        '29AAACI4747B1ZP': {
-            businessName: 'Infosys Commercial Systems',
-            tradeName: 'Infosys Enterprises',
-            legalName: 'Infosys Limited',
-            ownerName: 'Salil Parekh',
-            city: 'Bengaluru',
-            address: 'Electronics City, Hosur Road, Bengaluru, Karnataka - 560100',
-            pinCode: '560100',
-            industry: 'Services',
-            constitution: 'Company',
-            isComposition: false,
-        },
-        '29AABCU9603R1ZV': {
-            businessName: 'Flipkart Commerce',
-            tradeName: 'Flipkart Internet',
-            legalName: 'Flipkart Internet Private Limited',
-            ownerName: 'Kalyan Krishnamurthy',
-            city: 'Bengaluru',
-            address: 'Buildings Alyssa, Begonia & Clover, Embassy Tech Village, Bengaluru, Karnataka - 560103',
-            pinCode: '560103',
-            industry: 'Retail',
-            constitution: 'Company',
-            isComposition: false,
-        },
-        '19AAACI0203P1Z9': {
-            businessName: 'ITC Commercial Division',
-            tradeName: 'ITC Goods',
-            legalName: 'ITC Limited',
-            ownerName: 'Sanjiv Puri',
-            city: 'Kolkata',
-            address: 'Virginia House, 37 J.L. Nehru Road, Kolkata, West Bengal - 700071',
-            pinCode: '700071',
-            industry: 'Manufacturing',
-            constitution: 'Company',
-            isComposition: false,
-        },
-        '16GPZPD6335F1ZH': {
-            businessName: 'BALAJI ENTERPRISE',
-            tradeName: 'BALAJI ENTERPRISE',
-            legalName: 'BALAJI ENTERPRISE',
-            ownerName: 'Proprietor',
-            city: 'Dharmanagar',
-            address: '09, Dharmanagar, Dharmanagar, North Tripura, Tripura',
-            pinCode: '799250',
-            industry: 'Retail',
-            constitution: 'Sole Proprietorship',
-            isComposition: false,
-        },
-    };
-    if (demoProfiles[gstin]) {
-        return {
-            gstin,
-            valid: true,
-            ...demoProfiles[gstin],
-            pan,
-            stateCode,
-            state,
-            status: 'Active',
-            registrationDate: '2017-07-01',
-            isOnlineFetched: true,
-        };
-    }
-    // Live lookup query to public GST directory (genuine live lookup via jamku / gstincheck)
-    if (config.nodeEnv !== 'test' && isValidFormat) {
-        // 1. Try public live GST portal endpoint (no key required, returns real registered tradeName & address)
-        try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 4000);
-            const res = await fetch(`https://gst.jamku.app/api/gstin/${gstin}`, {
-                signal: controller.signal,
-                headers: {
-                    'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                },
-            });
-            clearTimeout(timeout);
-            if (res.ok) {
-                const json = await res.json();
-                if (json?.success === true && json?.data) {
-                    const d = json.data;
-                    const tradeName = (d.tradeName || d.lgnm || '').trim();
-                    const legalName = (d.lgnm || d.tradeName || '').trim();
-                    const fullAddress = (d.adr || '').trim();
-                    const pinMatch = fullAddress.match(/\b([1-9][0-9]{5})\b/);
-                    const pinCode = d.pincode || (pinMatch ? pinMatch[1] : capital.pinCode);
-                    let city = capital.city;
-                    if (fullAddress) {
-                        const parts = fullAddress.split(',').map((s) => s.trim()).filter(Boolean);
-                        if (parts.length >= 3) {
-                            const potentialCity = parts[parts.length - 3];
-                            if (potentialCity && potentialCity.length > 2 && !/\d/.test(potentialCity)) {
-                                city = potentialCity;
-                            }
-                        }
-                    }
-                    if (tradeName.length > 0 || legalName.length > 0 || fullAddress.length > 0) {
-                        return {
-                            gstin,
-                            valid: true,
-                            businessName: tradeName || legalName,
-                            tradeName: tradeName || legalName,
-                            legalName: legalName || tradeName,
-                            ownerName: legalName,
-                            pan,
-                            stateCode,
-                            state,
-                            city,
-                            address: fullAddress,
-                            pinCode,
-                            constitution: d.ctb || constitution,
-                            industry,
-                            isComposition: String(d.dty || '').toLowerCase().includes('composition'),
-                            status: d.sts || 'Active',
-                            registrationDate: d.rgdt || null,
-                            isOnlineFetched: true,
-                        };
-                    }
-                }
-            }
+    const result = await sandboxService.lookupGstin(gstin);
+    return reply.code(200).send(result);
+});
+// E-Invoice Generation (NIC Schema v1.03 via Sandbox.co.in / Compliance Engine)
+app.post('/api/v1/einvoice/generate', async (request, reply) => {
+    try {
+        const payload = request.body;
+        if (!payload) {
+            return reply.code(400).send({ error: 'Missing invoice payload for E-Invoice' });
         }
-        catch {
-            // Primary live lookup timed out or failed, try secondary if key is present
-        }
-        // 2. Try sheet.gstincheck.co.in if private API key is configured
-        const apiKey = process.env.GST_API_KEY;
-        if (apiKey) {
-            try {
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 3000);
-                const res = await fetch(`https://sheet.gstincheck.co.in/check/${apiKey}/${gstin}`, {
-                    signal: controller.signal,
-                });
-                clearTimeout(timeout);
-                if (res.ok) {
-                    const json = await res.json();
-                    if (json?.flag === true && json?.data) {
-                        const d = json.data;
-                        const addr = d.pradr?.addr;
-                        const tradeName = d.tradeNam?.trim() || null;
-                        const legalName = d.lgnm?.trim() || null;
-                        const city = addr?.dst || addr?.city || capital.city;
-                        const pinCode = addr?.pncd || capital.pinCode;
-                        const addressParts = [addr?.bno, addr?.bnm, addr?.st, addr?.loc, city, addr?.stcd, pinCode]
-                            .filter(Boolean)
-                            .join(', ');
-                        return {
-                            gstin,
-                            valid: true,
-                            businessName: tradeName || legalName,
-                            tradeName,
-                            legalName,
-                            ownerName: legalName,
-                            pan,
-                            stateCode,
-                            state,
-                            city,
-                            address: addressParts,
-                            pinCode,
-                            constitution: d.ctb || constitution,
-                            industry,
-                            isComposition: String(d.dty || '').toLowerCase().includes('composition'),
-                            status: d.sts || 'Active',
-                            registrationDate: d.rgdt || null,
-                            isOnlineFetched: true,
-                        };
-                    }
-                }
-            }
-            catch {
-                // Secondary network lookup timed out or failed
-            }
-        }
+        const result = await sandboxService.generateEInvoice(payload);
+        return reply.code(200).send(result);
     }
-    // Clean, honest fallback: state and PAN are accurately derived; no fake placeholder names/addresses
-    return {
-        gstin,
-        valid: isValidFormat,
-        businessName: '',
-        tradeName: '',
-        legalName: '',
-        ownerName: '',
-        pan,
-        stateCode,
-        state,
-        city: '',
-        address: '',
-        pinCode: '',
-        constitution,
-        industry,
-        isComposition: false,
-        status: isValidFormat ? 'Format Valid' : 'Invalid',
-        isOnlineFetched: false,
-    };
+    catch (err) {
+        return reply.code(400).send({ error: err?.message || 'E-Invoice generation failed' });
+    }
+});
+// E-Invoice Cancellation (Statutory 24h window)
+app.post('/api/v1/einvoice/cancel', async (request, reply) => {
+    try {
+        const payload = request.body;
+        if (!payload?.irn) {
+            return reply.code(400).send({ error: 'IRN is required for cancellation' });
+        }
+        const result = await sandboxService.cancelEInvoice(payload);
+        return reply.code(200).send(result);
+    }
+    catch (err) {
+        return reply.code(400).send({ error: err?.message || 'E-Invoice cancellation failed' });
+    }
+});
+// E-Way Bill Generation (NIC Standard Form EWB-01 via Sandbox.co.in / Compliance Engine)
+app.post('/api/v1/ewaybill/generate', async (request, reply) => {
+    try {
+        const payload = request.body;
+        if (!payload) {
+            return reply.code(400).send({ error: 'Missing payload for E-Way Bill' });
+        }
+        const result = await sandboxService.generateEWayBill(payload);
+        return reply.code(200).send(result);
+    }
+    catch (err) {
+        return reply.code(400).send({ error: err?.message || 'E-Way Bill generation failed' });
+    }
+});
+// E-Way Bill Cancellation
+app.post('/api/v1/ewaybill/cancel', async (request, reply) => {
+    try {
+        const payload = request.body;
+        if (!payload?.ewbNo) {
+            return reply.code(400).send({ error: 'E-Way Bill Number is required for cancellation' });
+        }
+        const result = await sandboxService.cancelEWayBill(payload);
+        return reply.code(200).send(result);
+    }
+    catch (err) {
+        return reply.code(400).send({ error: err?.message || 'E-Way Bill cancellation failed' });
+    }
 });
 app.addHook('preHandler', async (request, reply) => {
     const authHeader = request.headers.authorization;
@@ -725,6 +468,8 @@ app.addHook('preHandler', async (request, reply) => {
     const isPublicRoute = url === '/health' ||
         url.startsWith('/api/v1/auth/') ||
         url.startsWith('/api/v1/gst/') ||
+        url.startsWith('/api/v1/einvoice/') ||
+        url.startsWith('/api/v1/ewaybill/') ||
         url === '/api/v1/admin/login' ||
         url.startsWith('/admin') ||
         url === '/' ||

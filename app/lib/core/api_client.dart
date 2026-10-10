@@ -58,6 +58,8 @@ class ApiClient {
   void setToken(String? token) => _token = token;
   void setBusinessId(String? businessId) => _businessId = businessId;
   void clearToken() => _token = null;
+  String? get token => _token;
+  bool get hasAuth => _token != null && _token!.isNotEmpty;
 
   Map<String, String> _headers({Map<String, String>? extra}) {
     final headers = <String, String>{

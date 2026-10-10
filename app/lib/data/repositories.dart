@@ -1480,6 +1480,43 @@ class Repository {
         entity: 'invoice', entityId: invoiceId, op: 'update', payload: jsonEncode(invoicePayload));
   }
 
+  /// Updates E-Invoice IRN or E-Way Bill compliance details for an existing invoice.
+  Future<void> updateInvoiceCompliance(
+    int businessId,
+    int invoiceId, {
+    String? irn,
+    String? ewayBillNumber,
+    String? vehicleNumber,
+    String? customFieldsJson,
+  }) async {
+    final db = await _database;
+    final values = <String, Object?>{};
+    if (irn != null) values['irn'] = irn;
+    if (ewayBillNumber != null) values['eway_bill_number'] = ewayBillNumber;
+    if (vehicleNumber != null) values['vehicle_number'] = vehicleNumber;
+    if (customFieldsJson != null) values['custom_fields_json'] = customFieldsJson;
+
+    if (values.isNotEmpty) {
+      await db.update(
+        'invoices',
+        values,
+        where: 'business_id = ? AND id = ?',
+        whereArgs: [businessId, invoiceId],
+      );
+
+      final inv = await invoice(businessId, invoiceId);
+      if (inv != null) {
+        await _enqueueSync(
+          businessId,
+          entity: 'invoice',
+          entityId: invoiceId,
+          op: 'update',
+          payload: jsonEncode(inv.toMap()),
+        );
+      }
+    }
+  }
+
   /// MCA Audit Trail & Statutory Compliance: Cancels an invoice.
   /// Reverts stock moves, restores inventory quantities, restores sold serial numbers,
   /// voids ledger entries and initial payments, updates invoice status to 'Cancelled',

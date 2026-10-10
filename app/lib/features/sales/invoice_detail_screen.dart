@@ -17,6 +17,8 @@ import 'delivery_challan_builder_screen.dart';
 import 'delivery_challan_detail_screen.dart';
 import 'invoice_builder_screen.dart';
 import 'sales_return_form.dart';
+import '../compliance/einvoice_details_sheet.dart';
+import '../compliance/ewaybill_sheet.dart';
 
 class InvoiceDetailScreen extends StatefulWidget {
   const InvoiceDetailScreen({super.key, required this.invoiceId});
@@ -711,6 +713,8 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                 ]),
               ),
               const SizedBox(height: 12),
+              _buildComplianceCard(biz, inv),
+              const SizedBox(height: 12),
               if (inv.lines.isNotEmpty) ...[
                 AppCard(
                   padding: EdgeInsets.zero,
@@ -887,4 +891,183 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       );
 
   static String _qty(num q) => q == q.roundToDouble() ? q.round().toString() : q.toStringAsFixed(2);
+
+  Widget _buildComplianceCard(Business biz, Invoice inv) {
+    final hasIrn = inv.hasEInvoice;
+    final hasEwb = inv.hasEWayBill;
+    final isCancelled = inv.status.toLowerCase() == 'cancelled';
+
+    return AppCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: StitchColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.verified_user_rounded, color: StitchColors.primary, size: 18),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Government Compliance',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: StitchColors.textPrimary),
+                ),
+              ),
+              if (hasIrn || hasEwb)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: StitchColors.successSoft,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: StitchColors.success.withValues(alpha: 0.3)),
+                  ),
+                  child: const Text(
+                    'Active',
+                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: StitchColors.success),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // E-Invoice Item
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: hasIrn ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: hasIrn ? const Color(0xFFBBF7D0) : Colors.grey.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  hasIrn ? Icons.check_circle_rounded : Icons.receipt_long_outlined,
+                  color: hasIrn ? StitchColors.success : StitchColors.textSecondary,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('E-Invoice (IRN)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                          const SizedBox(width: 6),
+                          Text(
+                            hasIrn ? 'Generated' : 'Not generated',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: hasIrn ? StitchColors.success : StitchColors.textTertiary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (hasIrn && inv.irn != null && inv.irn!.length >= 16)
+                        Text(
+                          'IRN: ${inv.irn!.substring(0, 8)}...${inv.irn!.substring(inv.irn!.length - 8)}',
+                          style: const TextStyle(fontSize: 10.5, color: StitchColors.textSecondary),
+                        ),
+                    ],
+                  ),
+                ),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: hasIrn ? StitchColors.success : StitchColors.primary,
+                    side: BorderSide(color: hasIrn ? StitchColors.success : StitchColors.primary),
+                  ),
+                  onPressed: isCancelled
+                      ? null
+                      : () {
+                          EInvoiceDetailsSheet.show(
+                            context,
+                            business: biz,
+                            invoice: inv,
+                            onUpdated: _load,
+                          );
+                        },
+                  child: Text(hasIrn ? 'View Details' : 'Generate IRN', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // E-Way Bill Item
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: hasEwb ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: hasEwb ? const Color(0xFFBFDBFE) : Colors.grey.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  hasEwb ? Icons.local_shipping_rounded : Icons.local_shipping_outlined,
+                  color: hasEwb ? const Color(0xFF2563EB) : StitchColors.textSecondary,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('E-Way Bill', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                          const SizedBox(width: 6),
+                          Text(
+                            hasEwb ? 'Generated' : 'Not generated',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: hasEwb ? const Color(0xFF2563EB) : StitchColors.textTertiary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (hasEwb && inv.ewayBillNumber != null)
+                        Text(
+                          'No: ${inv.ewayBillNumber}',
+                          style: const TextStyle(fontSize: 10.5, color: StitchColors.textSecondary),
+                        ),
+                    ],
+                  ),
+                ),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: hasEwb ? const Color(0xFF2563EB) : StitchColors.primary,
+                    side: BorderSide(color: hasEwb ? const Color(0xFF2563EB) : StitchColors.primary),
+                  ),
+                  onPressed: isCancelled
+                      ? null
+                      : () {
+                          EWayBillSheet.show(
+                            context,
+                            business: biz,
+                            invoice: inv,
+                            onUpdated: _load,
+                          );
+                        },
+                  child: Text(hasEwb ? 'View Slip' : 'Generate EWB', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
