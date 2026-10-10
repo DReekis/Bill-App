@@ -26,6 +26,7 @@ import '../auth/login_screen.dart';
 import '../backup/cloud_backup_sheet.dart';
 import 'import_screen.dart';
 import '../subscription/subscription_plans_screen.dart';
+import '../diagnostics/sentry_diagnostics_screen.dart';
 import '../../core/subscription_service.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -248,6 +249,13 @@ class _MoreTabState extends State<MoreTab> {
             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: StitchColors.primary),
           ),
         ),
+      ),
+      _menuTile(
+        context,
+        Icons.monitor_heart_outlined,
+        t('Sentry Crash Diagnostics', 'सेंट्री क्रैश डायग्नोस्टिक्स', 'সেন্ট্রি ক্র্যাশ ডায়াগনস্টিকস'),
+        () => nav(const SentryDiagnosticsScreen()),
+        trailing: const Icon(Icons.chevron_right_rounded, color: StitchColors.textTertiary),
       ),
       const SizedBox(height: 18),
       const Padding(

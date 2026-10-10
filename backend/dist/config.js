@@ -26,6 +26,10 @@ export const config = {
         apiSecret: process.env.SANDBOX_API_SECRET || '',
         baseUrl: process.env.SANDBOX_BASE_URL || 'https://api.sandbox.co.in',
     },
+    sentry: {
+        dsn: process.env.SENTRY_DSN || 'https://b81fe0dccbe91fc92f403d905cdf88d4@o4512214034677760.ingest.us.sentry.io/4512230552043520',
+        environment: process.env.NODE_ENV || 'production',
+    },
 };
 export const ALLOWED_GOOGLE_CLIENT_IDS = [
     config.google.clientId,

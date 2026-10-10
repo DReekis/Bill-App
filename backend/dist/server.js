@@ -16,7 +16,33 @@ import { adminLoginLimiter } from './lib/rate_limiter.js';
 import { uploadTenantBackup, listTenantBackups, getTenantBackup, deleteTenantBackup, } from './services/backup.js';
 import { SUBSCRIPTION_PLANS, createSubscriptionOrder, verifySubscriptionPayment, handleRazorpayWebhook, getBusinessSubscriptionStatus, } from './services/subscriptionService.js';
 import { sandboxService } from './services/sandboxService.js';
+import * as Sentry from '@sentry/node';
+if (config.sentry.dsn) {
+    Sentry.init({
+        dsn: config.sentry.dsn,
+        environment: config.sentry.environment,
+        tracesSampleRate: 1.0,
+    });
+}
 export const app = Fastify({ logger: config.nodeEnv !== 'production' });
+app.setErrorHandler((error, request, reply) => {
+    if (config.sentry.dsn && (!error.statusCode || error.statusCode >= 500)) {
+        Sentry.withScope((scope) => {
+            scope.setExtra('url', request.url);
+            scope.setExtra('method', request.method);
+            scope.setExtra('headers', request.headers);
+            if (request.user) {
+                scope.setUser({ id: request.user.userId });
+            }
+            Sentry.captureException(error);
+        });
+    }
+    const statusCode = error.statusCode || 500;
+    reply.status(statusCode).send({
+        error: error.message || 'Internal Server Error',
+        statusCode,
+    });
+});
 await app.register(fastifyCors, {
     origin: true,
     credentials: true,
@@ -462,6 +488,15 @@ app.post('/api/v1/ewaybill/cancel', async (request, reply) => {
         return reply.code(400).send({ error: err?.message || 'E-Way Bill cancellation failed' });
     }
 });
+app.post('/api/v1/diagnostics/sentry-test', async (request, reply) => {
+    const eventId = Sentry.captureMessage(`[Backend Telemetry Alert] Manual test trigger at ${new Date().toISOString()}`, 'info');
+    return reply.send({
+        success: true,
+        eventId: eventId || 'event-dispatched',
+        timestamp: new Date().toISOString(),
+        message: 'Backend Sentry test telemetry event dispatched successfully',
+    });
+});
 app.addHook('preHandler', async (request, reply) => {
     const authHeader = request.headers.authorization;
     const url = request.url.split('?')[0];
@@ -470,6 +505,7 @@ app.addHook('preHandler', async (request, reply) => {
         url.startsWith('/api/v1/gst/') ||
         url.startsWith('/api/v1/einvoice/') ||
         url.startsWith('/api/v1/ewaybill/') ||
+        url.startsWith('/api/v1/diagnostics/') ||
         url === '/api/v1/admin/login' ||
         url.startsWith('/admin') ||
         url === '/' ||
