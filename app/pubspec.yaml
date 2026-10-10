@@ -72,7 +72,6 @@ dependencies:
   qr_flutter: ^4.1.0
   google_sign_in: ^7.2.0
   razorpay_flutter: ^1.4.7
-  sentry_flutter: ^10.0.0
 
 dev_dependencies:
   flutter_lints: 4.0.0

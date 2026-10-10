@@ -12,9 +12,6 @@ import 'data/repositories.dart';
 import 'l10n/app_localizations.dart';
 import 'core/subscription_service.dart';
 import 'sync/sync_engine.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
-
-import 'core/telemetry_service.dart';
 import 'features/auth/auth_flow.dart';
 import 'features/auth/pin_lock_screen.dart';
 import 'features/shell/app_shell.dart';
@@ -22,26 +19,9 @@ import 'theme/stitch_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  await SentryFlutter.init(
-    (options) {
-      options.dsn = TelemetryService.flutterDsn;
-      options.tracesSampleRate = 1.0;
-      options.environment = 'production';
-      options.enableAutoPerformanceTracing = true;
-    },
-    appRunner: () async {
-      TelemetryService.instance.markInitialized();
-      await Repository.instance.session.load();
-      await SubscriptionService.instance.init(businessId: Repository.instance.session.businessId);
-      runApp(
-        DefaultAssetBundle(
-          bundle: SentryAssetBundle(),
-          child: const BillApp(),
-        ),
-      );
-    },
-  );
+  await Repository.instance.session.load();
+  await SubscriptionService.instance.init(businessId: Repository.instance.session.businessId);
+  runApp(const BillApp());
 }
 
 class BillApp extends StatelessWidget {
@@ -61,9 +41,6 @@ class BillApp extends StatelessWidget {
           theme: buildStitchTheme(),
           locale: session.locale,
           supportedLocales: AppLocalizations.supportedLocales,
-          navigatorObservers: [
-            SentryNavigatorObserver(),
-          ],
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,

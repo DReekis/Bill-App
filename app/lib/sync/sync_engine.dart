@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/api_client.dart';
 import '../core/models.dart';
 import '../core/sync_service.dart';
-import '../core/telemetry_service.dart';
 import '../data/repositories.dart';
 
 /// Bidirectional cloud sync manager with health ping, exponential backoff,
@@ -83,7 +82,6 @@ class SyncEngine extends ChangeNotifier {
     syncing = true;
     lastError = null;
     notifyListeners();
-    TelemetryService.instance.addBreadcrumb('Cloud sync started', category: 'sync', data: {'force': force});
 
     var pushedCount = 0;
     var pulledCount = 0;
@@ -220,10 +218,8 @@ class SyncEngine extends ChangeNotifier {
 
       lastSyncedAt = DateTime.now();
       lastError = null;
-      TelemetryService.instance.addBreadcrumb('Cloud sync completed', category: 'sync', data: {'summary': lastSyncResultSummary});
-    } catch (e, stack) {
+    } catch (e) {
       lastError = e.toString();
-      TelemetryService.instance.captureException(e, stackTrace: stack, tag: 'sync_engine');
     } finally {
       syncing = false;
       await refreshPending();
