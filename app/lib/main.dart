@@ -11,6 +11,7 @@ import 'core/session.dart';
 import 'data/repositories.dart';
 import 'l10n/app_localizations.dart';
 import 'core/subscription_service.dart';
+import 'core/permission_service.dart';
 import 'sync/sync_engine.dart';
 import 'features/auth/auth_flow.dart';
 import 'features/auth/pin_lock_screen.dart';
@@ -64,6 +65,24 @@ class AppGate extends StatefulWidget {
 class _AppGateState extends State<AppGate> {
   String? _hydratedToken;
   bool _isHydrating = false;
+  bool _hasCheckedPermissions = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkInitialPermissions();
+    });
+  }
+
+  Future<void> _checkInitialPermissions() async {
+    if (_hasCheckedPermissions || !mounted) return;
+    _hasCheckedPermissions = true;
+    final shouldAsk = await PermissionService.shouldAskInitialPermissions();
+    if (shouldAsk && mounted) {
+      await PermissionService.showInitialPermissionsPrompt(context);
+    }
+  }
 
   Future<void> _hydrateServerData(Session session) async {
     final token = session.token;

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/models.dart';
 import '../../core/session.dart';
+import '../../core/permission_service.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../inventory/product_form.dart';
@@ -249,7 +250,20 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen>
                         style: const TextStyle(color: Colors.white70, fontSize: 13),
                       ),
                       const SizedBox(height: 16),
-                      FilledButton.icon(
+                      if (error.errorCode == MobileScannerErrorCode.permissionDenied) ...[
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(backgroundColor: StitchColors.primary),
+                          icon: const Icon(Icons.security_rounded, size: 18),
+                          label: const Text('Grant Camera Permission'),
+                          onPressed: () async {
+                            final granted = await PermissionService.requestCameraPermission(context);
+                            if (granted) _controller.start();
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white38)),
                         icon: const Icon(Icons.refresh_rounded, size: 18),
                         label: const Text('Retry Camera'),
                         onPressed: () => _controller.start(),

@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:excel/excel.dart' as xl;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -16,6 +16,7 @@ import '../core/models.dart';
 import '../core/money.dart';
 import '../data/repositories.dart';
 import '../theme/stitch_theme.dart';
+import 'permission_service.dart';
 
 enum GstReturnType {
   gstr1('GSTR-1 (Sales)', 'Outward supplies & sales register', 'GSTR1'),
@@ -1785,19 +1786,28 @@ class GstReportsService {
     required Uint8List bytes,
     required String filename,
   }) async {
-    Directory? targetDir;
-    try {
-      if (Platform.isAndroid) {
+    if (Platform.isAndroid) {
+      try {
         final downloadDir = Directory('/storage/emulated/0/Download');
         if (await downloadDir.exists()) {
-          targetDir = downloadDir;
+          final file = File('${downloadDir.path}/$filename');
+          await file.writeAsBytes(bytes, flush: true);
+          return file.path;
         }
-      }
-    } catch (_) {}
-    targetDir ??= await getApplicationDocumentsDirectory();
-    final file = File('${targetDir.path}/$filename');
-    await file.writeAsBytes(bytes);
-    return file.path;
+      } catch (_) {}
+    }
+
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final file = File('${appDir.path}/$filename');
+      await file.writeAsBytes(bytes, flush: true);
+      return file.path;
+    } catch (_) {
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/$filename');
+      await file.writeAsBytes(bytes, flush: true);
+      return file.path;
+    }
   }
 
   /// Opens layout print dialog for a generated PDF.
@@ -1885,9 +1895,93 @@ class _GstExportBottomSheet extends StatefulWidget {
 
 class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
   String? activeExportingFormat;
+  String? _lastExportedFilename;
+  String? _lastExportedPath;
 
   String get _fp => GstReportsService.formatFp(widget.fromDate ?? widget.toDate ?? DateTime.now());
   String get _cleanGstin => widget.business.gstin?.trim().toUpperCase() ?? 'UNREGISTERED';
+
+  String _formatDisplayName(String format) {
+    switch (format) {
+      case 'excel':
+        return 'GST Portal Excel (.xlsx)';
+      case 'json':
+        return 'GST Portal JSON (.json)';
+      case 'csv':
+        return 'GST Portal CSV (.csv)';
+      case 'pdf':
+        return 'Official Form PDF';
+      default:
+        return 'Report';
+    }
+  }
+
+  void _showExportError(String message) {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: StitchColors.error, size: 22),
+            SizedBox(width: 8),
+            Text('Export Failed', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(fontSize: 13, color: StitchColors.textSecondary, height: 1.4),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: StitchColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showDownloadSuccessDialog({
+    required String formatName,
+    required String filename,
+    required String savedPath,
+    required Uint8List bytes,
+    required String mimeType,
+    required Color themeColor,
+  }) async {
+    if (!mounted) return;
+    setState(() {
+      _lastExportedFilename = filename;
+      _lastExportedPath = savedPath;
+    });
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) => _GstDownloadSuccessDialog(
+        formatName: formatName,
+        filename: filename,
+        savedPath: savedPath,
+        themeColor: themeColor,
+        onShare: () async {
+          Navigator.of(dialogCtx).pop();
+          await GstReportsService.shareExportedFile(
+            bytes: bytes,
+            filename: filename,
+            mimeType: mimeType,
+            subject: '${widget.returnType.title} - ${widget.business.name} ($_fp)',
+          );
+        },
+      ),
+    );
+  }
 
   Future<void> _handlePdfExport({required bool printDirectly}) async {
     if (widget.returnType == GstReturnType.gstr1) {
@@ -1946,9 +2040,7 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to generate PDF: $e'), backgroundColor: Colors.red.shade800),
-        );
+        _showExportError('Failed to generate PDF: $e');
       }
     } finally {
       if (mounted) setState(() => activeExportingFormat = null);
@@ -2005,31 +2097,27 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
           subject: '${widget.returnType.title} - ${widget.business.name} ($_fp)',
         );
       } else {
-        await GstReportsService.saveExportedFile(
+        if (Platform.isAndroid && mounted) {
+          await PermissionService.requestStoragePermission(context);
+        }
+        final savedPath = await GstReportsService.saveExportedFile(
           bytes: bytes,
           filename: filename,
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text('Saved to Downloads: $filename')),
-                ],
-              ),
-              backgroundColor: const Color(0xFF059669),
-              behavior: SnackBarBehavior.floating,
-            ),
+          await _showDownloadSuccessDialog(
+            formatName: 'GST Portal Excel (.xlsx)',
+            filename: filename,
+            savedPath: savedPath,
+            bytes: bytes,
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            themeColor: const Color(0xFF059669),
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to export Excel: $e'), backgroundColor: Colors.red.shade800),
-        );
+        _showExportError('Failed to export Excel: $e');
       }
     } finally {
       if (mounted) setState(() => activeExportingFormat = null);
@@ -2087,31 +2175,27 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
           subject: '${widget.returnType.title} - ${widget.business.name} ($_fp)',
         );
       } else {
-        await GstReportsService.saveExportedFile(
+        if (Platform.isAndroid && mounted) {
+          await PermissionService.requestStoragePermission(context);
+        }
+        final savedPath = await GstReportsService.saveExportedFile(
           bytes: bytes,
           filename: filename,
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text('Saved to Downloads: $filename')),
-                ],
-              ),
-              backgroundColor: const Color(0xFF4338CA),
-              behavior: SnackBarBehavior.floating,
-            ),
+          await _showDownloadSuccessDialog(
+            formatName: 'GST Portal JSON (.json)',
+            filename: filename,
+            savedPath: savedPath,
+            bytes: bytes,
+            mimeType: 'application/json',
+            themeColor: const Color(0xFF4338CA),
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to export JSON: $e'), backgroundColor: Colors.red.shade800),
-        );
+        _showExportError('Failed to export JSON: $e');
       }
     } finally {
       if (mounted) setState(() => activeExportingFormat = null);
@@ -2158,31 +2242,27 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
           subject: '${widget.returnType.title} CSV - ${widget.business.name} ($_fp)',
         );
       } else {
-        await GstReportsService.saveExportedFile(
+        if (Platform.isAndroid && mounted) {
+          await PermissionService.requestStoragePermission(context);
+        }
+        final savedPath = await GstReportsService.saveExportedFile(
           bytes: bytes,
           filename: filename,
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text('Saved to Downloads: $filename')),
-                ],
-              ),
-              backgroundColor: const Color(0xFF0284C7),
-              behavior: SnackBarBehavior.floating,
-            ),
+          await _showDownloadSuccessDialog(
+            formatName: 'GST Portal CSV (.csv)',
+            filename: filename,
+            savedPath: savedPath,
+            bytes: bytes,
+            mimeType: 'text/csv',
+            themeColor: const Color(0xFF0284C7),
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to export CSV: $e'), backgroundColor: Colors.red.shade800),
-        );
+        _showExportError('Failed to export CSV: $e');
       }
     } finally {
       if (mounted) setState(() => activeExportingFormat = null);
@@ -2284,6 +2364,70 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
               ),
             ),
             const SizedBox(height: 14),
+
+            if (activeExportingFormat != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: StitchColors.primary),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Generating and exporting ${_formatDisplayName(activeExportingFormat!)}...',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: StitchColors.primary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ] else if (_lastExportedPath != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFA7F3D0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Downloaded: $_lastExportedFilename',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF065F46)),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            'Saved to: $_lastExportedPath',
+                            style: const TextStyle(fontSize: 10.5, color: Color(0xFF047857), fontWeight: FontWeight.w500),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
 
             // 1. PDF Option Card
             _exportOptionCard(
@@ -2549,6 +2693,218 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
           else
             actionRow,
         ],
+      ),
+    );
+  }
+}
+
+class _GstDownloadSuccessDialog extends StatefulWidget {
+  const _GstDownloadSuccessDialog({
+    required this.formatName,
+    required this.filename,
+    required this.savedPath,
+    required this.themeColor,
+    required this.onShare,
+  });
+
+  final String formatName;
+  final String filename;
+  final String savedPath;
+  final Color themeColor;
+  final VoidCallback onShare;
+
+  @override
+  State<_GstDownloadSuccessDialog> createState() => _GstDownloadSuccessDialogState();
+}
+
+class _GstDownloadSuccessDialogState extends State<_GstDownloadSuccessDialog> {
+  bool _copied = false;
+
+  void _copyPath() {
+    Clipboard.setData(ClipboardData(text: widget.savedPath));
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      backgroundColor: Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Success Icon
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF059669).withValues(alpha: 0.15),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 38),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Title
+            const Center(
+              child: Text(
+                'Download Complete!',
+                style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: StitchColors.textPrimary),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Center(
+              child: Text(
+                '${widget.formatName} has been saved to your device.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12.5, color: StitchColors.textSecondary, fontWeight: FontWeight.w500),
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // File Info Box
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: StitchColors.outline),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: widget.themeColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(Icons.insert_drive_file_rounded, color: widget.themeColor, size: 18),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.filename,
+                          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: StitchColors.textPrimary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 10),
+                  const Row(
+                    children: [
+                      Icon(Icons.folder_open_rounded, size: 14, color: StitchColors.textSecondary),
+                      SizedBox(width: 5),
+                      Text(
+                        'Saved Location:',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: StitchColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: SelectableText(
+                      widget.savedPath,
+                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: StitchColors.textPrimary),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: InkWell(
+                      onTap: _copyPath,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _copied ? Icons.check_rounded : Icons.copy_rounded,
+                              size: 13,
+                              color: _copied ? const Color(0xFF059669) : StitchColors.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _copied ? 'Path Copied!' : 'Copy Path',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: _copied ? const Color(0xFF059669) : StitchColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Actions
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: StitchColors.primary,
+                      side: const BorderSide(color: Color(0xFFC7D2FE)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.share_rounded, size: 16),
+                    label: const Text('Share File', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                    onPressed: widget.onShare,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: StitchColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Done', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -26,7 +26,7 @@ void main() {
     await pumpGate(tester, session);
     await tester.pumpAndSettle();
     expect(find.text('Welcome to Billket'), findsOneWidget);
-    expect(find.text('Sign in with Google'), findsOneWidget);
+    expect(find.text('Business Owner'), findsOneWidget);
   });
 
   testWidgets('locked session with PIN shows the lock screen', (tester) async {
