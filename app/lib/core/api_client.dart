@@ -14,7 +14,7 @@ class ApiClient {
 
   ApiClient({String? baseUrl})
       : _explicitBaseUrl = baseUrl != null,
-        _baseUrl = baseUrl ?? _cachedBaseUrl ?? defaultBaseUrl {
+        _baseUrl = _sanitizeUrl(baseUrl ?? _cachedBaseUrl ?? defaultBaseUrl) {
     _ready = _loadBaseUrl();
   }
 
@@ -28,6 +28,11 @@ class ApiClient {
 
   String get baseUrl => _baseUrl;
 
+  static String _sanitizeUrl(String url) {
+    final trimmed = url.trim();
+    return trimmed.replaceAll(RegExp(r'/+$'), '');
+  }
+
   Future<void> ensureReady() async {
     await (_ready ??= _loadBaseUrl());
   }
@@ -38,14 +43,15 @@ class ApiClient {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getString(_kBaseUrlKey);
       if (saved != null && saved.trim().isNotEmpty) {
-        _baseUrl = saved.trim();
-        _cachedBaseUrl = saved.trim();
+        final clean = _sanitizeUrl(saved);
+        _baseUrl = clean;
+        _cachedBaseUrl = clean;
       }
     } catch (_) {}
   }
 
   Future<void> setBaseUrl(String url) async {
-    final clean = url.trim();
+    final clean = _sanitizeUrl(url);
     if (clean.isNotEmpty) {
       _baseUrl = clean;
       try {

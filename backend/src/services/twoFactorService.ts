@@ -4,6 +4,8 @@ interface OtpSession {
   sessionId: string;
   expiresAt: number;
   lastSentAt: number;
+  attempts: number;
+  sendTimestamps: number[];
 }
 
 export class TwoFactorService {
@@ -49,23 +51,39 @@ export class TwoFactorService {
       };
     }
 
-    // Cooldown check (25 seconds between requests for same number)
+    const now = Date.now();
     const existing = this.sessions.get(phone);
-    if (existing && Date.now() - existing.lastSentAt < 25000) {
-      const waitSeconds = Math.ceil((25000 - (Date.now() - existing.lastSentAt)) / 1000);
+
+    // Rate Limiting 1: Cooldown check (30 seconds between requests for same number)
+    if (existing && now - existing.lastSentAt < 30000) {
+      const waitSeconds = Math.ceil((30000 - (now - existing.lastSentAt)) / 1000);
       return {
         success: false,
         message: `Please wait ${waitSeconds}s before requesting a new OTP`,
       };
     }
 
-    // Fast-path for unit tests or dedicated test phone
-    if (config.nodeEnv === 'test' || phone === '9876543210') {
-      const mockSessionId = `test_session_${phone}_${Date.now()}`;
+    // Rate Limiting 2: Max 5 OTP requests per hour per number to prevent spam/cost drain
+    if (existing) {
+      const recentSends = existing.sendTimestamps.filter((t) => now - t < 3600000);
+      if (recentSends.length >= 5) {
+        return {
+          success: false,
+          message: 'Too many OTP requests for this number. Please try again after 1 hour.',
+        };
+      }
+    }
+
+    // Fast-path strictly for automated unit tests
+    if (config.nodeEnv === 'test') {
+      const mockSessionId = `test_session_${phone}_${now}`;
+      const timestamps = existing ? [...existing.sendTimestamps.filter((t) => now - t < 3600000), now] : [now];
       this.sessions.set(phone, {
         sessionId: mockSessionId,
-        expiresAt: Date.now() + 5 * 60 * 1000,
-        lastSentAt: Date.now(),
+        expiresAt: now + 5 * 60 * 1000,
+        lastSentAt: now,
+        attempts: 0,
+        sendTimestamps: timestamps,
       });
       return {
         success: true,
@@ -99,10 +117,13 @@ export class TwoFactorService {
 
       if (res.ok && json?.Status === 'Success' && json?.Details) {
         const sessionId = String(json.Details);
+        const timestamps = existing ? [...existing.sendTimestamps.filter((t) => now - t < 3600000), now] : [now];
         this.sessions.set(phone, {
           sessionId,
-          expiresAt: Date.now() + 5 * 60 * 1000,
-          lastSentAt: Date.now(),
+          expiresAt: now + 5 * 60 * 1000,
+          lastSentAt: now,
+          attempts: 0,
+          sendTimestamps: timestamps,
         });
         return {
           success: true,
@@ -138,8 +159,8 @@ export class TwoFactorService {
       return { success: false, message: 'Please enter the OTP' };
     }
 
-    // Fast-path for unit tests or dedicated test phone
-    if (config.nodeEnv === 'test' || phone === '9876543210') {
+    // Fast-path strictly for automated unit tests
+    if (config.nodeEnv === 'test') {
       if (otp === '1234' || otp === '0000') {
         this.sessions.delete(phone);
         return { success: true };
@@ -164,6 +185,18 @@ export class TwoFactorService {
       };
     }
 
+    // Brute-force protection: Max 5 incorrect attempts per session
+    if (session) {
+      session.attempts = (session.attempts || 0) + 1;
+      if (session.attempts > 5) {
+        this.sessions.delete(phone);
+        return {
+          success: false,
+          message: 'Too many incorrect attempts. This OTP session has been invalidated for security. Please request a new OTP.',
+        };
+      }
+    }
+
     const { apiKey, baseUrl } = config.twoFactor;
     try {
       const controller = new AbortController();
@@ -184,9 +217,12 @@ export class TwoFactorService {
         return { success: true };
       }
 
+      const remaining = session ? Math.max(0, 5 - session.attempts) : 0;
       return {
         success: false,
-        message: json?.Details || 'Invalid OTP entered',
+        message: remaining > 0
+          ? `${json?.Details || 'Invalid OTP entered'}. (${remaining} attempts remaining)`
+          : (json?.Details || 'Invalid OTP entered'),
       };
     } catch (err: any) {
       return {

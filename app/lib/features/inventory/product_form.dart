@@ -119,6 +119,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
       showAppMessage(context, 'Product name is required', error: true);
       return;
     }
+    final canViewCosts = context.read<Session>().canViewCosts;
     setState(() => saving = true);
     try {
       if (widget.product == null) {
@@ -160,7 +161,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
         barcode: _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
         unit: unit ?? 'PCS',
         gstRate: gstRate,
-        purchasePrice: context.read<Session>().canViewCosts
+        purchasePrice: canViewCosts
             ? _toPaise(_purchasePrice.text)
             : (widget.product?.purchasePrice ?? 0),
         salePrice: _toPaise(_salePrice.text),
@@ -175,7 +176,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
         description: _description.text.trim(),
         stock: finalStock,
         costAverage: widget.product?.costAverage ??
-            (context.read<Session>().canViewCosts ? _toPaise(_purchasePrice.text) : 0),
+            (canViewCosts ? _toPaise(_purchasePrice.text) : 0),
         lowStockThreshold: lowStock,
       );
       await Repository.instance.upsertProduct(product, businessIdOverride: widget.businessId);

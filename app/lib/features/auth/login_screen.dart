@@ -251,21 +251,14 @@ class _LoginScreenState extends State<LoginScreen> {
       final session = context.read<Session>();
       var staff = await Repository.instance.findStaffByPhone(phone, businessId: session.businessId);
 
-      // If not found, check if this is a demo number or if business exists to seed demo staff
-      if (staff == null) {
+      // If businessId wasn't set yet in session, search across businesses on this device
+      if (staff == null && session.businessId == null) {
         final bizList = await Repository.instance.allBusinesses();
-        if (bizList.isNotEmpty) {
-          final bizId = session.businessId ?? bizList.first.id;
-          if (bizId != null) {
-            await Repository.instance.seedDemoStaffIfEmpty(bizId);
-            staff = await Repository.instance.findStaffByPhone(phone, businessId: bizId);
+        for (final b in bizList) {
+          if (b.id != null) {
+            staff = await Repository.instance.findStaffByPhone(phone, businessId: b.id!);
+            if (staff != null) break;
           }
-        } else if (phone.contains('9876500001') || phone.contains('9876500002')) {
-          final bizId = await Repository.instance.createBusiness(
-            Business(name: 'Demo Mart', ownerName: 'Owner', currency: 'INR'),
-          );
-          await Repository.instance.seedDemoStaffIfEmpty(bizId);
-          staff = await Repository.instance.findStaffByPhone(phone, businessId: bizId);
         }
       }
 
@@ -296,24 +289,20 @@ class _LoginScreenState extends State<LoginScreen> {
     if (staff == null) return;
 
     final pin = _staffPinController.text.trim();
-    if (staff.pin != null && staff.pin!.isNotEmpty) {
-      if (pin.isEmpty || pin.length < 4) {
-        setState(() => _errorMessage = 'Please enter your 4-digit Security PIN.');
-        return;
-      }
-      if (pin != staff.pin && pin != '1234') {
-        setState(() => _errorMessage = 'Incorrect PIN. Please re-enter or check with your business owner.');
-        return;
-      }
-    } else {
-      if (pin.isEmpty || pin.length < 4) {
-        setState(() => _errorMessage = 'Please enter 4-digit OTP (1234 in test mode).');
-        return;
-      }
-      if (pin != '1234' && pin != '0000') {
-        setState(() => _errorMessage = 'Invalid OTP. Please enter 1234 in test mode.');
-        return;
-      }
+    if (staff.pin == null || staff.pin!.isEmpty) {
+      setState(() => _errorMessage =
+          'No Security PIN has been configured for this staff account. Please ask the Business Owner to set a 4-digit PIN in Staff Management.');
+      return;
+    }
+
+    if (pin.length < 4) {
+      setState(() => _errorMessage = 'Please enter your 4-digit Security PIN.');
+      return;
+    }
+
+    if (pin != staff.pin) {
+      setState(() => _errorMessage = 'Incorrect PIN. Please re-enter or check with your business owner.');
+      return;
     }
 
     final session = context.read<Session>();

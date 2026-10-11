@@ -284,7 +284,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
 
           if (_loading)
             Container(
-              color: Colors.black.withOpacity(0.4),
+              color: Colors.black.withValues(alpha: 0.4),
               child: const Center(
                 child: Card(
                   elevation: 8,
@@ -327,7 +327,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.2),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.2),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
@@ -344,7 +344,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.white.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
@@ -419,9 +419,9 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.08),
+                    color: Colors.white.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withOpacity(0.12)),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
                   ),
                   child: Column(
                     children: [
@@ -474,7 +474,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -737,7 +737,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
-        headingRowColor: MaterialStateProperty.all(const Color(0xFFF1F5F9)),
+        headingRowColor: WidgetStateProperty.all(const Color(0xFFF1F5F9)),
         columnSpacing: 16,
         columns: const [
           DataColumn(label: Text('Feature', style: TextStyle(fontWeight: FontWeight.bold))),
