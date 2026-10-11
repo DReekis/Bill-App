@@ -1,3 +1,4 @@
+import 'gst_service.dart';
 import 'models.dart';
 import 'money.dart';
 
@@ -161,7 +162,7 @@ class BillingEngine {
 
     final sameState = businessState != null &&
         customerState != null &&
-        businessState.trim() == customerState.trim();
+        IndianStates.isSameState(businessState, customerState);
     final intraState = gstEnabled &&
         businessTaxRegistered &&
         (intraStateOverride ?? sameState);

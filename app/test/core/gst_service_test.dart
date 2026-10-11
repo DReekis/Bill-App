@@ -152,4 +152,44 @@ void main() {
       expect(balaji.isOnlineFetched, isTrue);
     });
   });
+
+  group('IndianStates Mapping Utility Tests', () {
+    test('converts numeric codes to readable state names accurately', () {
+      expect(IndianStates.getName('01'), 'Jammu and Kashmir');
+      expect(IndianStates.getName('19'), 'West Bengal');
+      expect(IndianStates.getName('27'), 'Maharashtra');
+      expect(IndianStates.getName('07'), 'Delhi');
+      expect(IndianStates.getName('29'), 'Karnataka');
+      expect(IndianStates.getName('33'), 'Tamil Nadu');
+    });
+
+    test('resolves state aliases and names to numeric GST codes', () {
+      expect(IndianStates.getCode('Maharashtra'), '27');
+      expect(IndianStates.getCode('MH'), '27');
+      expect(IndianStates.getCode('West Bengal'), '19');
+      expect(IndianStates.getCode('WB'), '19');
+      expect(IndianStates.getCode('Delhi'), '07');
+      expect(IndianStates.getCode('New Delhi'), '07');
+      expect(IndianStates.getCode('Jammu & Kashmir'), '01');
+      expect(IndianStates.getCode('J&K'), '01');
+    });
+
+    test('isSameState correctly handles mixed names and codes', () {
+      expect(IndianStates.isSameState('27', 'Maharashtra'), isTrue);
+      expect(IndianStates.isSameState('MH', '27'), isTrue);
+      expect(IndianStates.isSameState('07', 'Delhi'), isTrue);
+      expect(IndianStates.isSameState('Delhi', 'Delhi NCR'), isTrue);
+      expect(IndianStates.isSameState('27', '19'), isFalse);
+      expect(IndianStates.isSameState('Maharashtra', 'West Bengal'), isFalse);
+    });
+
+    test('list returns sorted human-readable states', () {
+      final list = IndianStates.list;
+      expect(list.isNotEmpty, isTrue);
+      expect(list.first.name.compareTo(list.last.name), lessThan(0));
+      expect(list.any((s) => s.code == '27' && s.name == 'Maharashtra'), isTrue);
+      expect(list.any((s) => s.code == '19' && s.name == 'West Bengal'), isTrue);
+      expect(list.any((s) => s.code == '01' && s.name.contains('Jammu')), isTrue);
+    });
+  });
 }

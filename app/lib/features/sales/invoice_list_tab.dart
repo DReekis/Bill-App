@@ -9,10 +9,13 @@ import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../../l10n/app_localizations.dart';
+import 'delivery_challan_detail_screen.dart';
 import 'invoice_builder_screen.dart';
 import 'invoice_detail_screen.dart';
+import 'quotation_detail_screen.dart';
 import 'sales_order_detail_screen.dart';
 import '../purchases/purchase_builder_screen.dart';
+import '../purchases/purchase_detail_screen.dart';
 import '../purchases/purchase_order_detail_screen.dart';
 
 /// Unified Transactions Hub displaying Sales, Purchases, Payments In/Out, and Expenses.
@@ -111,6 +114,27 @@ class _TransactionListTabState extends State<TransactionListTab> {
       Navigator.of(context)
           .push(MaterialPageRoute(
               builder: (_) => InvoiceDetailScreen(invoiceId: tx.refId!)))
+          .then((_) => _load());
+      return;
+    }
+    if (tx.type == TransactionType.purchase && tx.refId != null) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(
+              builder: (_) => PurchaseDetailScreen(purchaseId: tx.refId!)))
+          .then((_) => _load());
+      return;
+    }
+    if (tx.type == TransactionType.deliveryChallan && tx.refId != null) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(
+              builder: (_) => DeliveryChallanDetailScreen(challanId: tx.refId!)))
+          .then((_) => _load());
+      return;
+    }
+    if (tx.type == TransactionType.quotation && tx.refId != null) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(
+              builder: (_) => QuotationDetailScreen(quotationId: tx.refId!)))
           .then((_) => _load());
       return;
     }

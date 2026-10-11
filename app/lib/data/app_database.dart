@@ -169,6 +169,20 @@ class AppDatabase {
     } catch (_) {}
     try {
       await db.execute('''
+        CREATE TABLE IF NOT EXISTS purchase_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          purchase_id INTEGER NOT NULL,
+          product_id INTEGER,
+          name TEXT NOT NULL,
+          quantity REAL DEFAULT 1,
+          price INTEGER DEFAULT 0,
+          tax INTEGER DEFAULT 0,
+          unit TEXT DEFAULT 'pc'
+        );
+      ''');
+    } catch (_) {}
+    try {
+      await db.execute('''
         CREATE TABLE IF NOT EXISTS staff_members (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           business_id INTEGER NOT NULL,
@@ -662,6 +676,19 @@ class AppDatabase {
         name TEXT,
         quantity REAL DEFAULT 0,
         price INTEGER DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE purchase_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        purchase_id INTEGER NOT NULL,
+        product_id INTEGER,
+        name TEXT NOT NULL,
+        quantity REAL DEFAULT 1,
+        price INTEGER DEFAULT 0,
+        tax INTEGER DEFAULT 0,
+        unit TEXT DEFAULT 'pc'
       )
     ''');
 

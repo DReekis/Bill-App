@@ -163,6 +163,9 @@ class GstService {
     '99': 'Centre Jurisdiction',
   };
 
+  /// Indian States and UTs Mapping Utility for human-readable state names and numeric GST codes.
+  static IndianStates get states => IndianStates.instance;
+
   /// State capital and major commercial trade city mapping for all 38 Indian states & UTs.
   static const Map<String, ({String city, String pinCode})> stateCommercialCapitals = {
     '01': (city: 'Srinagar', pinCode: '190001'),
@@ -648,3 +651,97 @@ class GstService {
     );
   }
 }
+
+/// Helper utility for Indian State Names and numeric GST State Codes.
+class IndianStates {
+  IndianStates._();
+  static final IndianStates instance = IndianStates._();
+
+  static const Map<String, String> codeToName = GstService.stateCodes;
+
+  static final Map<String, String> _nameToCode = () {
+    final map = <String, String>{};
+    for (final e in codeToName.entries) {
+      map[_norm(e.value)] = e.key;
+    }
+    void add(String alias, String code) {
+      map[_norm(alias)] = code;
+    }
+    // Variations & aliases
+    add('jammu & kashmir', '01');
+    add('jammu and kashmir', '01');
+    add('j&k', '01');
+    add('jk', '01');
+    add('delhi', '07');
+    add('new delhi', '07');
+    add('delhi ncr', '07');
+    add('nct of delhi', '07');
+    add('up', '09');
+    add('uttar pradesh', '09');
+    add('wb', '19');
+    add('west bengal', '19');
+    add('mp', '23');
+    add('madhya pradesh', '23');
+    add('daman and diu', '26');
+    add('dadra and nagar haveli', '26');
+    add('dadra & nagar haveli and daman & diu', '26');
+    add('dadra and nagar haveli and daman and diu', '26');
+    add('maharashtra', '27');
+    add('mh', '27');
+    add('andhra pradesh', '37');
+    add('ap', '37');
+    add('karnataka', '29');
+    add('ka', '29');
+    add('tamil nadu', '33');
+    add('tn', '33');
+    add('andaman and nicobar', '35');
+    add('andaman & nicobar islands', '35');
+    add('telangana', '36');
+    add('ts', '36');
+    add('tg', '36');
+    add('ladakh', '38');
+    return map;
+  }();
+
+  static String _norm(String s) => s
+      .trim()
+      .toLowerCase()
+      .replaceAll('&', 'and')
+      .replaceAll(RegExp(r'\s+'), ' ');
+
+  static String? getCode(String? codeOrName) {
+    if (codeOrName == null || codeOrName.trim().isEmpty) return null;
+    final trimmed = codeOrName.trim();
+    if (codeToName.containsKey(trimmed)) return trimmed;
+    final padded = trimmed.padLeft(2, '0');
+    if (codeToName.containsKey(padded)) return padded;
+    return _nameToCode[_norm(trimmed)];
+  }
+
+  static String? getName(String? codeOrName) {
+    if (codeOrName == null || codeOrName.trim().isEmpty) return null;
+    final trimmed = codeOrName.trim();
+    final code = getCode(trimmed);
+    if (code != null && codeToName.containsKey(code)) {
+      return codeToName[code];
+    }
+    return trimmed;
+  }
+
+  static bool isSameState(String? a, String? b) {
+    if (a == null || b == null) return false;
+    final codeA = getCode(a);
+    final codeB = getCode(b);
+    if (codeA != null && codeB != null) return codeA == codeB;
+    return _norm(a) == _norm(b);
+  }
+
+  static List<({String code, String name})> get list {
+    final entries = codeToName.entries
+        .map((e) => (code: e.key, name: e.value))
+        .toList();
+    entries.sort((a, b) => a.name.compareTo(b.name));
+    return entries;
+  }
+}
+

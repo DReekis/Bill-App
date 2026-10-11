@@ -14,10 +14,11 @@ import '../inventory/product_form.dart';
 import 'barcode_scanner_screen.dart';
 
 class QuotationBuilderScreen extends StatefulWidget {
-  const QuotationBuilderScreen({super.key, this.businessId, this.customerId});
+  const QuotationBuilderScreen({super.key, this.businessId, this.customerId, this.existingQuotation});
 
   final int? businessId;
   final int? customerId;
+  final Quotation? existingQuotation;
 
   @override
   State<QuotationBuilderScreen> createState() => _QuotationBuilderScreenState();
@@ -94,7 +95,50 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
           _notesController.text = biz!.termsQuotation!;
         }
       });
-      if (quotationNumber == null && biz != null) {
+      if (widget.existingQuotation != null) {
+        final eq = widget.existingQuotation!;
+        if (mounted) {
+          setState(() {
+            quotationNumber = eq.number;
+            quotationDate = eq.date;
+            customerId = eq.customerId;
+            customerName = eq.customerName;
+            _notesController.text = eq.notes ?? '';
+            if (customerId != null && custs.any((c) => c.id == customerId)) {
+              selectedCustomer = custs.firstWhere((c) => c.id == customerId);
+            }
+            lines.clear();
+            for (final item in eq.lines) {
+              Product? prod;
+              if (item.productId != null) {
+                for (final p in prods) {
+                  if (p.id == item.productId) {
+                    prod = p;
+                    break;
+                  }
+                }
+              }
+              prod ??= Product(
+                id: item.productId,
+                name: item.name,
+                purchasePrice: item.price,
+                salePrice: item.price,
+                gstRate: item.gstRate,
+                hsn: item.hsn,
+                unit: item.unit ?? 'pc',
+                stock: 0,
+              );
+              lines.add(_LineEdit(
+                product: prod,
+                qty: item.quantity,
+                price: item.price,
+                discountPercent: item.discountPercent,
+                gstRate: item.gstRate,
+              ));
+            }
+          });
+        }
+      } else if (quotationNumber == null && biz != null) {
         final nextQuote = await repo.peekNextQuotationNumber(businessId, biz.quotationPrefix);
         if (mounted) {
           setState(() => quotationNumber = nextQuote);
@@ -415,42 +459,83 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
           ? quotationNumber!.trim()
           : await Repository.instance.nextQuotationNumber(bizId, business?.quotationPrefix ?? 'EST');
 
-      final quote = Quotation(
-        businessId: bizId,
-        number: quoteNumber,
-        customerId: customerId,
-        customerName: customerName,
-        date: quotationDate,
-        subtotal: subtotal,
-        taxable: subtotal,
-        cgst: cgst,
-        sgst: sgst,
-        igst: igst,
-        total: grandTotal,
-        status: 'Open',
-        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-        lines: lines
-            .map((l) => InvoiceLine(
-                  productId: l.product.id,
-                  name: l.product.name,
-                  hsn: l.product.hsn,
-                  quantity: l.qty,
-                  price: l.price,
-                  gstRate: l.gstRate,
-                  discount: l.discountPaise,
-                  discountPercent: l.discountPercent,
-                  taxable: l.taxablePaise,
-                  tax: l.taxPaise,
-                  unit: l.product.unit,
-                ))
-            .toList(),
-      );
+      if (widget.existingQuotation != null) {
+        final quote = Quotation(
+          id: widget.existingQuotation!.id,
+          businessId: bizId,
+          number: quoteNumber,
+          customerId: customerId,
+          customerName: customerName,
+          date: quotationDate,
+          subtotal: subtotal,
+          taxable: subtotal,
+          cgst: cgst,
+          sgst: sgst,
+          igst: igst,
+          total: grandTotal,
+          status: widget.existingQuotation!.status,
+          notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+          lines: lines
+              .map((l) => InvoiceLine(
+                    productId: l.product.id,
+                    name: l.product.name,
+                    hsn: l.product.hsn,
+                    quantity: l.qty,
+                    price: l.price,
+                    gstRate: l.gstRate,
+                    discount: l.discountPaise,
+                    discountPercent: l.discountPercent,
+                    taxable: l.taxablePaise,
+                    tax: l.taxPaise,
+                    unit: l.product.unit,
+                  ))
+              .toList(),
+        );
 
-      await Repository.instance.finalizeQuotation(quote);
+        await Repository.instance.updateQuotation(quote);
 
-      if (mounted) {
-        showAppMessage(context, 'Quotation $quoteNumber saved successfully');
-        Navigator.pop(context, true);
+        if (mounted) {
+          showAppMessage(context, 'Quotation $quoteNumber updated successfully');
+          Navigator.pop(context, true);
+        }
+      } else {
+        final quote = Quotation(
+          businessId: bizId,
+          number: quoteNumber,
+          customerId: customerId,
+          customerName: customerName,
+          date: quotationDate,
+          subtotal: subtotal,
+          taxable: subtotal,
+          cgst: cgst,
+          sgst: sgst,
+          igst: igst,
+          total: grandTotal,
+          status: 'Open',
+          notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+          lines: lines
+              .map((l) => InvoiceLine(
+                    productId: l.product.id,
+                    name: l.product.name,
+                    hsn: l.product.hsn,
+                    quantity: l.qty,
+                    price: l.price,
+                    gstRate: l.gstRate,
+                    discount: l.discountPaise,
+                    discountPercent: l.discountPercent,
+                    taxable: l.taxablePaise,
+                    tax: l.taxPaise,
+                    unit: l.product.unit,
+                  ))
+              .toList(),
+        );
+
+        await Repository.instance.finalizeQuotation(quote);
+
+        if (mounted) {
+          showAppMessage(context, 'Quotation $quoteNumber saved successfully');
+          Navigator.pop(context, true);
+        }
       }
     } catch (e) {
       if (mounted) showAppMessage(context, 'Error saving quotation: $e', error: true);
@@ -468,7 +553,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
     return Scaffold(
       backgroundColor: StitchColors.surface,
       appBar: AppBar(
-        title: const Text('New Quotation', style: TextStyle(fontWeight: FontWeight.w700)),
+        title: Text(widget.existingQuotation != null ? 'Edit Quotation' : 'New Quotation', style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           IconButton(
             tooltip: 'Scan Barcode',
@@ -880,7 +965,7 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                     SizedBox(
                       height: 44,
                       child: AsyncButton(
-                        label: 'Save Quotation',
+                        label: widget.existingQuotation != null ? 'Update Quotation' : 'Save Quotation',
                         expand: false,
                         loading: saving,
                         onPressed: _save,

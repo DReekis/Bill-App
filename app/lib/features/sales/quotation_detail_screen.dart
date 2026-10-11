@@ -10,6 +10,7 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
 import 'invoice_detail_screen.dart';
+import 'quotation_builder_screen.dart';
 
 class QuotationDetailScreen extends StatefulWidget {
   const QuotationDetailScreen({super.key, required this.quotationId});
@@ -115,6 +116,50 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
     }
   }
 
+  Future<void> _previewPdf() async {
+    final q = quotation;
+    final b = business;
+    if (q == null || b == null) return;
+    setState(() => _busy = true);
+    try {
+      final session = context.read<Session>();
+      final repo = Repository.instance;
+      final settings = await repo.getInvoiceCustomizationSettings(session.businessId ?? b.id ?? 1);
+      Customer? cust;
+      if (q.customerId != null) {
+        cust = await repo.customer(session.businessId ?? b.id ?? 1, q.customerId!);
+      }
+
+      if (!mounted) return;
+      await showInvoicePreviewModal(
+        context,
+        business: b,
+        settings: settings,
+        title: '${q.number} - Preview',
+        pdfBuilder: () => buildQuotationPdf(
+          business: b,
+          quotation: q,
+          customer: cust,
+          settings: settings,
+        ),
+      );
+    } catch (e) {
+      if (mounted) showAppMessage(context, 'Preview failed: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _editQuotation() {
+    final q = quotation;
+    if (q == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => QuotationBuilderScreen(existingQuotation: q),
+      ),
+    ).then((_) => _load());
+  }
+
   Future<void> _delete() async {
     final q = quotation;
     if (q == null || q.id == null) return;
@@ -165,6 +210,16 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
         ),
         actions: [
           if (q != null) ...[
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit Quotation',
+              onPressed: _busy ? null : _editQuotation,
+            ),
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              tooltip: 'Preview PDF',
+              onPressed: _busy ? null : _previewPdf,
+            ),
             IconButton(
               icon: const Icon(Icons.print_outlined),
               tooltip: 'Print',
@@ -398,7 +453,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
                   ),
                 ),
 
-                // Sticky Bottom Action Bar (BillBook Style)
+                // Sticky Bottom Action Bar
                 Container(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
                   decoration: BoxDecoration(
@@ -411,28 +466,61 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
                       ),
                     ],
                   ),
-                  child: Row(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _busy ? null : _share,
-                          icon: const Icon(Icons.share_outlined, size: 16),
-                          label: const Text('Share PDF'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: StitchColors.primary.withValues(alpha: 0.12),
+                            foregroundColor: StitchColors.primary,
+                            padding: const EdgeInsets.symmetric(vertical: 13),
                           ),
+                          onPressed: _busy ? null : _editQuotation,
+                          icon: const Icon(Icons.edit_note_rounded, size: 20),
+                          label: const Text('Edit Quotation', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _busy ? null : _previewPdf,
+                              icon: const Icon(Icons.visibility_outlined, size: 18),
+                              label: const Text('Preview'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _busy ? null : _print,
+                              icon: const Icon(Icons.print_outlined, size: 18),
+                              label: const Text('Print'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _busy ? null : _share,
+                              icon: const Icon(Icons.share_rounded, size: 18),
+                              label: const Text('Share'),
+                            ),
+                          ),
+                        ],
+                      ),
                       if (q.status.toLowerCase() != 'converted') ...[
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 2,
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
                           child: FilledButton.icon(
                             onPressed: _busy ? null : _convert,
                             icon: const Icon(Icons.transform_rounded, size: 18),
                             label: const Text('Convert to Sale Invoice'),
                             style: FilledButton.styleFrom(
+                              backgroundColor: StitchColors.primary,
+                              foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),

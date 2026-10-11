@@ -1729,6 +1729,15 @@ class Repository {
             'date': date,
           });
         }
+        await txn.insert('purchase_items', {
+          'purchase_id': purchaseId,
+          'product_id': productId,
+          'name': name,
+          'quantity': qty,
+          'price': price,
+          'tax': gstRate,
+          'unit': 'pc',
+        });
         await txn.insert('ledger', {
           'business_id': businessId,
           'date': date,
@@ -1791,6 +1800,266 @@ class Repository {
     await _audit(businessId, action: 'create', entity: 'purchase', entityId: purchaseId);
     await _enqueueSync(businessId, entity: 'purchase', entityId: purchaseId, op: 'create');
     return purchaseId;
+  }
+
+  Future<PurchaseBill?> purchase(int businessId, int purchaseId) async {
+    final db = await _database;
+    final expRows = await db.query(
+      'expenses',
+      where: 'id = ? AND business_id = ? AND category = ?',
+      whereArgs: [purchaseId, businessId, 'Purchase'],
+      limit: 1,
+    );
+    if (expRows.isEmpty) return null;
+    final r = expRows.first;
+    final total = (r['amount'] as num?)?.toInt() ?? 0;
+    final vendor = r['vendor'] as String?;
+    final date = r['date'] as String? ?? todayIso();
+    final mode = r['mode'] as String? ?? 'Cash';
+    final desc = r['description'] as String? ?? '';
+
+    String number = 'PUR-$purchaseId';
+    String? notes;
+    if (desc.startsWith('Purchase ')) {
+      final rem = desc.substring('Purchase '.length);
+      final fromIdx = rem.indexOf(' from ');
+      if (fromIdx != -1) {
+        number = rem.substring(0, fromIdx).trim();
+        final rest = rem.substring(fromIdx + ' from '.length);
+        final dashIdx = rest.indexOf(' — ');
+        if (dashIdx != -1) {
+          notes = rest.substring(dashIdx + ' — '.length).trim();
+        }
+      }
+    }
+
+    Supplier? supp;
+    if (vendor != null && vendor.isNotEmpty) {
+      final suppRows = await db.query(
+        'suppliers',
+        where: 'business_id = ? AND name = ?',
+        whereArgs: [businessId, vendor],
+        limit: 1,
+      );
+      if (suppRows.isNotEmpty) {
+        supp = Supplier.fromMap(suppRows.first);
+      }
+    }
+
+    final payRows = await db.query(
+      'payments',
+      where: "business_id = ? AND party_type = 'supplier' AND (invoice_number = ? OR reference = 'initial_purchase')",
+      whereArgs: [businessId, number],
+    );
+    var paid = 0;
+    for (final p in payRows) {
+      paid += (p['amount'] as num?)?.toInt() ?? 0;
+    }
+    if (mode == 'Cash' && paid == 0 && total > 0) {
+      paid = total;
+    }
+
+    List<InvoiceLine> lines = [];
+    final itemRows = await db.query(
+      'purchase_items',
+      where: 'purchase_id = ?',
+      whereArgs: [purchaseId],
+    );
+    if (itemRows.isNotEmpty) {
+      lines = itemRows.map((m) => InvoiceLine(
+        productId: m['product_id'] as int?,
+        name: m['name'] as String? ?? 'Item',
+        quantity: (m['quantity'] as num?)?.toDouble() ?? 1.0,
+        price: (m['price'] as num?)?.toInt() ?? 0,
+        unit: m['unit'] as String?,
+        gstRate: (m['tax'] as num?)?.toInt() ?? 0,
+      )).toList();
+    } else {
+      final moves = await db.query(
+        'stock_moves',
+        where: "business_id = ? AND ref_type = 'purchase' AND ref_id = ?",
+        whereArgs: [businessId, purchaseId],
+      );
+      for (final m in moves) {
+        final pid = m['product_id'] as int?;
+        final qty = (m['change_qty'] as num?)?.toDouble() ?? 1.0;
+        String name = 'Item';
+        int price = 0;
+        int gstRate = 0;
+        String? unit;
+        if (pid != null) {
+          final pRows = await db.query('products', where: 'id = ?', whereArgs: [pid], limit: 1);
+          if (pRows.isNotEmpty) {
+            final p = pRows.first;
+            name = p['name'] as String? ?? 'Item';
+            price = (p['purchase_price'] as num?)?.toInt() ?? (p['cost_average'] as num?)?.toInt() ?? 0;
+            gstRate = (p['gst_rate'] as num?)?.toInt() ?? 0;
+            unit = p['unit'] as String?;
+          }
+        }
+        lines.add(InvoiceLine(
+          productId: pid,
+          name: name,
+          quantity: qty,
+          price: price,
+          unit: unit,
+          gstRate: gstRate,
+        ));
+      }
+    }
+
+    return PurchaseBill(
+      id: purchaseId,
+      businessId: businessId,
+      number: number,
+      supplierId: supp?.id,
+      supplierName: vendor,
+      supplierGstin: supp?.gstin,
+      supplierPhone: supp?.phone,
+      supplierAddress: supp?.address,
+      date: date,
+      total: total,
+      amountPaid: paid,
+      outstanding: (total - paid).clamp(0, total),
+      paymentMode: mode,
+      notes: notes,
+      lines: lines,
+    );
+  }
+
+  Future<void> updatePurchase({
+    required int purchaseId,
+    required int businessId,
+    required int? supplierId,
+    required String supplierName,
+    required String date,
+    required List<(int?, String, double, int, int)> items,
+    required int amountPaid,
+    String? paymentMode,
+    String? notes,
+    required String purchaseNumber,
+  }) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      final prevMoves = await txn.query(
+        'stock_moves',
+        where: "business_id = ? AND ref_type = 'purchase' AND ref_id = ?",
+        whereArgs: [businessId, purchaseId],
+      );
+      for (final m in prevMoves) {
+        final pid = m['product_id'] as int?;
+        final qty = (m['change_qty'] as num?)?.toDouble() ?? 0.0;
+        if (pid != null && qty > 0) {
+          final pRows = await txn.query('products', where: 'id = ?', whereArgs: [pid], limit: 1);
+          if (pRows.isNotEmpty) {
+            final curStock = (pRows.first['stock'] as num?)?.toDouble() ?? 0;
+            await txn.update('products', {'stock': curStock - qty}, where: 'id = ?', whereArgs: [pid]);
+          }
+        }
+      }
+      await txn.delete('stock_moves', where: "business_id = ? AND ref_type = 'purchase' AND ref_id = ?", whereArgs: [businessId, purchaseId]);
+      await txn.delete('ledger', where: "business_id = ? AND ref_type = 'purchase' AND ref_id = ?", whereArgs: [businessId, purchaseId]);
+      await txn.delete('purchase_items', where: 'purchase_id = ?', whereArgs: [purchaseId]);
+
+      var total = 0;
+      for (final item in items) {
+        final (productId, name, qty, price, gstRate) = item;
+        final lineAmount = (price * qty).round();
+        final taxAmount = (price * qty * gstRate / 100).round();
+        total += lineAmount + taxAmount;
+        if (productId != null) {
+          final pRows = await txn.query('products', where: 'id = ?', whereArgs: [productId], limit: 1);
+          if (pRows.isNotEmpty) {
+            final stock = (pRows.first['stock'] as num?)?.toDouble() ?? 0;
+            final costAvg = (pRows.first['cost_average'] as int? ?? 0);
+            final newStock = stock + qty;
+            final newAvg = newStock == 0 ? costAvg : (costAvg * stock + price * qty) / newStock;
+            await txn.update('products', {
+              'stock': newStock,
+              'cost_average': newAvg.round(),
+            }, where: 'id = ?', whereArgs: [productId]);
+            await txn.insert('stock_moves', {
+              'business_id': businessId,
+              'product_id': productId,
+              'change_qty': qty,
+              'qty_after': newStock,
+              'move_type': 'purchase',
+              'ref_type': 'purchase',
+              'ref_id': purchaseId,
+              'date': date,
+            });
+          }
+        }
+        await txn.insert('purchase_items', {
+          'purchase_id': purchaseId,
+          'product_id': productId,
+          'name': name,
+          'quantity': qty,
+          'price': price,
+          'tax': gstRate,
+          'unit': 'pc',
+        });
+        await txn.insert('ledger', {
+          'business_id': businessId,
+          'date': date,
+          'account': 'purchases',
+          'debit': lineAmount + taxAmount,
+          'credit': 0,
+          'ref_type': 'purchase',
+          'ref_id': purchaseId,
+          'note': '$name x${_qty(qty)} from $supplierName',
+        });
+      }
+
+      await txn.update('expenses', {
+        'amount': total,
+        'mode': paymentMode ?? 'Credit',
+        'date': date,
+        'description': notes == null || notes.isEmpty
+            ? 'Purchase $purchaseNumber from $supplierName'
+            : 'Purchase $purchaseNumber from $supplierName — $notes',
+        'vendor': supplierName,
+      }, where: 'id = ? AND business_id = ?', whereArgs: [purchaseId, businessId]);
+
+      await txn.insert('ledger', {
+        'business_id': businessId,
+        'date': date,
+        'account': 'supplier:${supplierId ?? 0}',
+        'debit': 0,
+        'credit': total,
+        'ref_type': 'purchase',
+        'ref_id': purchaseId,
+        'note': '$supplierName — $purchaseNumber',
+      });
+    });
+    await _audit(businessId, action: 'update', entity: 'purchase', entityId: purchaseId);
+  }
+
+  Future<void> deletePurchase(int businessId, int purchaseId) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      final prevMoves = await txn.query(
+        'stock_moves',
+        where: "business_id = ? AND ref_type = 'purchase' AND ref_id = ?",
+        whereArgs: [businessId, purchaseId],
+      );
+      for (final m in prevMoves) {
+        final pid = m['product_id'] as int?;
+        final qty = (m['change_qty'] as num?)?.toDouble() ?? 0.0;
+        if (pid != null && qty > 0) {
+          final pRows = await txn.query('products', where: 'id = ?', whereArgs: [pid], limit: 1);
+          if (pRows.isNotEmpty) {
+            final curStock = (pRows.first['stock'] as num?)?.toDouble() ?? 0;
+            await txn.update('products', {'stock': curStock - qty}, where: 'id = ?', whereArgs: [pid]);
+          }
+        }
+      }
+      await txn.delete('stock_moves', where: "business_id = ? AND ref_type = 'purchase' AND ref_id = ?", whereArgs: [businessId, purchaseId]);
+      await txn.delete('ledger', where: "business_id = ? AND ref_type = 'purchase' AND ref_id = ?", whereArgs: [businessId, purchaseId]);
+      await txn.delete('purchase_items', where: 'purchase_id = ?', whereArgs: [purchaseId]);
+      await txn.delete('expenses', where: 'id = ? AND business_id = ?', whereArgs: [purchaseId, businessId]);
+    });
+    await _audit(businessId, action: 'delete', entity: 'purchase', entityId: purchaseId);
   }
 
   Future<int> recordExpense({
@@ -2104,6 +2373,64 @@ class Repository {
     return id;
   }
 
+  Future<void> updateQuotation(Quotation quote) async {
+    final db = await _database;
+    final bizId = quote.businessId ?? session.businessId!;
+    await db.transaction((txn) async {
+      final qMap = <String, Object?>{
+        'business_id': bizId,
+        'number': quote.number,
+        'customer_id': quote.customerId,
+        'customer_name': quote.customerName,
+        'date': quote.date,
+        'expiry_date': quote.expiryDate,
+        'gst_type': quote.gstType,
+        'subtotal': quote.subtotal,
+        'discount': quote.discount,
+        'taxable': quote.taxable,
+        'cgst': quote.cgst,
+        'sgst': quote.sgst,
+        'igst': quote.igst,
+        'total': quote.total,
+        'status': quote.status,
+        'notes': quote.notes,
+        'is_proforma': quote.isProforma ? 1 : 0,
+      };
+      try {
+        await txn.update('quotations', qMap, where: 'id = ? AND business_id = ?', whereArgs: [quote.id, bizId]);
+      } catch (_) {
+        final fallbackMap = Map<String, Object?>.from(qMap)..remove('is_proforma');
+        await txn.update('quotations', fallbackMap, where: 'id = ? AND business_id = ?', whereArgs: [quote.id, bizId]);
+      }
+      await txn.delete('quotation_items', where: 'quotation_id = ?', whereArgs: [quote.id]);
+      for (final line in quote.lines) {
+        final itemMap = <String, Object?>{
+          'quotation_id': quote.id,
+          'product_id': line.productId,
+          'name': line.name,
+          'hsn': line.hsn,
+          'gst_rate': line.gstRate,
+          'quantity': line.quantity,
+          'price': line.price,
+          'discount': line.discount,
+          'discount_percent': line.discountPercent,
+          'taxable': line.taxable,
+          'tax': line.tax,
+          'unit': line.unit,
+        };
+        try {
+          await txn.insert('quotation_items', itemMap);
+        } catch (_) {
+          final fallbackItemMap = Map<String, Object?>.from(itemMap)
+            ..remove('discount_percent')
+            ..remove('unit');
+          await txn.insert('quotation_items', fallbackItemMap);
+        }
+      }
+    });
+    await _audit(bizId, action: 'update', entity: 'quotation', entityId: quote.id);
+  }
+
   Future<List<Quotation>> quotations(int businessId) async {
     final db = await _database;
     final rows = await db.query('quotations',
@@ -2350,6 +2677,31 @@ class Repository {
     });
     await _audit(challan.businessId ?? session.businessId!, action: 'create', entity: 'delivery_challan', entityId: id);
     return id;
+  }
+
+  Future<void> updateDeliveryChallan(DeliveryChallan challan) async {
+    final db = await _database;
+    final bizId = challan.businessId ?? session.businessId!;
+    await db.transaction((txn) async {
+      await txn.update(
+        'delivery_challans',
+        challan.toMap()..['business_id'] = bizId,
+        where: 'id = ? AND business_id = ?',
+        whereArgs: [challan.id, bizId],
+      );
+      await txn.delete('delivery_challan_items', where: 'challan_id = ?', whereArgs: [challan.id]);
+      for (final line in challan.lines) {
+        await txn.insert('delivery_challan_items', {
+          'challan_id': challan.id,
+          'product_id': line.productId,
+          'name': line.name,
+          'quantity': line.quantity,
+          'price': line.price,
+          'unit': line.unit,
+        });
+      }
+    });
+    await _audit(bizId, action: 'update', entity: 'delivery_challan', entityId: challan.id);
   }
 
   Future<int> upsertBankAccount(BankAccount account) async {
@@ -3969,14 +4321,28 @@ class Repository {
     };
   }
 
-  Future<DashboardPerformance> dashboardPerformance(int businessId, String timeframe) async {
+  Future<DashboardPerformance> dashboardPerformance(
+    int businessId,
+    String timeframe, {
+    DateTime? customStart,
+    DateTime? customEnd,
+  }) async {
     final db = await _database;
     final now = DateTime.now();
 
     DateTime curStart, curEnd, prevStart, prevEnd;
     String comparisonLabel;
 
-    if (timeframe == 'This Week') {
+    if (timeframe == 'Custom Range' || (customStart != null && customEnd != null)) {
+      final s = customStart ?? now.subtract(const Duration(days: 6));
+      final e = customEnd ?? now;
+      curStart = DateTime(s.year, s.month, s.day);
+      curEnd = DateTime(e.year, e.month, e.day);
+      final rangeDays = curEnd.difference(curStart).inDays + 1;
+      prevStart = curStart.subtract(Duration(days: rangeDays));
+      prevEnd = curStart.subtract(const Duration(days: 1));
+      comparisonLabel = 'vs prev $rangeDays d';
+    } else if (timeframe == 'This Week') {
       final monday = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
       curStart = monday;
       curEnd = monday.add(const Duration(days: 6));
@@ -4151,6 +4517,43 @@ class Repository {
       final expMap = {for (var r in expByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
 
       for (var i = 0; i < 7; i++) {
+        final dStr = isoDate(curStart.add(Duration(days: i)));
+        salesHistory.add(salesMap[dStr] ?? 0.0);
+        final rev = (taxMap[dStr] ?? 0.0) - (retMap[dStr] ?? 0.0);
+        final p = rev - (cogsMap[dStr] ?? 0.0) - (expMap[dStr] ?? 0.0);
+        profitHistory.add(p);
+      }
+    } else if (timeframe == 'Custom Range' || (customStart != null && customEnd != null)) {
+      final days = curEnd.difference(curStart).inDays + 1;
+      final salesByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(total), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final taxByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(taxable), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final retByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(taxable), 0) AS s FROM returns WHERE business_id = ? AND date >= ? AND date <= ? AND party_type = 'customer' GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final cogsByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(debit), 0) AS s FROM ledger WHERE business_id = ? AND date >= ? AND date <= ? AND account = 'cogs' GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+      final expByDay = await db.rawQuery(
+        "SELECT date, COALESCE(SUM(amount), 0) AS s FROM expenses WHERE business_id = ? AND date >= ? AND date <= ? AND category != 'Purchase' GROUP BY date",
+        [businessId, curFrom, curTo],
+      );
+
+      final salesMap = {for (var r in salesByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final taxMap = {for (var r in taxByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final retMap = {for (var r in retByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final cogsMap = {for (var r in cogsByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+      final expMap = {for (var r in expByDay) r['date'] as String: (r['s'] as num).toDouble() / 100};
+
+      final sampleStep = days > 30 ? (days / 15).ceil() : 1;
+      for (var i = 0; i < days; i += sampleStep) {
         final dStr = isoDate(curStart.add(Duration(days: i)));
         salesHistory.add(salesMap[dStr] ?? 0.0);
         final rev = (taxMap[dStr] ?? 0.0) - (retMap[dStr] ?? 0.0);

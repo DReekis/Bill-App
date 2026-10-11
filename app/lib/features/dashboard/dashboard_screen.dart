@@ -19,9 +19,12 @@ import '../sales/delivery_challan_builder_screen.dart';
 import '../sales/invoice_builder_screen.dart';
 import '../orders/orders_screen.dart';
 import '../sales/quotation_builder_screen.dart';
+import '../sales/quotation_detail_screen.dart';
 import '../sales/sales_order_builder_screen.dart';
+import '../sales/delivery_challan_detail_screen.dart';
 import '../sales/invoice_detail_screen.dart';
 import '../sales/invoice_list_tab.dart';
+import '../purchases/purchase_detail_screen.dart';
 import '../suppliers/supplier_form.dart';
 import '../search/search_screen.dart';
 import '../reports/reports_menu_screen.dart';
@@ -57,6 +60,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ReceivablesSummary? receivables;
   PayablesSummary? payables;
   String snapshotTimeframe = 'Today';
+  DateTimeRange? customDateRange;
   TrendInfo salesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%');
   TrendInfo purchasesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%');
   TrendInfo expensesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%');
@@ -70,7 +74,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (businessId == null) return;
     final repo = Repository.instance;
     final results = await Future.wait([
-      repo.dashboardPerformance(businessId, snapshotTimeframe),
+      repo.dashboardPerformance(
+        businessId,
+        snapshotTimeframe,
+        customStart: customDateRange?.start,
+        customEnd: customDateRange?.end,
+      ),
       repo.recentTransactions(businessId, limit: 5),
       repo.getBusiness(businessId),
       repo.lowStockCount(businessId),
@@ -120,7 +129,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final businessId = session.businessId;
     if (businessId == null) return;
     final repo = Repository.instance;
-    final perf = await repo.dashboardPerformance(businessId, tf);
+
+    DateTime? cStart;
+    DateTime? cEnd;
+    DateTimeRange? pickedRange;
+
+    if (tf == 'Custom Range') {
+      final now = DateTime.now();
+      pickedRange = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2020),
+        lastDate: now.add(const Duration(days: 365)),
+        initialDateRange: customDateRange ??
+            DateTimeRange(
+              start: now.subtract(const Duration(days: 6)),
+              end: now,
+            ),
+        helpText: 'Select Custom Date Range',
+        builder: (context, child) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: Theme.of(context).colorScheme.copyWith(
+                    primary: StitchColors.primary,
+                    onPrimary: Colors.white,
+                  ),
+            ),
+            child: child!,
+          );
+        },
+      );
+      if (pickedRange == null) return;
+      cStart = pickedRange.start;
+      cEnd = pickedRange.end;
+    }
+
+    final perf = await repo.dashboardPerformance(
+      businessId,
+      tf,
+      customStart: cStart,
+      customEnd: cEnd,
+    );
     if (!mounted) return;
     setState(() {
       totals = perf.totals;
@@ -133,6 +181,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       salesHistory = perf.salesHistory;
       profitHistory = perf.profitHistory;
       snapshotTimeframe = tf;
+      if (tf == 'Custom Range') {
+        customDateRange = pickedRange;
+      } else {
+        customDateRange = null;
+      }
     });
   }
 
@@ -789,6 +842,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         receivables: receivables,
         payables: payables,
         snapshotTimeframe: snapshotTimeframe,
+        customDateRange: customDateRange,
         salesHistory: salesHistory,
         profitHistory: profitHistory,
         salesTrend: salesTrend,
@@ -983,6 +1037,7 @@ class _ReferenceDashboard extends StatelessWidget {
     this.receivables,
     this.payables,
     this.snapshotTimeframe = 'Today',
+    this.customDateRange,
     required this.salesHistory,
     required this.profitHistory,
     this.salesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%'),
@@ -1016,6 +1071,7 @@ class _ReferenceDashboard extends StatelessWidget {
   final ReceivablesSummary? receivables;
   final PayablesSummary? payables;
   final String snapshotTimeframe;
+  final DateTimeRange? customDateRange;
   final List<double> salesHistory;
   final List<double> profitHistory;
   final TrendInfo salesTrend;
@@ -1227,6 +1283,7 @@ class _ReferenceDashboard extends StatelessWidget {
             totals: t,
             amount: amount,
             timeframe: snapshotTimeframe,
+            customDateRange: customDateRange,
             onSelectTimeframe: onSelectTimeframe,
             salesTrend: salesTrend,
             purchasesTrend: purchasesTrend,
@@ -1256,7 +1313,12 @@ class _ReferenceDashboard extends StatelessWidget {
               Text(l10n.text('business_overview'),
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               PopupMenuButton<String>(
-                initialValue: snapshotTimeframe,
+                initialValue: (snapshotTimeframe == 'Today' ||
+                        snapshotTimeframe == 'This Week' ||
+                        snapshotTimeframe == 'This Month' ||
+                        snapshotTimeframe == 'This Year')
+                    ? snapshotTimeframe
+                    : 'Custom Range',
                 tooltip: 'Select timeframe',
                 onSelected: (val) => onSelectTimeframe?.call(val),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1266,6 +1328,16 @@ class _ReferenceDashboard extends StatelessWidget {
                   PopupMenuItem(value: 'This Week', child: Text(l10n.text('this_week'))),
                   PopupMenuItem(value: 'This Month', child: Text(l10n.text('this_month'))),
                   PopupMenuItem(value: 'This Year', child: Text(l10n.text('this_year'))),
+                  PopupMenuItem(
+                    value: 'Custom Range',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.date_range_rounded, size: 16, color: StitchColors.primary),
+                        const SizedBox(width: 8),
+                        Text(l10n.text('custom_range')),
+                      ],
+                    ),
+                  ),
                 ],
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1284,7 +1356,11 @@ class _ReferenceDashboard extends StatelessWidget {
                                 ? l10n.text('this_week')
                                 : (snapshotTimeframe == 'This Month'
                                     ? l10n.text('this_month')
-                                    : l10n.text('this_year'))),
+                                    : (snapshotTimeframe == 'This Year'
+                                        ? l10n.text('this_year')
+                                        : (customDateRange != null
+                                            ? _formatDateRange(customDateRange!)
+                                            : l10n.text('custom_range'))))),
                         style: const TextStyle(color: StitchColors.primary, fontSize: 12, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(width: 4),
@@ -1524,6 +1600,21 @@ class _ReferenceDashboard extends StatelessWidget {
                           context,
                           MaterialPageRoute(builder: (_) => InvoiceDetailScreen(invoiceId: tx.refId!)),
                         ).then((_) => onRefresh());
+                      } else if (tx.type == TransactionType.purchase && tx.refId != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => PurchaseDetailScreen(purchaseId: tx.refId!)),
+                        ).then((_) => onRefresh());
+                      } else if (tx.type == TransactionType.deliveryChallan && tx.refId != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => DeliveryChallanDetailScreen(challanId: tx.refId!)),
+                        ).then((_) => onRefresh());
+                      } else if (tx.type == TransactionType.quotation && tx.refId != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => QuotationDetailScreen(quotationId: tx.refId!)),
+                        ).then((_) => onRefresh());
                       } else {
                         onViewAllTransactions?.call();
                       }
@@ -1667,11 +1758,19 @@ class _DashboardTransactionRow extends StatelessWidget {
   }
 }
 
+String _formatDateRange(DateTimeRange range) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  final s = range.start;
+  final e = range.end;
+  return '${s.day} ${months[s.month - 1]} - ${e.day} ${months[e.month - 1]}';
+}
+
 class _Snapshot extends StatelessWidget {
   const _Snapshot({
     required this.totals,
     required this.amount,
     required this.timeframe,
+    this.customDateRange,
     required this.onSelectTimeframe,
     this.salesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%'),
     this.purchasesTrend = const TrendInfo(percent: 0, isNegative: false, formatted: '0.0%'),
@@ -1680,6 +1779,7 @@ class _Snapshot extends StatelessWidget {
   final Map<String, int>? totals;
   final String Function(int?) amount;
   final String timeframe;
+  final DateTimeRange? customDateRange;
   final ValueChanged<String>? onSelectTimeframe;
   final TrendInfo salesTrend;
   final TrendInfo purchasesTrend;
@@ -1693,13 +1793,20 @@ class _Snapshot extends StatelessWidget {
       'This Week' => l10n.text('this_week'),
       'This Month' => l10n.text('this_month'),
       'This Year' => l10n.text('this_year'),
+      'Custom Range' => customDateRange != null
+          ? _formatDateRange(customDateRange!)
+          : l10n.text('custom_range'),
       _ => timeframe,
     };
     final snapshotTitle = timeframe == 'Today'
         ? l10n.text('todays_snapshot')
-        : (l10n.isHindi || l10n.isBengali
-            ? '$timeframeLabel ${l10n.text('snapshot')}'
-            : "$timeframe's ${l10n.text('snapshot')}");
+        : (timeframe == 'Custom Range'
+            ? (customDateRange != null
+                ? 'Snapshot (${_formatDateRange(customDateRange!)})'
+                : l10n.text('custom_range'))
+            : (l10n.isHindi || l10n.isBengali
+                ? '$timeframeLabel ${l10n.text('snapshot')}'
+                : "$timeframe's ${l10n.text('snapshot')}"));
 
     return Container(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
@@ -1725,7 +1832,12 @@ class _Snapshot extends StatelessWidget {
                 Text(snapshotTitle,
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
                 PopupMenuButton<String>(
-                  initialValue: timeframe,
+                  initialValue: (timeframe == 'Today' ||
+                          timeframe == 'This Week' ||
+                          timeframe == 'This Month' ||
+                          timeframe == 'This Year')
+                      ? timeframe
+                      : 'Custom Range',
                   tooltip: 'Select timeframe',
                   onSelected: (val) => onSelectTimeframe?.call(val),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1735,6 +1847,16 @@ class _Snapshot extends StatelessWidget {
                     PopupMenuItem(value: 'This Week', child: Text(l10n.text('this_week'))),
                     PopupMenuItem(value: 'This Month', child: Text(l10n.text('this_month'))),
                     PopupMenuItem(value: 'This Year', child: Text(l10n.text('this_year'))),
+                    PopupMenuItem(
+                      value: 'Custom Range',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.date_range_rounded, size: 16, color: StitchColors.primary),
+                          const SizedBox(width: 8),
+                          Text(l10n.text('custom_range')),
+                        ],
+                      ),
+                    ),
                   ],
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),

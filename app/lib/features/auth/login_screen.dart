@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_service.dart';
-import '../../core/google_auth_config.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
 import '../../data/repositories.dart';
@@ -50,9 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _staffLookingUp = false;
   bool _obscureStaffPin = true;
 
-  bool _busy = false;
   String? _errorMessage;
-  bool _isUnregisteredSha1Error = false;
 
   @override
   void initState() {
@@ -72,27 +69,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String _friendlyAuthError(Object e, String serverUrl) {
     final msg = e.toString();
-    _isUnregisteredSha1Error = false;
-
-    if (msg.contains('SIGN_IN_CANCELLED') ||
-        msg.contains('canceled') ||
-        msg.contains('cancelled')) {
-      return 'cancelled';
-    }
-
-    if (msg.contains('28444') ||
-        msg.contains('Developer console is not set up correctly') ||
-        msg.contains('UNREGISTERED_ON_API_CONSOLE') ||
-        msg.contains('providerConfigurationError') ||
-        msg.contains('Account reauth failed') ||
-        msg.contains('ApiException: 10') ||
-        msg.contains('ApiException: 16') ||
-        msg.contains('DEVELOPER_ERROR') ||
-        msg.contains('[16]') ||
-        msg.contains('[10]')) {
-      _isUnregisteredSha1Error = true;
-      return 'Google Cloud Console configuration issue ([28444]):\n• In OAuth consent screen, add your Google account to "Test users" (or click "Publish App").\n• Ensure package name "com.pricepilot.bill" and SHA-1 match your Android Client ID.';
-    }
 
     if (msg.contains('SocketException') ||
         msg.contains('TimeoutException') ||
@@ -102,18 +78,6 @@ class _LoginScreenState extends State<LoginScreen> {
         msg.contains('Connection refused') ||
         msg.contains('Connection timed out')) {
       return 'Cannot reach Billket Cloud at $serverUrl. Please ensure the cloud server is online and your internet is connected.';
-    }
-
-    if (msg.contains('GOOGLE_SIGN_IN_UNSUPPORTED') || msg.contains('UnimplementedError')) {
-      return 'Google Sign-In is not supported directly on this platform. Please continue offline or use a supported device.';
-    }
-
-    if (msg.contains('UNAUTHORIZED_CLIENT_AUDIENCE') || msg.contains('INVALID_GOOGLE_TOKEN')) {
-      return 'Google token was rejected by the cloud server. Ensure GOOGLE_CLIENT_ID on AWS matches the Web client ID.';
-    }
-
-    if (msg.contains('MISSING_ID_TOKEN')) {
-      return 'Google did not return an ID token. Confirm the Web client ID is configured as serverClientId.';
     }
 
     return msg
@@ -132,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
     SyncEngine.instance.syncNow(force: true);
 
     if (!mounted) return;
-    setState(() => _busy = false);
+    setState(() => _phoneBusy = false);
     showAppMessage(context, successMessage);
     widget.onSuccess?.call();
 
@@ -170,37 +134,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _handleGoogleSignIn() async {
-    setState(() {
-      _busy = true;
-      _errorMessage = null;
-      _isUnregisteredSha1Error = false;
-    });
-
-    final session = context.read<Session>();
-    final apiClient = SyncEngine.instance.apiClient;
-
-    try {
-      await apiClient.ensureReady();
-      final result = await _authService.signInWithGoogle(
-        apiClient: apiClient,
-        businessName: session.currentUser,
-      );
-      await _finishLogin(result, 'Signed in as ${result.user.displayName}');
-    } catch (e) {
-      if (!mounted) return;
-      final msg = _friendlyAuthError(e, apiClient.baseUrl);
-      if (msg == 'cancelled') {
-        setState(() => _busy = false);
-        return;
-      }
-      setState(() {
-        _busy = false;
-        _errorMessage = msg;
-      });
-    }
-  }
-
   Future<void> _handleRequestOtp() async {
     final phone = _phoneController.text.trim();
     if (phone.length < 10) {
@@ -211,7 +144,6 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _phoneBusy = true;
       _errorMessage = null;
-      _isUnregisteredSha1Error = false;
     });
 
     final apiClient = SyncEngine.instance.apiClient;
@@ -281,7 +213,6 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _phoneBusy = true;
       _errorMessage = null;
-      _isUnregisteredSha1Error = false;
     });
 
     final apiClient = SyncEngine.instance.apiClient;
@@ -580,144 +511,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _showSha1Sheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE2E8F0),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.security_rounded, color: Color(0xFF2563EB), size: 24),
-                  ),
-                  const SizedBox(width: 14),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Google Cloud Registration',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF0F172A),
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Add this SHA-1 to Google Cloud Console',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Package Name',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: const SelectableText(
-                  GoogleAuthConfig.appPackageName,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E293B),
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Signing Certificate SHA-1',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: const SelectableText(
-                  GoogleAuthConfig.debugSha1,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E293B),
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    Clipboard.setData(const ClipboardData(text: GoogleAuthConfig.debugSha1));
-                    Navigator.pop(ctx);
-                    showAppMessage(context, 'SHA-1 fingerprint copied to clipboard!');
-                  },
-                  icon: const Icon(Icons.copy_rounded, size: 18),
-                  label: const Text('Copy SHA-1 Fingerprint', style: TextStyle(fontWeight: FontWeight.w700)),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   void _continueOffline() {
     widget.onOffline?.call();
     if (Navigator.canPop(context)) {
@@ -916,21 +709,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ],
                           ),
-                          if (_isUnregisteredSha1Error) ...[
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton.icon(
-                                onPressed: _showSha1Sheet,
-                                icon: const Icon(Icons.copy_rounded, size: 15),
-                                label: const Text('View Required SHA-1'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: const Color(0xFF2563EB),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ),
-                            ),
-                          ],
+
                         ],
                       ),
                     ),
@@ -1632,71 +1411,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 20),
 
-                  if (!_isStaffMode) ...[
-                    // Divider
-                    const Row(
-                      children: [
-                        Expanded(child: Divider(color: Color(0xFFE2E8F0), thickness: 1)),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 14),
-                          child: Text(
-                            'OR',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF94A3B8),
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                        Expanded(child: Divider(color: Color(0xFFE2E8F0), thickness: 1)),
-                      ],
-                    ),
 
-                    const SizedBox(height: 20),
-
-                    // Secondary Action: Google Sign-In Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: OutlinedButton(
-                        onPressed: (_busy || _phoneBusy) ? null : _handleGoogleSignIn,
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.4),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          elevation: 1,
-                          shadowColor: Colors.black.withValues(alpha: 0.05),
-                        ),
-                        child: _busy
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.2,
-                                  color: Color(0xFF4F46E5),
-                                ),
-                              )
-                            : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  _GoogleGLogo(),
-                                  const SizedBox(width: 14),
-                                  Text(
-                                    isBn ? 'গুগল দিয়ে সাইন ইন করুন' : isHi ? 'Google से साइन इन करें' : 'Sign in with Google',
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      color: Color(0xFF0F172A),
-                                      letterSpacing: -0.2,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                  ],
 
                   // Offline First Option
                   TextButton.icon(
@@ -1722,51 +1437,4 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-class _GoogleGLogo extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 20,
-      height: 20,
-      alignment: Alignment.center,
-      child: CustomPaint(
-        size: const Size(20, 20),
-        painter: _GoogleLogoPainter(),
-      ),
-    );
-  }
-}
 
-class _GoogleLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double w = size.width;
-    final double h = size.height;
-
-    final paintBlue = Paint()..color = const Color(0xFF4285F4)..style = PaintingStyle.fill;
-    final paintRed = Paint()..color = const Color(0xFFEA4335)..style = PaintingStyle.fill;
-    final paintYellow = Paint()..color = const Color(0xFFFBBC05)..style = PaintingStyle.fill;
-    final paintGreen = Paint()..color = const Color(0xFF34A853)..style = PaintingStyle.fill;
-
-    final center = Offset(w / 2, h / 2);
-    final radius = w / 2;
-
-    // Draw Google 4-color arcs cleanly
-    final rect = Rect.fromCircle(center: center, radius: radius);
-    canvas.drawArc(rect, -0.785, 1.57, true, paintBlue);
-    canvas.drawArc(rect, 0.785, 1.57, true, paintGreen);
-    canvas.drawArc(rect, 2.355, 1.57, true, paintYellow);
-    canvas.drawArc(rect, 3.925, 1.57, true, paintRed);
-
-    // Inner cutout
-    final innerPaint = Paint()..color = Colors.white..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius * 0.58, innerPaint);
-
-    // Crossbar
-    final barRect = Rect.fromLTWH(center.dx - 1, center.dy - (radius * 0.22), radius + 1, radius * 0.44);
-    canvas.drawRect(barRect, paintBlue);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}

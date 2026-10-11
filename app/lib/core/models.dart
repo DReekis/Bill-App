@@ -1201,6 +1201,42 @@ class PurchaseOrder {
       );
 }
 
+class PurchaseBill {
+  PurchaseBill({
+    this.id,
+    this.businessId,
+    required this.number,
+    this.supplierId,
+    this.supplierName,
+    this.supplierGstin,
+    this.supplierPhone,
+    this.supplierAddress,
+    required this.date,
+    this.total = 0,
+    this.amountPaid = 0,
+    this.outstanding = 0,
+    this.paymentMode = 'Cash',
+    this.notes,
+    this.lines = const [],
+  });
+
+  final int? id;
+  final int? businessId;
+  String number;
+  int? supplierId;
+  String? supplierName;
+  String? supplierGstin;
+  String? supplierPhone;
+  String? supplierAddress;
+  String date;
+  int total; // in paise
+  int amountPaid; // in paise
+  int outstanding; // in paise
+  String paymentMode;
+  String? notes;
+  List<InvoiceLine> lines;
+}
+
 class DeliveryChallan {
   DeliveryChallan({
     this.id,

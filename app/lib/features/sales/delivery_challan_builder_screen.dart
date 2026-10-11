@@ -12,10 +12,11 @@ import '../inventory/multi_product_picker_sheet.dart';
 import 'delivery_challan_detail_screen.dart';
 
 class DeliveryChallanBuilderScreen extends StatefulWidget {
-  const DeliveryChallanBuilderScreen({super.key, this.fromInvoice, this.customerId});
+  const DeliveryChallanBuilderScreen({super.key, this.fromInvoice, this.customerId, this.existingChallan});
 
   final Invoice? fromInvoice;
   final int? customerId;
+  final DeliveryChallan? existingChallan;
 
   @override
   State<DeliveryChallanBuilderScreen> createState() => _DeliveryChallanBuilderScreenState();
@@ -90,7 +91,31 @@ class _DeliveryChallanBuilderScreenState extends State<DeliveryChallanBuilderScr
       _numberCtrl.text = nextNum;
       _notesCtrl.text = biz?.termsChallan ?? 'Goods dispatched at consignee risk.';
 
-      if (widget.fromInvoice != null) {
+      if (widget.existingChallan != null) {
+        final dc = widget.existingChallan!;
+        _numberCtrl.text = dc.number;
+        challanDate = dc.date;
+        customerId = dc.customerId;
+        customerName = dc.customerName;
+        _vehicleCtrl.text = dc.vehicleNo ?? '';
+        _transportCtrl.text = dc.transportDetails ?? '';
+        _addressCtrl.text = dc.address ?? '';
+        _notesCtrl.text = dc.notes ?? '';
+        if (customerId != null && custs.any((c) => c.id == customerId)) {
+          selectedCustomer = custs.firstWhere((c) => c.id == customerId);
+        }
+        lines.clear();
+        for (final item in dc.lines) {
+          lines.add(_ChallanLineItem(
+            name: item.name,
+            productId: item.productId,
+            qty: item.quantity,
+            unit: item.unit ?? 'pc',
+            price: item.price,
+            included: true,
+          ));
+        }
+      } else if (widget.fromInvoice != null) {
         final inv = widget.fromInvoice!;
         customerId = inv.customerId;
         customerName = inv.customerName;
@@ -235,39 +260,72 @@ class _DeliveryChallanBuilderScreenState extends State<DeliveryChallanBuilderScr
     setState(() => saving = true);
     try {
       final bizId = context.read<Session>().businessId!;
-      final challan = DeliveryChallan(
-        businessId: bizId,
-        number: finalNumber,
-        customerId: customerId,
-        customerName: customerName ?? selectedCustomer?.name,
-        date: challanDate,
-        address: _addressCtrl.text.trim().isNotEmpty ? _addressCtrl.text.trim() : null,
-        transportDetails: _transportCtrl.text.trim().isNotEmpty ? _transportCtrl.text.trim() : null,
-        status: 'Pending',
-        invoiceId: widget.fromInvoice?.id,
-        invoiceNumber: widget.fromInvoice?.number,
-        vehicleNo: _vehicleCtrl.text.trim().isNotEmpty ? _vehicleCtrl.text.trim().toUpperCase() : null,
-        notes: _notesCtrl.text.trim().isNotEmpty ? _notesCtrl.text.trim() : null,
-        lines: validLines
-            .map((l) => InvoiceLine(
-                  productId: l.productId,
-                  name: l.name,
-                  quantity: l.qty,
-                  price: l.price,
-                  unit: l.unit,
-                ))
-            .toList(),
-      );
+      if (widget.existingChallan != null) {
+        final updatedChallan = DeliveryChallan(
+          id: widget.existingChallan!.id,
+          businessId: bizId,
+          number: finalNumber,
+          customerId: customerId,
+          customerName: customerName ?? selectedCustomer?.name,
+          date: challanDate,
+          address: _addressCtrl.text.trim().isNotEmpty ? _addressCtrl.text.trim() : null,
+          transportDetails: _transportCtrl.text.trim().isNotEmpty ? _transportCtrl.text.trim() : null,
+          status: widget.existingChallan!.status,
+          invoiceId: widget.existingChallan!.invoiceId,
+          invoiceNumber: widget.existingChallan!.invoiceNumber,
+          vehicleNo: _vehicleCtrl.text.trim().isNotEmpty ? _vehicleCtrl.text.trim().toUpperCase() : null,
+          notes: _notesCtrl.text.trim().isNotEmpty ? _notesCtrl.text.trim() : null,
+          lines: validLines
+              .map((l) => InvoiceLine(
+                    productId: l.productId,
+                    name: l.name,
+                    quantity: l.qty,
+                    price: l.price,
+                    unit: l.unit,
+                  ))
+              .toList(),
+        );
 
-      final challanId = await Repository.instance.finalizeDeliveryChallan(challan);
-      if (!mounted) return;
+        await Repository.instance.updateDeliveryChallan(updatedChallan);
+        if (!mounted) return;
 
-      showAppMessage(context, 'Delivery Challan $finalNumber created successfully ✓');
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => DeliveryChallanDetailScreen(challanId: challanId),
-        ),
-      );
+        showAppMessage(context, 'Delivery Challan $finalNumber updated successfully ✓');
+        Navigator.of(context).pop(true);
+      } else {
+        final challan = DeliveryChallan(
+          businessId: bizId,
+          number: finalNumber,
+          customerId: customerId,
+          customerName: customerName ?? selectedCustomer?.name,
+          date: challanDate,
+          address: _addressCtrl.text.trim().isNotEmpty ? _addressCtrl.text.trim() : null,
+          transportDetails: _transportCtrl.text.trim().isNotEmpty ? _transportCtrl.text.trim() : null,
+          status: 'Pending',
+          invoiceId: widget.fromInvoice?.id,
+          invoiceNumber: widget.fromInvoice?.number,
+          vehicleNo: _vehicleCtrl.text.trim().isNotEmpty ? _vehicleCtrl.text.trim().toUpperCase() : null,
+          notes: _notesCtrl.text.trim().isNotEmpty ? _notesCtrl.text.trim() : null,
+          lines: validLines
+              .map((l) => InvoiceLine(
+                    productId: l.productId,
+                    name: l.name,
+                    quantity: l.qty,
+                    price: l.price,
+                    unit: l.unit,
+                  ))
+              .toList(),
+        );
+
+        final challanId = await Repository.instance.finalizeDeliveryChallan(challan);
+        if (!mounted) return;
+
+        showAppMessage(context, 'Delivery Challan $finalNumber created successfully ✓');
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => DeliveryChallanDetailScreen(challanId: challanId),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) showAppMessage(context, 'Save failed: $e', error: true);
     } finally {
@@ -279,7 +337,7 @@ class _DeliveryChallanBuilderScreenState extends State<DeliveryChallanBuilderScr
   Widget build(BuildContext context) {
     if (loading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Create Delivery Challan')),
+        appBar: AppBar(title: Text(widget.existingChallan != null ? 'Edit Delivery Challan' : 'Create Delivery Challan')),
         body: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
     }
@@ -287,7 +345,10 @@ class _DeliveryChallanBuilderScreenState extends State<DeliveryChallanBuilderScr
     return Scaffold(
       backgroundColor: StitchColors.surface,
       appBar: AppBar(
-        title: const Text('Create Delivery Challan', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: Text(
+          widget.existingChallan != null ? 'Edit Delivery Challan' : 'Create Delivery Challan',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.help_outline_rounded),
@@ -732,7 +793,9 @@ class _DeliveryChallanBuilderScreenState extends State<DeliveryChallanBuilderScr
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.check_circle_rounded, size: 20),
                 label: Text(
-                  saving ? 'Saving Challan...' : 'Generate Delivery Challan',
+                  saving
+                      ? 'Saving Challan...'
+                      : (widget.existingChallan != null ? 'Save Changes' : 'Generate Delivery Challan'),
                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
                 ),
               ),

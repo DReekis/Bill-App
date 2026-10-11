@@ -1629,11 +1629,13 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                   flex: 3,
                   child: DropdownButtonFormField<String>(
                     key: ValueKey('ship-to-state-$shipToState'),
-                    initialValue: shipToState,
+                    initialValue: IndianStates.getName(shipToState),
                     decoration: inputDecoration('State'),
                     isDense: true,
-                    items: GstService.stateCodes.keys
-                        .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))))
+                    items: IndianStates.list
+                        .map((s) => DropdownMenuItem(
+                            value: s.name,
+                            child: Text('${s.name} (${s.code})', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))))
                         .toList(),
                     onChanged: _onShipToStateChanged,
                   ),
@@ -1718,11 +1720,13 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                   const SizedBox(height: 4),
                   DropdownButtonFormField<String>(
                     key: ValueKey('pos-$effectivePos-$manualPosOverride'),
-                    initialValue: GstService.stateCodes.containsKey(effectivePos) ? effectivePos : null,
+                    initialValue: IndianStates.getName(effectivePos),
                     decoration: inputDecoration(manualPosOverride ? 'Manual Place of Supply' : 'Auto POS (Sec 10 IGST Act)'),
                     isDense: true,
-                    items: GstService.stateCodes.keys
-                        .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))))
+                    items: IndianStates.list
+                        .map((s) => DropdownMenuItem(
+                            value: s.name,
+                            child: Text('${s.name} (${s.code})', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))))
                         .toList(),
                     onChanged: manualPosOverride
                         ? (v) {

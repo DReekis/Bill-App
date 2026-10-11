@@ -8,6 +8,7 @@ import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
+import 'delivery_challan_builder_screen.dart';
 import 'invoice_detail_screen.dart';
 
 class DeliveryChallanDetailScreen extends StatefulWidget {
@@ -143,6 +144,16 @@ class _DeliveryChallanDetailScreenState extends State<DeliveryChallanDetailScree
     }
   }
 
+  void _editChallan() {
+    final dc = challan;
+    if (dc == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DeliveryChallanBuilderScreen(existingChallan: dc),
+      ),
+    ).then((_) => _load());
+  }
+
   Future<void> _delete() async {
     final dc = challan;
     if (dc == null || dc.id == null) return;
@@ -193,6 +204,11 @@ class _DeliveryChallanDetailScreenState extends State<DeliveryChallanDetailScree
         ),
         actions: [
           if (dc != null) ...[
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit Challan',
+              onPressed: _busy ? null : _editChallan,
+            ),
             IconButton(
               icon: const Icon(Icons.picture_as_pdf_outlined),
               tooltip: 'Preview PDF',
@@ -547,40 +563,61 @@ class _DeliveryChallanDetailScreenState extends State<DeliveryChallanDetailScree
                       ),
                     ],
                   ),
-                  child: Row(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _busy ? null : _share,
-                          icon: const Icon(Icons.share_outlined, size: 16),
-                          label: const Text('Share PDF'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: StitchColors.primary.withValues(alpha: 0.12),
+                            foregroundColor: StitchColors.primary,
+                            padding: const EdgeInsets.symmetric(vertical: 13),
                           ),
+                          onPressed: _busy ? null : _editChallan,
+                          icon: const Icon(Icons.edit_note_rounded, size: 20),
+                          label: const Text('Edit Challan', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _busy ? null : _print,
-                          icon: const Icon(Icons.print_outlined, size: 16),
-                          label: const Text('Print'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _busy ? null : _previewPdf,
+                              icon: const Icon(Icons.visibility_outlined, size: 18),
+                              label: const Text('Preview'),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _busy ? null : _print,
+                              icon: const Icon(Icons.print_outlined, size: 18),
+                              label: const Text('Print'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _busy ? null : _share,
+                              icon: const Icon(Icons.share_rounded, size: 18),
+                              label: const Text('Share'),
+                            ),
+                          ),
+                        ],
                       ),
                       if (dc.invoiceId == null && dc.status.toLowerCase() != 'converted') ...[
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 2,
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
                           child: FilledButton.icon(
                             onPressed: _busy ? null : _convert,
                             icon: const Icon(Icons.transform_rounded, size: 18),
-                            label: const Text('Convert to Sale'),
+                            label: const Text('Convert to Sale Invoice'),
                             style: FilledButton.styleFrom(
+                              backgroundColor: StitchColors.primary,
+                              foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),

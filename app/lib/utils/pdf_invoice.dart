@@ -1416,6 +1416,7 @@ Future<Uint8List> buildQuotationPdf({
   Customer? customer,
   BankAccount? bankAccount,
   InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
   customer ??= (quotation.customerId != null && business.id != null)
       ? await Repository.instance.customer(business.id!, quotation.customerId!)
@@ -1443,6 +1444,7 @@ Future<Uint8List> buildQuotationPdf({
     termsText: business.termsQuotation,
     bankAccount: bankAccount,
     pageFormat: paperSize.format,
+    settings: settings,
   );
 }
 
@@ -1633,6 +1635,62 @@ Future<void> sharePurchaseOrder({
 }) async {
   final bytes = await buildPurchaseOrderPdf(business: business, order: order);
   await Printing.sharePdf(bytes: bytes, filename: '${order.number}.pdf');
+}
+
+Future<Uint8List> buildPurchaseBillPdf({
+  required Business business,
+  required PurchaseBill purchase,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
+}) async {
+  int subtotal = 0;
+  int tax = 0;
+  for (final l in purchase.lines) {
+    final lineSub = (l.price * l.quantity).round();
+    final lineTax = (lineSub * (l.gstRate / 100)).round();
+    subtotal += lineSub;
+    tax += lineTax;
+  }
+
+  return buildDocumentPdf(
+    business: business,
+    title: 'Purchase Bill',
+    number: purchase.number,
+    date: purchase.date,
+    partyName: purchase.supplierName ?? 'Vendor',
+    lines: purchase.lines,
+    subtotal: subtotal > 0 ? subtotal : purchase.total,
+    discount: 0,
+    taxable: subtotal > 0 ? subtotal : purchase.total,
+    igst: 0,
+    cgst: tax ~/ 2,
+    sgst: tax - (tax ~/ 2),
+    roundOff: 0,
+    total: purchase.total,
+    outstandingPaise: purchase.outstanding,
+    notes: purchase.notes,
+    termsText: business.termsPurchase,
+    pageFormat: paperSize.format,
+  );
+}
+
+Future<void> printPurchaseBill({
+  required Business business,
+  required PurchaseBill purchase,
+}) async {
+  final bytes = await buildPurchaseBillPdf(business: business, purchase: purchase);
+  await Printing.layoutPdf(
+    onLayout: (_) async => bytes,
+    name: '${purchase.number}.pdf',
+  );
+}
+
+Future<void> sharePurchaseBill({
+  required Business business,
+  required PurchaseBill purchase,
+}) async {
+  final bytes = await buildPurchaseBillPdf(business: business, purchase: purchase);
+  await Printing.sharePdf(bytes: bytes, filename: '${purchase.number}.pdf');
 }
 
 Future<Uint8List> buildDeliveryChallanPdf({

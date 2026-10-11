@@ -22,8 +22,9 @@ class _PurchaseLine {
 }
 
 class PurchaseBuilderScreen extends StatefulWidget {
-  const PurchaseBuilderScreen({super.key, this.initialSupplierId});
+  const PurchaseBuilderScreen({super.key, this.initialSupplierId, this.existingPurchaseId});
   final int? initialSupplierId;
+  final int? existingPurchaseId;
   @override
   State<PurchaseBuilderScreen> createState() => _PurchaseBuilderScreenState();
 }
@@ -41,6 +42,9 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
   String? billNumber;
   String billDate = todayIso();
   Business? business;
+  String? existingNotes;
+  int? existingPaidAmount;
+  String? existingPaymentMode;
 
   Future<void> _load() async {
     final businessId = context.read<Session>().businessId;
@@ -66,6 +70,47 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
         }
       }
     });
+
+    if (widget.existingPurchaseId != null) {
+      final p = await repo.purchase(businessId, widget.existingPurchaseId!);
+      if (p != null && mounted) {
+        setState(() {
+          billNumber = p.number;
+          billDate = p.date;
+          supplierId = p.supplierId;
+          supplierName = p.supplierName;
+          directVendor = p.supplierId == null;
+          existingNotes = p.notes;
+          existingPaidAmount = p.amountPaid;
+          existingPaymentMode = p.paymentMode;
+          lines = p.lines.map((it) {
+            Product? prod;
+            if (it.productId != null) {
+              for (final pr in prods) {
+                if (pr.id == it.productId) {
+                  prod = pr;
+                  break;
+                }
+              }
+            }
+            prod ??= Product(
+              id: it.productId,
+              name: it.name,
+              purchasePrice: it.price,
+              salePrice: it.price,
+              gstRate: it.gstRate,
+              stock: 0,
+            );
+            return _PurchaseLine(
+              product: prod,
+              qty: it.quantity,
+              price: it.price,
+              tax: it.gstRate,
+            );
+          }).toList();
+        });
+      }
+    }
   }
 
   Future<void> _editBillNumber() async {
@@ -324,16 +369,29 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
     }
 
     // Payment Type: 0 = Credit, 1 = Advance / Partial, 2 = Paid in Full
-    int paymentType = (supplierId != null && !directVendor) ? 0 : 2;
+    int paymentType;
+    if (widget.existingPurchaseId != null && existingPaidAmount != null) {
+      if (existingPaidAmount! <= 0) {
+        paymentType = 0;
+      } else if (existingPaidAmount! >= total.toInt()) {
+        paymentType = 2;
+      } else {
+        paymentType = 1;
+      }
+    } else {
+      paymentType = (supplierId != null && !directVendor) ? 0 : 2;
+    }
 
     final paid = TextEditingController(
       text: paymentType == 0
           ? '0'
-          : (paymentType == 2 ? (total / 100).toStringAsFixed(2) : ''),
+          : (paymentType == 2
+              ? (total / 100).toStringAsFixed(2)
+              : (existingPaidAmount != null ? (existingPaidAmount! / 100).toStringAsFixed(2) : '')),
     );
     String date = billDate;
-    String? mode = 'Cash';
-    final notes = TextEditingController();
+    String? mode = (existingPaymentMode != null && existingPaymentMode != 'Credit') ? existingPaymentMode : 'Cash';
+    final notes = TextEditingController(text: existingNotes ?? '');
     final vendorSearchController = TextEditingController(
       text: (supplierId != null && !directVendor) ? (supplierName ?? '') : '',
     );
@@ -830,20 +888,39 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
               ))
           .toList();
       final paidAmount = paymentType == 0 ? 0 : _toPaise(paid.text);
-      await Repository.instance.createPurchase(
-        businessId: businessId,
-        supplierId: supplierId,
-        supplierName: supplierName ?? 'Direct vendor',
-        date: date,
-        items: items,
-        amountPaid: paidAmount,
-        paymentMode: paidAmount > 0 ? (mode ?? 'Cash') : 'Credit',
-        notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
-        purchaseNumber: billNumber,
-      );
-      if (mounted) {
-        showAppMessage(context, 'Purchase saved · stock updated');
-        Navigator.of(context).pop();
+      if (widget.existingPurchaseId != null) {
+        await Repository.instance.updatePurchase(
+          purchaseId: widget.existingPurchaseId!,
+          businessId: businessId,
+          supplierId: supplierId,
+          supplierName: supplierName ?? 'Direct vendor',
+          date: date,
+          items: items,
+          amountPaid: paidAmount,
+          paymentMode: paidAmount > 0 ? (mode ?? 'Cash') : 'Credit',
+          notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
+          purchaseNumber: billNumber ?? 'PUR-0001',
+        );
+        if (mounted) {
+          showAppMessage(context, 'Purchase updated · stock updated');
+          Navigator.of(context).pop(true);
+        }
+      } else {
+        await Repository.instance.createPurchase(
+          businessId: businessId,
+          supplierId: supplierId,
+          supplierName: supplierName ?? 'Direct vendor',
+          date: date,
+          items: items,
+          amountPaid: paidAmount,
+          paymentMode: paidAmount > 0 ? (mode ?? 'Cash') : 'Credit',
+          notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
+          purchaseNumber: billNumber,
+        );
+        if (mounted) {
+          showAppMessage(context, 'Purchase saved · stock updated');
+          Navigator.of(context).pop(true);
+        }
       }
     } catch (e) {
       if (mounted) showAppMessage(context, 'Could not save: $e', error: true);
@@ -875,7 +952,7 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
   Widget build(BuildContext context) {
     _recomputeTotal();
     return Scaffold(
-      appBar: AppBar(title: const Text('New purchase')),
+      appBar: AppBar(title: Text(widget.existingPurchaseId != null ? 'Edit Purchase' : 'New purchase')),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 120), children: [
         // Bill Number & Bill Date cards (Billbook style)
         Row(

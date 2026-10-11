@@ -153,7 +153,7 @@ flowchart LR
    - Premium segmented persona selector: `[ 👑 Business Owner ]` vs `[ 👤 Staff / Employee ]`.
    - Responsive layout with `Flexible` & overflow handling across any screen/device dimensions.
    - **Business Owner Mode:**
-     * Log in via Owner Phone + OTP or Google Sign-In.
+     * Log in via Owner Phone + OTP (2Factor.in SMS/Call gateway).
      * Sets `session.switchOwnerSession()`, role `Owner`, full administrative, profit & P&L permissions.
    - **Staff / Employee Mode:**
      * Employee enters their 10-digit mobile number configured by the owner.
