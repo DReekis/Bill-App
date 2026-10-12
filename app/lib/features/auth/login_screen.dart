@@ -70,6 +70,12 @@ class _LoginScreenState extends State<LoginScreen> {
   String _friendlyAuthError(Object e, String serverUrl) {
     final msg = e.toString();
 
+    if (msg.contains('502') || msg.contains('Bad Gateway')) {
+      return 'Billket Cloud server is currently starting up or restarting (HTTP 502). Please wait 10 seconds and try again.';
+    }
+    if (msg.contains('504') || msg.contains('Gateway Timeout')) {
+      return 'Cloud server request timed out (HTTP 504). Please try again.';
+    }
     if (msg.contains('SocketException') ||
         msg.contains('TimeoutException') ||
         msg.contains('Timed out') ||
@@ -1141,67 +1147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 10),
-                            // Demo Staff Quick-Fill Chips
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              children: [
-                                InkWell(
-                                  borderRadius: BorderRadius.circular(8),
-                                  onTap: () {
-                                    _staffPhoneController.text = '9876500001';
-                                    _handleStaffLookup();
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFCCFBF1),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFF99F6E4)),
-                                    ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.bolt_rounded, size: 14, color: Color(0xFF0F766E)),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'Demo Cashier (9876500001)',
-                                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF0F766E)),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                InkWell(
-                                  borderRadius: BorderRadius.circular(8),
-                                  onTap: () {
-                                    _staffPhoneController.text = '9876500002';
-                                    _handleStaffLookup();
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFEF3C7),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFFFDE68A)),
-                                    ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.bolt_rounded, size: 14, color: Color(0xFFB45309)),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'Demo Salesman (9876500002)',
-                                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
+                             const SizedBox(height: 14),
                             SizedBox(
                               width: double.infinity,
                               height: 48,

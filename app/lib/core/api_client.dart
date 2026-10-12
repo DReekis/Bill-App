@@ -100,8 +100,14 @@ class ApiClient {
         return decoded['error'].toString();
       }
     } catch (_) {}
-    if (res.body.isEmpty) {
-      return '$fallback (HTTP ${res.statusCode})';
+    if (res.statusCode == 502) {
+      return 'Cloud server is starting up or restarting (502 Bad Gateway). Please try again in a moment.';
+    }
+    if (res.statusCode == 504) {
+      return 'Cloud server request timed out (504 Gateway Timeout). Please try again.';
+    }
+    if (res.statusCode == 503) {
+      return 'Cloud server is temporarily unavailable (503 Service Unavailable). Please try again shortly.';
     }
     return '$fallback (HTTP ${res.statusCode})';
   }
@@ -220,10 +226,13 @@ class ApiClient {
   Future<Map<String, dynamic>> requestPhoneOtp(String phone) async {
     final res = await post('/api/v1/auth/phone/otp', {'phone': phone});
     if (res.statusCode >= 200 && res.statusCode < 300) {
-      return jsonDecode(res.body) as Map<String, dynamic>;
+      try {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
     }
-    final dynamic body = jsonDecode(res.body);
-    throw Exception(body is Map && body['error'] != null ? body['error'] : 'Failed to send OTP');
+    throw Exception(_errorFromResponse(res, 'Failed to send OTP'));
   }
 
   Future<Map<String, dynamic>> uploadBackup({
