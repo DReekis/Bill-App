@@ -1,6 +1,11 @@
 #!/bin/sh
 set -e
 
+# Default to local container postgres if DATABASE_URL is not provided in env
+if [ -z "$DATABASE_URL" ]; then
+  export DATABASE_URL="postgresql://billket_user:billket_secure_password_2026@postgres:5432/billket_db?schema=public"
+fi
+
 echo "=========================================================="
 echo "  🚀 Billket Cloud Backend Server (Fastify + Prisma)     "
 echo "  Environment: ${NODE_ENV:-production}                   "
