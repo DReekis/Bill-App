@@ -15,6 +15,7 @@ Thumbs.db
 *.iws
 
 PROJECT_STATE.md
+.lib/
 
 # Node / Backend
 node_modules/

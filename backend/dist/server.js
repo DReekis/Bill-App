@@ -17,7 +17,10 @@ import { uploadTenantBackup, listTenantBackups, getTenantBackup, deleteTenantBac
 import { SUBSCRIPTION_PLANS, createSubscriptionOrder, verifySubscriptionPayment, handleRazorpayWebhook, getBusinessSubscriptionStatus, } from './services/subscriptionService.js';
 import { sandboxService } from './services/sandboxService.js';
 import { TwoFactorService } from './services/twoFactorService.js';
-export const app = Fastify({ logger: config.nodeEnv !== 'production' });
+export const app = Fastify({
+    logger: config.nodeEnv !== 'production',
+    trustProxy: true,
+});
 await app.register(fastifyCors, {
     origin: true,
     credentials: true,
@@ -424,6 +427,19 @@ app.get('/api/v1/gst/lookup/:gstin', async (request, reply) => {
 });
 // E-Invoice Generation (NIC Schema v1.03 via Sandbox.co.in / Compliance Engine)
 app.post('/api/v1/einvoice/generate', async (request, reply) => {
+    const authHeader = request.headers.authorization;
+    if (config.nodeEnv === 'production' && (!authHeader || !authHeader.startsWith('Bearer '))) {
+        return reply.code(401).send({ error: 'Authentication required for E-Invoice operations' });
+    }
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+            const token = authHeader.replace('Bearer ', '');
+            request.user = verifyAccessToken(token);
+        }
+        catch {
+            return reply.code(401).send({ error: 'Invalid authentication token' });
+        }
+    }
     try {
         const payload = request.body;
         if (!payload) {
@@ -438,6 +454,19 @@ app.post('/api/v1/einvoice/generate', async (request, reply) => {
 });
 // E-Invoice Cancellation (Statutory 24h window)
 app.post('/api/v1/einvoice/cancel', async (request, reply) => {
+    const authHeader = request.headers.authorization;
+    if (config.nodeEnv === 'production' && (!authHeader || !authHeader.startsWith('Bearer '))) {
+        return reply.code(401).send({ error: 'Authentication required for E-Invoice operations' });
+    }
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+            const token = authHeader.replace('Bearer ', '');
+            request.user = verifyAccessToken(token);
+        }
+        catch {
+            return reply.code(401).send({ error: 'Invalid authentication token' });
+        }
+    }
     try {
         const payload = request.body;
         if (!payload?.irn) {
@@ -452,6 +481,19 @@ app.post('/api/v1/einvoice/cancel', async (request, reply) => {
 });
 // E-Way Bill Generation (NIC Standard Form EWB-01 via Sandbox.co.in / Compliance Engine)
 app.post('/api/v1/ewaybill/generate', async (request, reply) => {
+    const authHeader = request.headers.authorization;
+    if (config.nodeEnv === 'production' && (!authHeader || !authHeader.startsWith('Bearer '))) {
+        return reply.code(401).send({ error: 'Authentication required for E-Way Bill operations' });
+    }
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+            const token = authHeader.replace('Bearer ', '');
+            request.user = verifyAccessToken(token);
+        }
+        catch {
+            return reply.code(401).send({ error: 'Invalid authentication token' });
+        }
+    }
     try {
         const payload = request.body;
         if (!payload) {
@@ -466,6 +508,19 @@ app.post('/api/v1/ewaybill/generate', async (request, reply) => {
 });
 // E-Way Bill Cancellation
 app.post('/api/v1/ewaybill/cancel', async (request, reply) => {
+    const authHeader = request.headers.authorization;
+    if (config.nodeEnv === 'production' && (!authHeader || !authHeader.startsWith('Bearer '))) {
+        return reply.code(401).send({ error: 'Authentication required for E-Way Bill operations' });
+    }
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+            const token = authHeader.replace('Bearer ', '');
+            request.user = verifyAccessToken(token);
+        }
+        catch {
+            return reply.code(401).send({ error: 'Invalid authentication token' });
+        }
+    }
     try {
         const payload = request.body;
         if (!payload?.ewbNo) {
@@ -482,15 +537,16 @@ app.addHook('preHandler', async (request, reply) => {
     const authHeader = request.headers.authorization;
     const url = request.url.split('?')[0];
     const isPublicRoute = url === '/health' ||
+        url === '/api/v1/health' ||
         url.startsWith('/api/v1/auth/') ||
         url.startsWith('/api/v1/gst/') ||
-        url.startsWith('/api/v1/einvoice/') ||
-        url.startsWith('/api/v1/ewaybill/') ||
         url === '/api/v1/admin/login' ||
         url.startsWith('/admin') ||
         url === '/' ||
         url.startsWith('/public') ||
-        url.startsWith('/api/v1/subscription/');
+        url === '/api/v1/subscription/plans' ||
+        (url === '/api/v1/subscription/webhook' && request.method === 'POST') ||
+        url.startsWith('/api/v1/subscription/status/');
     if (isPublicRoute) {
         if (authHeader && authHeader.startsWith('Bearer ')) {
             try {

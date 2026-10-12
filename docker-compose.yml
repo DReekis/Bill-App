@@ -29,26 +29,17 @@ services:
       postgres:
         condition: service_healthy
     env_file:
+      - path: ./.env
+        required: false
       - path: ./backend/.env
         required: false
     environment:
       PORT: 4000
       NODE_ENV: production
       DATABASE_URL: postgresql://billket_user:billket_secure_password_2026@postgres:5432/billket_db?schema=public
-      JWT_SECRET: ${JWT_SECRET:-}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      JWT_SECRET: ${JWT_SECRET:-billket_jwt_secret_production_ready_secure_2026}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@pricepilot.in}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_ANDROID_CLIENT_ID: ${GOOGLE_ANDROID_CLIENT_ID:-}
-      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
-      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
-      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
-      TWOFACTOR_API_KEY: ${TWOFACTOR_API_KEY:-}
-      TWOFACTOR_BASE_URL: ${TWOFACTOR_BASE_URL:-https://2factor.in/API/V1}
-      SANDBOX_API_KEY: ${SANDBOX_API_KEY:-}
-      SANDBOX_API_SECRET: ${SANDBOX_API_SECRET:-}
-      SANDBOX_BASE_URL: ${SANDBOX_BASE_URL:-https://api.sandbox.co.in}
     ports:
       - "127.0.0.1:4000:4000"
 

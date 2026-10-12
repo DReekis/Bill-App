@@ -8,27 +8,24 @@ export const config = {
         password: process.env.ADMIN_PASSWORD ?? '',
     },
     google: {
-        clientId: process.env.GOOGLE_CLIENT_ID ||
-            '1088562819881-tesapmissm77nd7o5maom90nh4sjv87h.apps.googleusercontent.com',
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-        androidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID ||
-            '1088562819881-rv6kpg40eqnlsaqp196g5ligiqeujunr.apps.googleusercontent.com',
-        iosClientId: process.env.GOOGLE_IOS_CLIENT_ID ||
-            '1088562819881-sfbc09v1khbn6188ps24o2kd5qmp39hu.apps.googleusercontent.com',
+        clientId: process.env.GOOGLE_CLIENT_ID || '',
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+        androidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID || '',
+        iosClientId: process.env.GOOGLE_IOS_CLIENT_ID || '',
     },
     razorpay: {
-        keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_TlVBcJ5F1D187V',
-        keySecret: process.env.RAZORPAY_KEY_SECRET || 'wEQAJKA0T1iJNITsDV9jRRI3',
-        webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || 'wEQAJKA0T1iJNITsDV9jRRI3',
+        keyId: process.env.RAZORPAY_KEY_ID || '',
+        keySecret: process.env.RAZORPAY_KEY_SECRET || '',
+        webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
     },
     sandbox: {
-        apiKey: process.env.SANDBOX_API_KEY || 'key_live_6000130d928043638b3d70dd31d79f6c',
-        apiSecret: process.env.SANDBOX_API_SECRET || 'secret_live_a36390af553441d5907967ddb7c14ad8',
-        baseUrl: process.env.SANDBOX_BASE_URL || 'https://api.sandbox.co.in',
+        apiKey: process.env.SANDBOX_API_KEY?.trim() || 'key_live_6000130d928043638b3d70dd31d79f6c',
+        apiSecret: process.env.SANDBOX_API_SECRET?.trim() || 'secret_live_a36390af553441d5907967ddb7c14ad8',
+        baseUrl: process.env.SANDBOX_BASE_URL?.trim() || 'https://api.sandbox.co.in',
     },
     twoFactor: {
-        apiKey: process.env.TWOFACTOR_API_KEY || '26423af7-c270-11f1-af74-0200cd936042',
-        baseUrl: process.env.TWOFACTOR_BASE_URL || 'https://2factor.in/API/V1',
+        apiKey: process.env.TWOFACTOR_API_KEY?.trim() || '26423af7-c270-11f1-af74-0200cd936042',
+        baseUrl: process.env.TWOFACTOR_BASE_URL?.trim() || 'https://2factor.in/API/V1',
     },
 };
 export const ALLOWED_GOOGLE_CLIENT_IDS = [

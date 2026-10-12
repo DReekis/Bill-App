@@ -20,13 +20,13 @@ export const config = {
     webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
   },
   sandbox: {
-    apiKey: process.env.SANDBOX_API_KEY || '',
-    apiSecret: process.env.SANDBOX_API_SECRET || '',
-    baseUrl: process.env.SANDBOX_BASE_URL || 'https://api.sandbox.co.in',
+    apiKey: process.env.SANDBOX_API_KEY?.trim() || 'key_live_6000130d928043638b3d70dd31d79f6c',
+    apiSecret: process.env.SANDBOX_API_SECRET?.trim() || 'secret_live_a36390af553441d5907967ddb7c14ad8',
+    baseUrl: process.env.SANDBOX_BASE_URL?.trim() || 'https://api.sandbox.co.in',
   },
   twoFactor: {
-    apiKey: process.env.TWOFACTOR_API_KEY || '',
-    baseUrl: process.env.TWOFACTOR_BASE_URL || 'https://2factor.in/API/V1',
+    apiKey: process.env.TWOFACTOR_API_KEY?.trim() || '26423af7-c270-11f1-af74-0200cd936042',
+    baseUrl: process.env.TWOFACTOR_BASE_URL?.trim() || 'https://2factor.in/API/V1',
   },
 };
 

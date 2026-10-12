@@ -152,10 +152,17 @@ class _LoginScreenState extends State<LoginScreen> {
       final res = await _authService.requestPhoneOtp(phone, apiClient: apiClient);
       if (!mounted) return;
       _sessionId = res['sessionId'] as String?;
+      final bool isTestMode = res['isTestMode'] == true || (res['message'] as String? ?? '').contains('1234');
+      if (isTestMode) {
+        _otpController.text = '1234';
+      }
       setState(() {
         _phoneBusy = false;
         _otpSent = true;
         _resendCountdown = 30;
+        if (isTestMode) {
+          _errorMessage = res['message'] as String? ?? 'SMS gateway fallback active: Test OTP 1234 entered.';
+        }
       });
 
       _resendTimer?.cancel();
@@ -174,20 +181,25 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       });
 
-      showAppMessage(context, 'OTP sent to +91 $phone');
+      final String msg = res['message'] as String? ?? 'OTP sent to +91 $phone';
+      showAppMessage(context, isTestMode ? '$msg (Auto-filled 1234)' : msg);
     } catch (e) {
       if (!mounted) return;
       final errStr = e.toString().toLowerCase();
-      // If AWS cloud server is running the legacy backend without /auth/phone/otp:
-      if (errStr.contains('not found') || errStr.contains('404')) {
+      // If AWS cloud server is running legacy backend without /auth/phone/otp or gateway pending:
+      if (errStr.contains('not found') ||
+          errStr.contains('404') ||
+          errStr.contains('sms gateway is not configured') ||
+          errStr.contains('sms gateway')) {
+        _otpController.text = '1234';
         setState(() {
           _phoneBusy = false;
           _otpSent = true;
           _resendCountdown = 30;
           _errorMessage =
-              'Cloud SMS gateway route pending on AWS. Enter test OTP (1234) to sign in or register immediately.';
+              'Cloud SMS gateway pending configuration. Test OTP (1234) auto-filled. Tap Verify to continue.';
         });
-        showAppMessage(context, 'AWS deployment pending: use test OTP 1234');
+        showAppMessage(context, 'Gateway fallback: Test OTP 1234 auto-filled');
         return;
       }
 
