@@ -339,12 +339,20 @@ Future<Uint8List> buildDocumentPdf({
                   ),
                 ),
                 if (signedQr != null && signedQr.isNotEmpty) ...[
-                  pw.SizedBox(width: 6),
-                  pw.BarcodeWidget(
-                    barcode: pw.Barcode.qrCode(),
-                    data: signedQr,
-                    width: 32,
-                    height: 32,
+                  pw.SizedBox(width: 8),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(2),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.white,
+                      border: pw.Border.all(color: borderGrey, width: 0.5),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+                    ),
+                    child: pw.BarcodeWidget(
+                      barcode: pw.Barcode.qrCode(),
+                      data: signedQr,
+                      width: 50,
+                      height: 50,
+                    ),
                   ),
                 ],
               ],

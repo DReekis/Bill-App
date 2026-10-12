@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 
 import '../data/repositories.dart';
 import 'api_client.dart';
@@ -104,9 +103,7 @@ class ComplianceService {
       throw StateError(validationError);
     }
 
-    final client = apiClient ?? ApiClient();
-    final url = '${client.baseUrl}/api/v1/einvoice/generate';
-
+    final client = apiClient ?? ApiClient.instance;
     final sellerGstin = business.gstin!.trim().toUpperCase();
     final buyerGstin = (customer?.gstin ?? '').trim().toUpperCase();
 
@@ -155,19 +152,11 @@ class ComplianceService {
       }).toList(),
     };
 
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-    if (client.hasAuth) {
-      headers['Authorization'] = 'Bearer ${client.token}';
-    }
-
-    final response = await http.post(
-      Uri.parse(url),
-      headers: headers,
-      body: jsonEncode(payload),
-    ).timeout(const Duration(seconds: 12));
+    final response = await client.post(
+      '/api/v1/einvoice/generate',
+      payload,
+      timeout: const Duration(seconds: 15),
+    );
 
     if (response.statusCode != 200) {
       final err = jsonDecode(response.body);
@@ -210,26 +199,16 @@ class ComplianceService {
       throw StateError('Cannot cancel: Invoice does not have an active IRN');
     }
 
-    final client = apiClient ?? ApiClient();
-    final url = '${client.baseUrl}/api/v1/einvoice/cancel';
-
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-    if (client.hasAuth) {
-      headers['Authorization'] = 'Bearer ${client.token}';
-    }
-
-    final response = await http.post(
-      Uri.parse(url),
-      headers: headers,
-      body: jsonEncode({
+    final client = apiClient ?? ApiClient.instance;
+    final response = await client.post(
+      '/api/v1/einvoice/cancel',
+      {
         'irn': irn,
         'reason': reason,
         'remarks': remarks ?? 'Cancelled via user application',
-      }),
-    ).timeout(const Duration(seconds: 8));
+      },
+      timeout: const Duration(seconds: 10),
+    );
 
     if (response.statusCode != 200) {
       final err = jsonDecode(response.body);
@@ -264,9 +243,7 @@ class ComplianceService {
     Customer? customer,
     ApiClient? apiClient,
   }) async {
-    final client = apiClient ?? ApiClient();
-    final url = '${client.baseUrl}/api/v1/ewaybill/generate';
-
+    final client = apiClient ?? ApiClient.instance;
     final cleanVehicle = vehicleNo.trim().toUpperCase().replaceAll(' ', '');
     if (cleanVehicle.isEmpty) {
       throw StateError('Vehicle Number is required for E-Way Bill Part B.');
@@ -310,19 +287,11 @@ class ComplianceService {
       'transDocNo': transDocNo,
     };
 
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-    if (client.hasAuth) {
-      headers['Authorization'] = 'Bearer ${client.token}';
-    }
-
-    final response = await http.post(
-      Uri.parse(url),
-      headers: headers,
-      body: jsonEncode(payload),
-    ).timeout(const Duration(seconds: 12));
+    final response = await client.post(
+      '/api/v1/ewaybill/generate',
+      payload,
+      timeout: const Duration(seconds: 15),
+    );
 
     if (response.statusCode != 200) {
       final err = jsonDecode(response.body);
@@ -368,26 +337,16 @@ class ComplianceService {
       throw StateError('Cannot cancel: Invoice does not have an active E-Way Bill Number');
     }
 
-    final client = apiClient ?? ApiClient();
-    final url = '${client.baseUrl}/api/v1/ewaybill/cancel';
-
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-    if (client.hasAuth) {
-      headers['Authorization'] = 'Bearer ${client.token}';
-    }
-
-    final response = await http.post(
-      Uri.parse(url),
-      headers: headers,
-      body: jsonEncode({
+    final client = apiClient ?? ApiClient.instance;
+    final response = await client.post(
+      '/api/v1/ewaybill/cancel',
+      {
         'ewbNo': ewbNo,
         'reason': reason,
         'remarks': remarks ?? 'Cancelled by user',
-      }),
-    ).timeout(const Duration(seconds: 8));
+      },
+      timeout: const Duration(seconds: 10),
+    );
 
     if (response.statusCode != 200) {
       final err = jsonDecode(response.body);

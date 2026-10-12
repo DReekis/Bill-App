@@ -61,7 +61,12 @@ class Session extends ChangeNotifier {
   String? token;
   int? businessId;
 
-  ApiClient get client => token != null ? (ApiClient()..setToken(token!)) : ApiClient();
+  ApiClient get client {
+    final c = ApiClient.instance;
+    if (token != null && token!.isNotEmpty) c.setToken(token);
+    if (cloudBusinessId != null && cloudBusinessId!.isNotEmpty) c.setBusinessId(cloudBusinessId);
+    return c;
+  }
   ApiClient get apiClient => client;
   String currentUser = 'Owner';
   String currentRole = 'Owner';

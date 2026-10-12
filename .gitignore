@@ -28,6 +28,9 @@ backend/prisma/*.db-wal
 backend/prisma/*.db-shm
 backend/backups/*.db
 backend/backups/
+.env
+.env.*
+*.env
 backend/.env
 backend/.env.local
 backend/.env.production

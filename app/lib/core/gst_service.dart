@@ -440,12 +440,11 @@ class GstService {
 
     // 1. Try local/configured backend proxy if available
     try {
-      final client = apiClient ?? ApiClient();
-      final url = '${client.baseUrl}/api/v1/gst/lookup/$clean';
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {'Accept': 'application/json'},
-      ).timeout(const Duration(milliseconds: 3500));
+      final client = apiClient ?? ApiClient.instance;
+      final response = await client.get(
+        '/api/v1/gst/lookup/$clean',
+        timeout: const Duration(milliseconds: 3500),
+      );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
