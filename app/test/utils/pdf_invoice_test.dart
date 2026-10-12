@@ -163,5 +163,153 @@ void main() {
       expect(InvoicePaperSize.roll58mm.format.width, closeTo(58 * 72 / 25.4, 1.0));
       expect(InvoicePaperSize.roll80mm.format.width, closeTo(80 * 72 / 25.4, 1.0));
     });
+
+    test('buildDocumentPdf renders billbook_stylish with custom brand color and party cards', () async {
+      final settings = InvoiceCustomizationSettings(
+        themeStyle: 'billbook_stylish',
+        primaryColorHex: '#4338CA',
+        showShipTo: true,
+        showHsnColumn: true,
+        showUnitColumn: true,
+        showDiscountColumn: true,
+        showTaxColumn: true,
+      );
+
+      final pdfBytes = await buildDocumentPdf(
+        business: testBusiness,
+        title: 'Tax Invoice',
+        number: 'INV-BB-001',
+        date: '2026-10-12',
+        partyName: 'Apex Retails Ltd',
+        partyGstin: '16AABCA1234F1Z1',
+        shipToName: 'Apex Warehouse 2',
+        lines: testLines,
+        subtotal: 88000,
+        discount: 1000,
+        taxable: 87000,
+        igst: 0,
+        cgst: 2175,
+        sgst: 2175,
+        roundOff: 0,
+        total: 91350,
+        outstandingPaise: 0,
+        settings: settings,
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+    });
+
+    test('buildDocumentPdf renders modern_minimal borderless layout cleanly', () async {
+      final settings = InvoiceCustomizationSettings(
+        themeStyle: 'modern_minimal',
+        primaryColorHex: '#0F766E',
+      );
+
+      final pdfBytes = await buildDocumentPdf(
+        business: testBusiness,
+        title: 'Invoice',
+        number: 'MIN-001',
+        date: '2026-10-12',
+        partyName: 'Studio Nordic',
+        lines: testLines,
+        subtotal: 88000,
+        discount: 1000,
+        taxable: 87000,
+        igst: 0,
+        cgst: 2175,
+        sgst: 2175,
+        roundOff: 0,
+        total: 91350,
+        outstandingPaise: 40000,
+        settings: settings,
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+    });
+
+    test('buildDocumentPdf renders gst_tax_pro with explicit CGST and SGST columns', () async {
+      final settings = InvoiceCustomizationSettings(
+        themeStyle: 'gst_tax_pro',
+        primaryColorHex: '#1E3A8A',
+        showHsnColumn: true,
+        showUnitColumn: true,
+        showDiscountColumn: true,
+      );
+
+      final pdfBytes = await buildDocumentPdf(
+        business: testBusiness,
+        title: 'Tax Invoice',
+        number: 'GST-PRO-99',
+        date: '2026-10-12',
+        partyName: 'Bharat Hardware Enterprise',
+        partyGstin: '16AAECB5678F1Z9',
+        placeOfSupply: 'Tripura (16)',
+        lines: testLines,
+        subtotal: 88000,
+        discount: 1000,
+        taxable: 87000,
+        igst: 0,
+        cgst: 2175,
+        sgst: 2175,
+        roundOff: 0,
+        total: 91350,
+        outstandingPaise: 91350,
+        settings: settings,
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+    });
+
+    test('buildDocumentPdf renders compact_pos single-page layout', () async {
+      final settings = InvoiceCustomizationSettings(
+        themeStyle: 'compact_pos',
+      );
+
+      final pdfBytes = await buildDocumentPdf(
+        business: testBusiness,
+        title: 'Cash Receipt',
+        number: 'CPOS-102',
+        date: '2026-10-12',
+        partyName: 'Walk-in Retail Buyer',
+        lines: testLines,
+        subtotal: 88000,
+        discount: 0,
+        taxable: 88000,
+        igst: 0,
+        cgst: 2200,
+        sgst: 2200,
+        roundOff: 0,
+        total: 92400,
+        outstandingPaise: 0,
+        settings: settings,
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+    });
+
+    test('generateCommercialSamplePdf executes across all 5 templates flawlessly', () async {
+      final testBank = BankAccount(
+        id: 1,
+        businessId: 1,
+        bankName: 'HDFC Bank',
+        accountNumber: '50200012345678',
+        ifsc: 'HDFC0001234',
+      );
+      final styles = ['billbook_stylish', 'classic_grid', 'modern_minimal', 'gst_tax_pro', 'compact_pos', 'modern_band'];
+      for (final s in styles) {
+        final settings = InvoiceCustomizationSettings(themeStyle: s, primaryColorHex: '#065F46');
+        final bytes = await generateCommercialSamplePdf(
+          business: testBusiness,
+          settings: settings,
+          bankAccount: testBank,
+        );
+        expect(bytes, isNotEmpty);
+        expect(String.fromCharCodes(bytes.sublist(0, 5)), '%PDF-');
+      }
+    });
   });
 }

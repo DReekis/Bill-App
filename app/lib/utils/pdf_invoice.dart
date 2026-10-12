@@ -247,30 +247,76 @@ Future<Uint8List> buildDocumentPdf({
   tableCellAlignments[colIdx] = pw.Alignment.centerRight;
   colIdx++;
 
+  final themeStyle = (customSettings.themeStyle == 'modern_band')
+      ? 'billbook_stylish'
+      : (customSettings.themeStyle == 'minimal_clean')
+          ? 'modern_minimal'
+          : (customSettings.themeStyle == 'retail_pos')
+              ? 'compact_pos'
+              : customSettings.themeStyle;
+
   // Setup multi-page with outer bounding border per page
+  final isCompactPos = themeStyle == 'compact_pos';
+  final effectiveMargin = isCompactPos ? 12.0 : 18.0;
   final effectiveFormat = pageFormat == PdfPageFormat.a4
       ? PdfPageFormat.a4.copyWith(
-          marginLeft: 18,
-          marginRight: 18,
-          marginTop: 18,
-          marginBottom: 18,
+          marginLeft: effectiveMargin,
+          marginRight: effectiveMargin,
+          marginTop: effectiveMargin,
+          marginBottom: effectiveMargin,
         )
       : pageFormat;
+
+  pw.Widget buildPageBackground(pw.Context context) {
+    if (themeStyle == 'modern_minimal') {
+      return pw.FullPage(
+        ignoreMargins: true,
+        child: pw.Container(
+          margin: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: const pw.BoxDecoration(),
+        ),
+      );
+    }
+    if (themeStyle == 'billbook_stylish') {
+      return pw.FullPage(
+        ignoreMargins: true,
+        child: pw.Container(
+          margin: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: borderGrey, width: 0.5),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+          ),
+        ),
+      );
+    }
+    if (themeStyle == 'compact_pos') {
+      return pw.FullPage(
+        ignoreMargins: true,
+        child: pw.Container(
+          margin: const pw.EdgeInsets.all(6),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: borderGrey, width: 0.5),
+          ),
+        ),
+      );
+    }
+    return pw.FullPage(
+      ignoreMargins: true,
+      child: pw.Container(
+        margin: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: borderGrey, width: 0.8),
+        ),
+      ),
+    );
+  }
 
   doc.addPage(
     pw.MultiPage(
       pageTheme: pw.PageTheme(
         pageFormat: effectiveFormat,
-        margin: const pw.EdgeInsets.all(18),
-        buildBackground: (context) => pw.FullPage(
-          ignoreMargins: true,
-          child: pw.Container(
-            margin: const pw.EdgeInsets.all(10),
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: borderGrey, width: 0.8),
-            ),
-          ),
-        ),
+        margin: pw.EdgeInsets.all(effectiveMargin),
+        buildBackground: buildPageBackground,
       ),
       footer: (context) => pw.Container(
         padding: const pw.EdgeInsets.only(top: 4),
@@ -359,256 +405,653 @@ Future<Uint8List> buildDocumentPdf({
             ),
           ),
         ],
-        // ==========================================
-        // 1. TOP HEADER & BRANDING (CLASSIC GRID)
-        // ==========================================
-        pw.Container(
-          decoration: const pw.BoxDecoration(
-            border: pw.Border(
-              bottom: pw.BorderSide(color: borderGrey, width: 0.8),
-            ),
-          ),
-          padding: const pw.EdgeInsets.fromLTRB(10, 8, 10, 10),
-          child: pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // Company details
-              if (logoImage != null && customSettings.logoPlacement == 'left') ...[
-                pw.Container(
-                  width: 55,
-                  height: 55,
-                  margin: const pw.EdgeInsets.only(right: 10),
-                  child: pw.Image(logoImage, fit: pw.BoxFit.contain),
-                ),
-              ],
-              pw.Expanded(
-                flex: 3,
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      business.name.toUpperCase(),
-                      style: pw.TextStyle(font: bold, fontSize: 13, color: primaryColor),
-                    ),
-                    if (customSettings.showAddress) ...[
-                      if (business.address != null && business.address!.isNotEmpty)
-                        pw.Text(
-                          business.address!,
-                          style: pw.TextStyle(font: regular, fontSize: 8, color: slateDark),
-                        ),
-                      if (business.city != null || business.state != null || business.pinCode != null)
-                        pw.Text(
-                          [business.city, business.state, business.pinCode].whereType<String>().where((s) => s.isNotEmpty).join(', '),
-                          style: pw.TextStyle(font: regular, fontSize: 8, color: slateDark),
-                        ),
-                    ],
-                    if (customSettings.showGstin && business.gstin != null && business.gstin!.isNotEmpty)
-                      pw.RichText(
-                        text: pw.TextSpan(children: [
-                          pw.TextSpan(text: 'GSTIN: ', style: pw.TextStyle(font: bold, fontSize: 8, color: slateDark)),
-                          pw.TextSpan(text: business.gstin!, style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor)),
-                        ]),
-                      ),
-                    if (customSettings.showPan && business.pan != null && business.pan!.isNotEmpty)
-                      pw.Text('PAN: ${business.pan}', style: pw.TextStyle(font: regular, fontSize: 8, color: slateDark)),
-                    if (customSettings.showPhone && business.displayInvoicePhone.isNotEmpty)
-                      pw.Text('Phone: ${business.displayInvoicePhone}', style: pw.TextStyle(font: regular, fontSize: 8, color: slateDark)),
-                    if (customSettings.showEmail && business.displayInvoiceEmail.isNotEmpty)
-                      pw.Text('Email: ${business.displayInvoiceEmail}', style: pw.TextStyle(font: regular, fontSize: 8, color: slateDark)),
-                  ],
-                ),
-              ),
-              if (logoImage != null && customSettings.logoPlacement == 'center') ...[
-                pw.Container(
-                  width: 50,
-                  height: 50,
-                  margin: const pw.EdgeInsets.symmetric(horizontal: 8),
-                  child: pw.Image(logoImage, fit: pw.BoxFit.contain),
-                ),
-              ],
-              if (logoImage != null && customSettings.logoPlacement == 'right') ...[
-                pw.Container(
-                  width: 50,
-                  height: 50,
-                  margin: const pw.EdgeInsets.symmetric(horizontal: 8),
-                  child: pw.Image(logoImage, fit: pw.BoxFit.contain),
-                ),
-              ],
-              // Banner & Document Meta
-              pw.Expanded(
-                flex: 2,
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: pw.BoxDecoration(
-                        color: lightGrey,
-                        border: pw.Border.all(color: borderGrey, width: 0.6),
-                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
-                      ),
-                      child: pw.Text(
-                        effectiveTitle,
-                        style: pw.TextStyle(font: bold, fontSize: 10, color: primaryColor),
-                        textAlign: pw.TextAlign.center,
-                      ),
-                    ),
-                    pw.SizedBox(height: 6),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.end,
-                      children: [
-                        pw.Text('Invoice No: ', style: pw.TextStyle(font: bold, fontSize: 8.5)),
-                        pw.Text(number, style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark)),
-                      ],
-                    ),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.end,
-                      children: [
-                        pw.Text('Date: ', style: pw.TextStyle(font: bold, fontSize: 8)),
-                        pw.Text(displayDate(date), style: pw.TextStyle(font: regular, fontSize: 8)),
-                      ],
-                    ),
-                    if (dueDate != null && dueDate.isNotEmpty)
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.end,
-                        children: [
-                          pw.Text('Due Date: ', style: pw.TextStyle(font: bold, fontSize: 8)),
-                          pw.Text(displayDate(dueDate), style: pw.TextStyle(font: regular, fontSize: 8)),
-                        ],
-                      ),
-                    if (placeOfSupply != null && placeOfSupply.isNotEmpty)
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.end,
-                        children: [
-                          pw.Text('Place of Supply: ', style: pw.TextStyle(font: bold, fontSize: 8)),
-                          pw.Text(placeOfSupply, style: pw.TextStyle(font: regular, fontSize: 8)),
-                        ],
-                      ),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.end,
-                      children: [
-                        pw.Text('Reverse Charge: ', style: pw.TextStyle(font: bold, fontSize: 7.5)),
-                        pw.Text(reverseCharge ? 'YES' : 'NO', style: pw.TextStyle(font: bold, fontSize: 7.5, color: reverseCharge ? PdfColors.red800 : slateDark)),
-                      ],
-                    ),
-                    if (ewayBillNumber != null && ewayBillNumber.isNotEmpty)
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.end,
-                        children: [
-                          pw.Text('E-Way Bill: ', style: pw.TextStyle(font: bold, fontSize: 7.5)),
-                          pw.Text(ewayBillNumber, style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
-                        ],
-                      ),
-                    if (vehicleNumber != null && vehicleNumber.isNotEmpty)
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.end,
-                        children: [
-                          pw.Text('Vehicle No: ', style: pw.TextStyle(font: bold, fontSize: 7.5)),
-                          pw.Text(vehicleNumber, style: pw.TextStyle(font: regular, fontSize: 7.5)),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-              if (logoImage != null && customSettings.logoPlacement == 'right') ...[
-                pw.Container(
-                  width: 55,
-                  height: 55,
-                  margin: const pw.EdgeInsets.only(left: 10),
-                  child: pw.Image(logoImage, fit: pw.BoxFit.contain),
-                ),
-              ],
-            ],
-          ),
-        ),
 
         // ==========================================
-        // 2. PARTIES GRID (BILL TO & SHIP TO)
+        // 1. TOP HEADER & BRANDING (MULTI-TEMPLATE)
         // ==========================================
-        pw.Container(
-          decoration: const pw.BoxDecoration(
-            border: pw.Border(
-              bottom: pw.BorderSide(color: borderGrey, width: 0.8),
+        if (themeStyle == 'billbook_stylish') ...[
+          // Billbook Stylish Header: Full Branded Banner with High Contrast
+          pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 6),
+            decoration: pw.BoxDecoration(
+              color: primaryColor,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
             ),
-          ),
-          child: pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // BILL TO
-              pw.Expanded(
-                child: pw.Container(
-                  padding: const pw.EdgeInsets.all(8),
-                  decoration: pw.BoxDecoration(
-                    border: hasShipTo
-                        ? const pw.Border(right: pw.BorderSide(color: borderGrey, width: 0.8))
-                        : null,
+            padding: const pw.EdgeInsets.fromLTRB(10, 8, 10, 8),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: [
+                if (logoImage != null && customSettings.logoPlacement == 'left') ...[
+                  pw.Container(
+                    width: 50,
+                    height: 50,
+                    margin: const pw.EdgeInsets.only(right: 10),
+                    padding: const pw.EdgeInsets.all(3),
+                    decoration: const pw.BoxDecoration(
+                      color: PdfColors.white,
+                      borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                    ),
+                    child: pw.Image(logoImage, fit: pw.BoxFit.contain),
                   ),
+                ],
+                pw.Expanded(
+                  flex: 3,
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
-                        'BILL TO:',
-                        style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor),
+                        business.name.toUpperCase(),
+                        style: pw.TextStyle(font: bold, fontSize: 13.5, color: PdfColors.white),
                       ),
+                      if (customSettings.showAddress) ...[
+                        if (business.address != null && business.address!.isNotEmpty)
+                          pw.Text(
+                            business.address!,
+                            style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.grey200),
+                          ),
+                        if (business.city != null || business.state != null || business.pinCode != null)
+                          pw.Text(
+                            [business.city, business.state, business.pinCode].whereType<String>().where((s) => s.isNotEmpty).join(', '),
+                            style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.grey200),
+                          ),
+                      ],
                       pw.SizedBox(height: 2),
-                      pw.Text(
-                        (partyName != null && partyName.trim().isNotEmpty) ? partyName.trim() : 'Cash / Walk-in Customer',
-                        style: pw.TextStyle(font: bold, fontSize: 9, color: slateDark),
+                      pw.Row(
+                        children: [
+                          if (customSettings.showGstin && business.gstin != null && business.gstin!.isNotEmpty) ...[
+                            pw.Text('GSTIN: ', style: pw.TextStyle(font: bold, fontSize: 7.5, color: PdfColors.white)),
+                            pw.Text(business.gstin!, style: pw.TextStyle(font: bold, fontSize: 7.5, color: PdfColors.white)),
+                            pw.SizedBox(width: 8),
+                          ],
+                          if (customSettings.showPan && business.pan != null && business.pan!.isNotEmpty) ...[
+                            pw.Text('PAN: ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.grey200)),
+                            pw.Text(business.pan!, style: pw.TextStyle(font: bold, fontSize: 7.5, color: PdfColors.white)),
+                          ],
+                        ],
                       ),
-                      if (partyAddress != null && partyAddress.trim().isNotEmpty)
-                        pw.Text(partyAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 8)),
-                      if (partyState != null && partyState.trim().isNotEmpty)
-                        pw.Text('State: $partyState', style: pw.TextStyle(font: regular, fontSize: 8)),
-                      if (partyGstin != null && partyGstin.trim().isNotEmpty)
-                        pw.RichText(
-                          text: pw.TextSpan(children: [
-                            pw.TextSpan(text: 'GSTIN: ', style: pw.TextStyle(font: bold, fontSize: 8)),
-                            pw.TextSpan(text: partyGstin.trim(), style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor)),
-                          ]),
+                      if ((customSettings.showPhone && business.displayInvoicePhone.isNotEmpty) ||
+                          (customSettings.showEmail && business.displayInvoiceEmail.isNotEmpty)) ...[
+                        pw.Text(
+                          [
+                            if (customSettings.showPhone && business.displayInvoicePhone.isNotEmpty) 'Phone: ${business.displayInvoicePhone}',
+                            if (customSettings.showEmail && business.displayInvoiceEmail.isNotEmpty) 'Email: ${business.displayInvoiceEmail}',
+                          ].join('  |  '),
+                          style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.grey200),
                         ),
-                      if (customSettings.showPan && customer?.pan != null && customer!.pan!.isNotEmpty)
-                        pw.Text('PAN: ${customer.pan}', style: pw.TextStyle(font: regular, fontSize: 8)),
-                      if (customSettings.showPhone && partyPhone != null && partyPhone.trim().isNotEmpty)
-                        pw.Text('Contact: ${partyPhone.trim()}', style: pw.TextStyle(font: regular, fontSize: 8)),
+                      ],
                     ],
                   ),
                 ),
+                if (logoImage != null && (customSettings.logoPlacement == 'center' || customSettings.logoPlacement == 'right')) ...[
+                  pw.Container(
+                    width: 48,
+                    height: 48,
+                    margin: const pw.EdgeInsets.symmetric(horizontal: 8),
+                    padding: const pw.EdgeInsets.all(3),
+                    decoration: const pw.BoxDecoration(
+                      color: PdfColors.white,
+                      borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                    ),
+                    child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+                  ),
+                ],
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                        decoration: const pw.BoxDecoration(
+                          color: PdfColors.white,
+                          borderRadius: pw.BorderRadius.all(pw.Radius.circular(12)),
+                        ),
+                        child: pw.Text(
+                          effectiveTitle,
+                          style: pw.TextStyle(font: bold, fontSize: 9.5, color: primaryColor),
+                        ),
+                      ),
+                      pw.SizedBox(height: 5),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.end,
+                        children: [
+                          pw.Text('Invoice #: ', style: pw.TextStyle(font: bold, fontSize: 8.5, color: PdfColors.white)),
+                          pw.Text(number, style: pw.TextStyle(font: bold, fontSize: 8.5, color: PdfColors.white)),
+                        ],
+                      ),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.end,
+                        children: [
+                          pw.Text('Date: ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.grey200)),
+                          pw.Text(displayDate(date), style: pw.TextStyle(font: bold, fontSize: 8, color: PdfColors.white)),
+                        ],
+                      ),
+                      if (dueDate != null && dueDate.isNotEmpty)
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.end,
+                          children: [
+                            pw.Text('Due Date: ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.grey200)),
+                            pw.Text(displayDate(dueDate), style: pw.TextStyle(font: bold, fontSize: 8, color: PdfColors.white)),
+                          ],
+                        ),
+                      if (placeOfSupply != null && placeOfSupply.isNotEmpty)
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.end,
+                          children: [
+                            pw.Text('Place of Supply: ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.grey200)),
+                            pw.Text(placeOfSupply, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.white)),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else if (themeStyle == 'modern_minimal') ...[
+          // Modern Minimal Header: Clean Borderless with Vertical Brand Stripe
+          pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 8),
+            padding: const pw.EdgeInsets.only(bottom: 8),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(bottom: pw.BorderSide(color: lightGrey, width: 1.5)),
+            ),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Container(
+                  width: 4,
+                  height: 44,
+                  margin: const pw.EdgeInsets.only(right: 10, top: 2),
+                  decoration: pw.BoxDecoration(
+                    color: primaryColor,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+                  ),
+                ),
+                if (logoImage != null && customSettings.logoPlacement == 'left') ...[
+                  pw.Container(
+                    width: 48,
+                    height: 48,
+                    margin: const pw.EdgeInsets.only(right: 10),
+                    child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+                  ),
+                ],
+                pw.Expanded(
+                  flex: 3,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        business.name.toUpperCase(),
+                        style: pw.TextStyle(font: bold, fontSize: 13.5, color: primaryColor),
+                      ),
+                      if (customSettings.showAddress && (business.address?.isNotEmpty == true || business.city?.isNotEmpty == true))
+                        pw.Text(
+                          [business.address, business.city, business.state, business.pinCode].whereType<String>().where((s) => s.isNotEmpty).join(', '),
+                          style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted),
+                        ),
+                      if (customSettings.showGstin && business.gstin?.isNotEmpty == true)
+                        pw.Text('GSTIN: ${business.gstin}', style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark)),
+                      if (customSettings.showPhone && business.displayInvoicePhone.isNotEmpty)
+                        pw.Text('Ph: ${business.displayInvoicePhone}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                    ],
+                  ),
+                ),
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        effectiveTitle,
+                        style: pw.TextStyle(font: bold, fontSize: 12, color: slateDark),
+                      ),
+                      pw.SizedBox(height: 3),
+                      pw.Text('Invoice #: $number', style: pw.TextStyle(font: bold, fontSize: 8.5, color: primaryColor)),
+                      pw.Text('Date: ${displayDate(date)}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                      if (dueDate != null && dueDate.isNotEmpty)
+                        pw.Text('Due: ${displayDate(dueDate)}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                      if (placeOfSupply != null && placeOfSupply.isNotEmpty)
+                        pw.Text('POS: $placeOfSupply', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else if (themeStyle == 'compact_pos') ...[
+          // Compact POS Slip Header
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(bottom: pw.BorderSide(color: borderGrey, width: 0.8)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(business.name.toUpperCase(), style: pw.TextStyle(font: bold, fontSize: 10, color: primaryColor)),
+                    if (business.gstin?.isNotEmpty == true && customSettings.showGstin)
+                      pw.Text('GSTIN: ${business.gstin}', style: pw.TextStyle(font: bold, fontSize: 7, color: slateDark)),
+                    if (business.displayInvoicePhone.isNotEmpty && customSettings.showPhone)
+                      pw.Text('Ph: ${business.displayInvoicePhone}', style: pw.TextStyle(font: regular, fontSize: 7, color: slateMuted)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(effectiveTitle, style: pw.TextStyle(font: bold, fontSize: 8.5, color: primaryColor)),
+                    pw.Text('Inv: $number', style: pw.TextStyle(font: bold, fontSize: 7.5)),
+                    pw.Text(displayDate(date), style: pw.TextStyle(font: regular, fontSize: 7)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ] else ...[
+          // Classic Grid & GST Tax Pro Header
+          pw.Container(
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(
+                bottom: pw.BorderSide(color: borderGrey, width: 0.8),
               ),
-              // SHIP TO
-              if (hasShipTo) ...[
+            ),
+            padding: const pw.EdgeInsets.fromLTRB(10, 8, 10, 10),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                if (logoImage != null && customSettings.logoPlacement == 'left') ...[
+                  pw.Container(
+                    width: 55,
+                    height: 55,
+                    margin: const pw.EdgeInsets.only(right: 10),
+                    child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+                  ),
+                ],
+                pw.Expanded(
+                  flex: 3,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        business.name.toUpperCase(),
+                        style: pw.TextStyle(font: bold, fontSize: 13, color: primaryColor),
+                      ),
+                      if (customSettings.showAddress) ...[
+                        if (business.address != null && business.address!.isNotEmpty)
+                          pw.Text(
+                            business.address!,
+                            style: pw.TextStyle(font: regular, fontSize: 8, color: slateDark),
+                          ),
+                        if (business.city != null || business.state != null || business.pinCode != null)
+                          pw.Text(
+                            [business.city, business.state, business.pinCode].whereType<String>().where((s) => s.isNotEmpty).join(', '),
+                            style: pw.TextStyle(font: regular, fontSize: 8, color: slateDark),
+                          ),
+                      ],
+                      if (customSettings.showGstin && business.gstin != null && business.gstin!.isNotEmpty)
+                        pw.RichText(
+                          text: pw.TextSpan(children: [
+                            pw.TextSpan(text: 'GSTIN: ', style: pw.TextStyle(font: bold, fontSize: 8, color: slateDark)),
+                            pw.TextSpan(text: business.gstin!, style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor)),
+                          ]),
+                        ),
+                      if (customSettings.showPan && business.pan != null && business.pan!.isNotEmpty)
+                        pw.Text('PAN: ${business.pan}', style: pw.TextStyle(font: regular, fontSize: 8, color: slateDark)),
+                      if (customSettings.showPhone && business.displayInvoicePhone.isNotEmpty)
+                        pw.Text('Phone: ${business.displayInvoicePhone}', style: pw.TextStyle(font: regular, fontSize: 8, color: slateDark)),
+                      if (customSettings.showEmail && business.displayInvoiceEmail.isNotEmpty)
+                        pw.Text('Email: ${business.displayInvoiceEmail}', style: pw.TextStyle(font: regular, fontSize: 8, color: slateDark)),
+                    ],
+                  ),
+                ),
+                if (logoImage != null && customSettings.logoPlacement == 'center') ...[
+                  pw.Container(
+                    width: 50,
+                    height: 50,
+                    margin: const pw.EdgeInsets.symmetric(horizontal: 8),
+                    child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+                  ),
+                ],
+                if (logoImage != null && customSettings.logoPlacement == 'right') ...[
+                  pw.Container(
+                    width: 50,
+                    height: 50,
+                    margin: const pw.EdgeInsets.symmetric(horizontal: 8),
+                    child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+                  ),
+                ],
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: pw.BoxDecoration(
+                          color: lightGrey,
+                          border: pw.Border.all(color: borderGrey, width: 0.6),
+                          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                        ),
+                        child: pw.Text(
+                          effectiveTitle,
+                          style: pw.TextStyle(font: bold, fontSize: 10, color: primaryColor),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      pw.SizedBox(height: 6),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.end,
+                        children: [
+                          pw.Text('Invoice No: ', style: pw.TextStyle(font: bold, fontSize: 8.5)),
+                          pw.Text(number, style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark)),
+                        ],
+                      ),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.end,
+                        children: [
+                          pw.Text('Date: ', style: pw.TextStyle(font: bold, fontSize: 8)),
+                          pw.Text(displayDate(date), style: pw.TextStyle(font: regular, fontSize: 8)),
+                        ],
+                      ),
+                      if (dueDate != null && dueDate.isNotEmpty)
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.end,
+                          children: [
+                            pw.Text('Due Date: ', style: pw.TextStyle(font: bold, fontSize: 8)),
+                            pw.Text(displayDate(dueDate), style: pw.TextStyle(font: regular, fontSize: 8)),
+                          ],
+                        ),
+                      if (placeOfSupply != null && placeOfSupply.isNotEmpty)
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.end,
+                          children: [
+                            pw.Text('Place of Supply: ', style: pw.TextStyle(font: bold, fontSize: 8)),
+                            pw.Text(placeOfSupply, style: pw.TextStyle(font: regular, fontSize: 8)),
+                          ],
+                        ),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.end,
+                        children: [
+                          pw.Text('Reverse Charge: ', style: pw.TextStyle(font: bold, fontSize: 7.5)),
+                          pw.Text(reverseCharge ? 'YES' : 'NO', style: pw.TextStyle(font: bold, fontSize: 7.5, color: reverseCharge ? PdfColors.red800 : slateDark)),
+                        ],
+                      ),
+                      if (ewayBillNumber != null && ewayBillNumber.isNotEmpty)
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.end,
+                          children: [
+                            pw.Text('E-Way Bill: ', style: pw.TextStyle(font: bold, fontSize: 7.5)),
+                            pw.Text(ewayBillNumber, style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
+                          ],
+                        ),
+                      if (vehicleNumber != null && vehicleNumber.isNotEmpty)
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.end,
+                          children: [
+                            pw.Text('Vehicle No: ', style: pw.TextStyle(font: bold, fontSize: 7.5)),
+                            pw.Text(vehicleNumber, style: pw.TextStyle(font: regular, fontSize: 7.5)),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+                if (logoImage != null && customSettings.logoPlacement == 'right') ...[
+                  pw.Container(
+                    width: 55,
+                    height: 55,
+                    margin: const pw.EdgeInsets.only(left: 10),
+                    child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+
+        // ==========================================
+        // 2. PARTIES SECTION (BILL TO & SHIP TO)
+        // ==========================================
+        if (themeStyle == 'billbook_stylish') ...[
+          // Billbook Party Cards: Clean Rounded Container Cards
+          pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 6),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
                 pw.Expanded(
                   child: pw.Container(
-                    padding: const pw.EdgeInsets.all(8),
+                    padding: const pw.EdgeInsets.all(6),
+                    decoration: pw.BoxDecoration(
+                      color: lightGrey,
+                      border: pw.Border.all(color: borderGrey, width: 0.5),
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                    ),
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text(
-                          'SHIP TO:',
-                          style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor),
-                        ),
-                        pw.SizedBox(height: 2),
-                        pw.Text(
-                          (shipToName != null && shipToName.trim().isNotEmpty) ? shipToName.trim() : (partyName ?? ''),
-                          style: pw.TextStyle(font: bold, fontSize: 9, color: slateDark),
-                        ),
-                        if (shipToAddress != null && shipToAddress.trim().isNotEmpty)
-                          pw.Text(shipToAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 8)),
-                        if (shipToState != null || shipToPincode != null)
-                          pw.Text(
-                            [
-                              if (shipToState != null && shipToState.trim().isNotEmpty) 'State: ${shipToState.trim()}',
-                              if (shipToPincode != null && shipToPincode.trim().isNotEmpty) 'PIN: ${shipToPincode.trim()}',
-                            ].join(' | '),
-                            style: pw.TextStyle(font: regular, fontSize: 8),
+                        pw.Container(
+                          padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          decoration: pw.BoxDecoration(
+                            color: primaryColor,
+                            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
                           ),
+                          child: pw.Text('BILL TO', style: pw.TextStyle(font: bold, fontSize: 6.5, color: PdfColors.white)),
+                        ),
+                        pw.SizedBox(height: 3),
+                        pw.Text(
+                          (partyName != null && partyName.trim().isNotEmpty) ? partyName.trim() : 'Cash / Walk-in Customer',
+                          style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark),
+                        ),
+                        if (partyAddress != null && partyAddress.trim().isNotEmpty)
+                          pw.Text(partyAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 7.5)),
+                        if (partyState != null && partyState.trim().isNotEmpty)
+                          pw.Text('State: $partyState', style: pw.TextStyle(font: regular, fontSize: 7.5)),
+                        if (partyGstin != null && partyGstin.trim().isNotEmpty)
+                          pw.RichText(
+                            text: pw.TextSpan(children: [
+                              pw.TextSpan(text: 'GSTIN: ', style: pw.TextStyle(font: bold, fontSize: 7.5)),
+                              pw.TextSpan(text: partyGstin.trim(), style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
+                            ]),
+                          ),
+                        if (customSettings.showPan && customer?.pan != null && customer!.pan!.isNotEmpty)
+                          pw.Text('PAN: ${customer.pan}', style: pw.TextStyle(font: regular, fontSize: 7.5)),
+                        if (customSettings.showPhone && partyPhone != null && partyPhone.trim().isNotEmpty)
+                          pw.Text('Contact: ${partyPhone.trim()}', style: pw.TextStyle(font: regular, fontSize: 7.5)),
                       ],
                     ),
                   ),
                 ),
+                if (hasShipTo) ...[
+                  pw.SizedBox(width: 6),
+                  pw.Expanded(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(6),
+                      decoration: pw.BoxDecoration(
+                        color: lightGrey,
+                        border: pw.Border.all(color: borderGrey, width: 0.5),
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Container(
+                            padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: pw.BoxDecoration(
+                              color: primaryColor,
+                              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+                            ),
+                            child: pw.Text('SHIP TO', style: pw.TextStyle(font: bold, fontSize: 6.5, color: PdfColors.white)),
+                          ),
+                          pw.SizedBox(height: 3),
+                          pw.Text(
+                            (shipToName != null && shipToName.trim().isNotEmpty) ? shipToName.trim() : (partyName ?? ''),
+                            style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark),
+                          ),
+                          if (shipToAddress != null && shipToAddress.trim().isNotEmpty)
+                            pw.Text(shipToAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 7.5)),
+                          if (shipToState != null || shipToPincode != null)
+                            pw.Text(
+                              [
+                                if (shipToState != null && shipToState.trim().isNotEmpty) 'State: ${shipToState.trim()}',
+                                if (shipToPincode != null && shipToPincode.trim().isNotEmpty) 'PIN: ${shipToPincode.trim()}',
+                              ].join(' | '),
+                              style: pw.TextStyle(font: regular, fontSize: 7.5),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
+        ] else if (themeStyle == 'modern_minimal') ...[
+          // Minimalist Party Columns: Borderless Clean
+          pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 6),
+            padding: const pw.EdgeInsets.symmetric(vertical: 4),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('BILLED TO', style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        (partyName != null && partyName.trim().isNotEmpty) ? partyName.trim() : 'Cash / Walk-in Customer',
+                        style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark),
+                      ),
+                      if (partyAddress != null && partyAddress.trim().isNotEmpty)
+                        pw.Text(partyAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                      if (partyGstin != null && partyGstin.trim().isNotEmpty)
+                        pw.Text('GSTIN: ${partyGstin.trim()}', style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark)),
+                      if (customSettings.showPhone && partyPhone != null && partyPhone.trim().isNotEmpty)
+                        pw.Text('Ph: ${partyPhone.trim()}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                    ],
+                  ),
+                ),
+                if (hasShipTo) ...[
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('SHIPPED TO', style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          (shipToName != null && shipToName.trim().isNotEmpty) ? shipToName.trim() : (partyName ?? ''),
+                          style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark),
+                        ),
+                        if (shipToAddress != null && shipToAddress.trim().isNotEmpty)
+                          pw.Text(shipToAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ] else if (themeStyle == 'compact_pos') ...[
+          // Compact POS Party Info
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Customer: ${(partyName?.isNotEmpty == true) ? partyName! : "Cash"}', style: pw.TextStyle(font: bold, fontSize: 7.5)),
+                if (partyGstin?.isNotEmpty == true) pw.Text('GSTIN: $partyGstin', style: pw.TextStyle(font: regular, fontSize: 7)),
+              ],
+            ),
+          ),
+        ] else ...[
+          // Classic Grid & GST Tax Pro Parties Box
+          pw.Container(
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(
+                bottom: pw.BorderSide(color: borderGrey, width: 0.8),
+              ),
+            ),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(
+                      border: hasShipTo
+                          ? const pw.Border(right: pw.BorderSide(color: borderGrey, width: 0.8))
+                          : null,
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'BILL TO:',
+                          style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor),
+                        ),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          (partyName != null && partyName.trim().isNotEmpty) ? partyName.trim() : 'Cash / Walk-in Customer',
+                          style: pw.TextStyle(font: bold, fontSize: 9, color: slateDark),
+                        ),
+                        if (partyAddress != null && partyAddress.trim().isNotEmpty)
+                          pw.Text(partyAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 8)),
+                        if (partyState != null && partyState.trim().isNotEmpty)
+                          pw.Text('State: $partyState', style: pw.TextStyle(font: regular, fontSize: 8)),
+                        if (partyGstin != null && partyGstin.trim().isNotEmpty)
+                          pw.RichText(
+                            text: pw.TextSpan(children: [
+                              pw.TextSpan(text: 'GSTIN: ', style: pw.TextStyle(font: bold, fontSize: 8)),
+                              pw.TextSpan(text: partyGstin.trim(), style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor)),
+                            ]),
+                          ),
+                        if (customSettings.showPan && customer?.pan != null && customer!.pan!.isNotEmpty)
+                          pw.Text('PAN: ${customer.pan}', style: pw.TextStyle(font: regular, fontSize: 8)),
+                        if (customSettings.showPhone && partyPhone != null && partyPhone.trim().isNotEmpty)
+                          pw.Text('Contact: ${partyPhone.trim()}', style: pw.TextStyle(font: regular, fontSize: 8)),
+                      ],
+                    ),
+                  ),
+                ),
+                if (hasShipTo) ...[
+                  pw.Expanded(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'SHIP TO:',
+                            style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor),
+                          ),
+                          pw.SizedBox(height: 2),
+                          pw.Text(
+                            (shipToName != null && shipToName.trim().isNotEmpty) ? shipToName.trim() : (partyName ?? ''),
+                            style: pw.TextStyle(font: bold, fontSize: 9, color: slateDark),
+                          ),
+                          if (shipToAddress != null && shipToAddress.trim().isNotEmpty)
+                            pw.Text(shipToAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 8)),
+                          if (shipToState != null || shipToPincode != null)
+                            pw.Text(
+                              [
+                                if (shipToState != null && shipToState.trim().isNotEmpty) 'State: ${shipToState.trim()}',
+                                if (shipToPincode != null && shipToPincode.trim().isNotEmpty) 'PIN: ${shipToPincode.trim()}',
+                              ].join(' | '),
+                              style: pw.TextStyle(font: regular, fontSize: 8),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
 
         // ==========================================
         // 3. TRANSPORT & STATUTORY STRIP (CONDITIONAL)
@@ -618,12 +1061,14 @@ Future<Uint8List> buildDocumentPdf({
             (poNumber != null && poNumber.trim().isNotEmpty) ||
             (lrRrNumber != null && lrRrNumber.trim().isNotEmpty)) ...[
           pw.Container(
-            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            decoration: const pw.BoxDecoration(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            margin: themeStyle == 'billbook_stylish' ? const pw.EdgeInsets.only(bottom: 6) : pw.EdgeInsets.zero,
+            decoration: pw.BoxDecoration(
               color: lightGrey,
-              border: pw.Border(
-                bottom: pw.BorderSide(color: borderGrey, width: 0.8),
-              ),
+              borderRadius: themeStyle == 'billbook_stylish' ? const pw.BorderRadius.all(pw.Radius.circular(3)) : null,
+              border: themeStyle == 'billbook_stylish'
+                  ? pw.Border.all(color: borderGrey, width: 0.5)
+                  : const pw.Border(bottom: pw.BorderSide(color: borderGrey, width: 0.8)),
             ),
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -644,46 +1089,265 @@ Future<Uint8List> buildDocumentPdf({
         // ==========================================
         // 4. LINE ITEMS TABLE (MULTI-PAGE CAPABLE)
         // ==========================================
-        pw.TableHelper.fromTextArray(
-          border: pw.TableBorder.all(color: borderGrey, width: 0.5),
-          headerDecoration: const pw.BoxDecoration(color: lightGrey),
-          headerHeight: 22,
-          headerStyle: pw.TextStyle(font: bold, fontSize: 8, color: slateDark),
-          cellStyle: pw.TextStyle(font: regular, fontSize: 8, color: slateDark),
-          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          headers: [
-            'S.N.',
-            'Items & Description',
-            if (customSettings.showHsnColumn) 'HSN/SAC',
-            if (customSettings.showUnitColumn) 'Qty',
-            'Rate',
-            if (customSettings.showDiscountColumn) 'Disc',
-            if (customSettings.showTaxColumn) 'Tax %',
-            'Amount',
-          ],
-          columnWidths: tableColWidths,
-          cellAlignments: tableCellAlignments,
-          data: List<List<String>>.generate(lines.length, (i) {
-            final line = lines[i];
-            final qtyStr = _qty(line.quantity);
-            final unitSuffix = (line.unit != null && line.unit!.trim().isNotEmpty) ? ' ${line.unit!.trim()}' : '';
-            return [
-              '${i + 1}',
-              line.name +
-                  (line.batchNumber != null && line.batchNumber!.isNotEmpty ? ' (B: ${line.batchNumber})' : '') +
-                  (line.serialNumber != null && line.serialNumber!.isNotEmpty ? ' (S: ${line.serialNumber})' : ''),
-              if (customSettings.showHsnColumn) line.hsn ?? '-',
-              if (customSettings.showUnitColumn) '$qtyStr$unitSuffix',
-              money(line.price),
-              if (customSettings.showDiscountColumn)
-                line.discountPercent > 0
-                    ? '${_qty(line.discountPercent)}%'
-                    : (line.discount > 0 ? money(line.discount) : '-'),
-              if (customSettings.showTaxColumn) '${line.gstRate}%',
-              money(line.taxable + line.tax),
+        if (themeStyle == 'gst_tax_pro') ...[
+          // GST Tax Pro: Explicit statutory CGST & SGST / IGST columns per line item
+          () {
+            int gIdx = 0;
+            final Map<int, pw.TableColumnWidth> gstProWidths = {};
+            final Map<int, pw.Alignment> gstProAligns = {};
+
+            gstProWidths[gIdx] = const pw.FixedColumnWidth(20);
+            gstProAligns[gIdx] = pw.Alignment.center;
+            gIdx++;
+
+            gstProWidths[gIdx] = const pw.FlexColumnWidth(3.4);
+            gstProAligns[gIdx] = pw.Alignment.centerLeft;
+            gIdx++;
+
+            if (customSettings.showHsnColumn) {
+              gstProWidths[gIdx] = const pw.FixedColumnWidth(38);
+              gstProAligns[gIdx] = pw.Alignment.center;
+              gIdx++;
+            }
+            if (customSettings.showUnitColumn) {
+              gstProWidths[gIdx] = const pw.FixedColumnWidth(36);
+              gstProAligns[gIdx] = pw.Alignment.centerRight;
+              gIdx++;
+            }
+            gstProWidths[gIdx] = const pw.FixedColumnWidth(42);
+            gstProAligns[gIdx] = pw.Alignment.centerRight;
+            gIdx++;
+
+            if (customSettings.showDiscountColumn) {
+              gstProWidths[gIdx] = const pw.FixedColumnWidth(32);
+              gstProAligns[gIdx] = pw.Alignment.centerRight;
+              gIdx++;
+            }
+
+            gstProWidths[gIdx] = const pw.FixedColumnWidth(46);
+            gstProAligns[gIdx] = pw.Alignment.centerRight;
+            gIdx++;
+
+            if (!isInterState) {
+              gstProWidths[gIdx] = const pw.FixedColumnWidth(28);
+              gstProAligns[gIdx] = pw.Alignment.center;
+              gIdx++;
+              gstProWidths[gIdx] = const pw.FixedColumnWidth(38);
+              gstProAligns[gIdx] = pw.Alignment.centerRight;
+              gIdx++;
+              gstProWidths[gIdx] = const pw.FixedColumnWidth(28);
+              gstProAligns[gIdx] = pw.Alignment.center;
+              gIdx++;
+              gstProWidths[gIdx] = const pw.FixedColumnWidth(38);
+              gstProAligns[gIdx] = pw.Alignment.centerRight;
+              gIdx++;
+            } else {
+              gstProWidths[gIdx] = const pw.FixedColumnWidth(32);
+              gstProAligns[gIdx] = pw.Alignment.center;
+              gIdx++;
+              gstProWidths[gIdx] = const pw.FixedColumnWidth(46);
+              gstProAligns[gIdx] = pw.Alignment.centerRight;
+              gIdx++;
+            }
+
+            gstProWidths[gIdx] = const pw.FixedColumnWidth(52);
+            gstProAligns[gIdx] = pw.Alignment.centerRight;
+            gIdx++;
+
+            final proHeaders = [
+              '#',
+              'Description',
+              if (customSettings.showHsnColumn) 'HSN',
+              if (customSettings.showUnitColumn) 'Qty',
+              'Rate',
+              if (customSettings.showDiscountColumn) 'Disc',
+              'Taxable',
+              if (!isInterState) ...['CGST %', 'CGST', 'SGST %', 'SGST'],
+              if (isInterState) ...['IGST %', 'IGST'],
+              'Total',
             ];
-          }),
-        ),
+
+            return pw.TableHelper.fromTextArray(
+              border: pw.TableBorder.all(color: borderGrey, width: 0.5),
+              headerDecoration: const pw.BoxDecoration(color: lightGrey),
+              headerHeight: 20,
+              headerStyle: pw.TextStyle(font: bold, fontSize: 7, color: slateDark),
+              cellStyle: pw.TextStyle(font: regular, fontSize: 7, color: slateDark),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3.5),
+              headers: proHeaders,
+              columnWidths: gstProWidths,
+              cellAlignments: gstProAligns,
+              data: List<List<String>>.generate(lines.length, (i) {
+                final line = lines[i];
+                final qtyStr = _qty(line.quantity);
+                final unitSuffix = (line.unit != null && line.unit!.trim().isNotEmpty) ? ' ${line.unit!.trim()}' : '';
+                final halfTax = line.tax ~/ 2;
+                final cgstAmt = isInterState ? 0 : halfTax;
+                final sgstAmt = isInterState ? 0 : (line.tax - halfTax);
+                final rateHalf = (line.gstRate / 2).toStringAsFixed(line.gstRate % 2 == 0 ? 0 : 1);
+
+                return [
+                  '${i + 1}',
+                  line.name +
+                      (line.batchNumber != null && line.batchNumber!.isNotEmpty ? ' (B: ${line.batchNumber})' : ''),
+                  if (customSettings.showHsnColumn) line.hsn ?? '-',
+                  if (customSettings.showUnitColumn) '$qtyStr$unitSuffix',
+                  money(line.price),
+                  if (customSettings.showDiscountColumn)
+                    line.discountPercent > 0
+                        ? '${_qty(line.discountPercent)}%'
+                        : (line.discount > 0 ? money(line.discount) : '-'),
+                  money(line.taxable),
+                  if (!isInterState) ...[
+                    '$rateHalf%',
+                    money(cgstAmt),
+                    '$rateHalf%',
+                    money(sgstAmt),
+                  ],
+                  if (isInterState) ...[
+                    '${line.gstRate}%',
+                    money(line.tax),
+                  ],
+                  money(line.taxable + line.tax),
+                ];
+              }),
+            );
+          }(),
+        ] else if (themeStyle == 'billbook_stylish') ...[
+          // Billbook Stylish: Branded Primary Header Row + Alternating Zebra Rows
+          pw.TableHelper.fromTextArray(
+            border: const pw.TableBorder(
+              horizontalInside: pw.BorderSide(color: PdfColor.fromInt(0xFFE2E8F0), width: 0.5),
+              bottom: pw.BorderSide(color: borderGrey, width: 0.8),
+            ),
+            headerDecoration: pw.BoxDecoration(color: primaryColor),
+            headerHeight: 22,
+            headerStyle: pw.TextStyle(font: bold, fontSize: 8, color: PdfColors.white),
+            rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+            oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF8FAFC)),
+            cellStyle: pw.TextStyle(font: regular, fontSize: 8, color: slateDark),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4.5),
+            headers: [
+              'S.N.',
+              'Items & Description',
+              if (customSettings.showHsnColumn) 'HSN/SAC',
+              if (customSettings.showUnitColumn) 'Qty',
+              'Rate',
+              if (customSettings.showDiscountColumn) 'Disc',
+              if (customSettings.showTaxColumn) 'Tax %',
+              'Amount',
+            ],
+            columnWidths: tableColWidths,
+            cellAlignments: tableCellAlignments,
+            data: List<List<String>>.generate(lines.length, (i) {
+              final line = lines[i];
+              final qtyStr = _qty(line.quantity);
+              final unitSuffix = (line.unit != null && line.unit!.trim().isNotEmpty) ? ' ${line.unit!.trim()}' : '';
+              return [
+                '${i + 1}',
+                line.name +
+                    (line.batchNumber != null && line.batchNumber!.isNotEmpty ? ' (B: ${line.batchNumber})' : '') +
+                    (line.serialNumber != null && line.serialNumber!.isNotEmpty ? ' (S: ${line.serialNumber})' : ''),
+                if (customSettings.showHsnColumn) line.hsn ?? '-',
+                if (customSettings.showUnitColumn) '$qtyStr$unitSuffix',
+                money(line.price),
+                if (customSettings.showDiscountColumn)
+                  line.discountPercent > 0
+                      ? '${_qty(line.discountPercent)}%'
+                      : (line.discount > 0 ? money(line.discount) : '-'),
+                if (customSettings.showTaxColumn) '${line.gstRate}%',
+                money(line.taxable + line.tax),
+              ];
+            }),
+          ),
+        ] else if (themeStyle == 'modern_minimal') ...[
+          // Modern Minimal: Clean Borderless Table
+          pw.TableHelper.fromTextArray(
+            border: const pw.TableBorder(
+              top: pw.BorderSide(color: borderGrey, width: 0.8),
+              bottom: pw.BorderSide(color: borderGrey, width: 0.8),
+              horizontalInside: pw.BorderSide(color: PdfColor.fromInt(0xFFF1F5F9), width: 0.5),
+            ),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.white),
+            headerHeight: 20,
+            headerStyle: pw.TextStyle(font: bold, fontSize: 8, color: slateDark),
+            cellStyle: pw.TextStyle(font: regular, fontSize: 8, color: slateDark),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            headers: [
+              'S.N.',
+              'Items & Description',
+              if (customSettings.showHsnColumn) 'HSN/SAC',
+              if (customSettings.showUnitColumn) 'Qty',
+              'Rate',
+              if (customSettings.showDiscountColumn) 'Disc',
+              if (customSettings.showTaxColumn) 'Tax %',
+              'Amount',
+            ],
+            columnWidths: tableColWidths,
+            cellAlignments: tableCellAlignments,
+            data: List<List<String>>.generate(lines.length, (i) {
+              final line = lines[i];
+              final qtyStr = _qty(line.quantity);
+              final unitSuffix = (line.unit != null && line.unit!.trim().isNotEmpty) ? ' ${line.unit!.trim()}' : '';
+              return [
+                '${i + 1}',
+                line.name +
+                    (line.batchNumber != null && line.batchNumber!.isNotEmpty ? ' (B: ${line.batchNumber})' : ''),
+                if (customSettings.showHsnColumn) line.hsn ?? '-',
+                if (customSettings.showUnitColumn) '$qtyStr$unitSuffix',
+                money(line.price),
+                if (customSettings.showDiscountColumn)
+                  line.discountPercent > 0
+                      ? '${_qty(line.discountPercent)}%'
+                      : (line.discount > 0 ? money(line.discount) : '-'),
+                if (customSettings.showTaxColumn) '${line.gstRate}%',
+                money(line.taxable + line.tax),
+              ];
+            }),
+          ),
+        ] else ...[
+          // Classic Grid & Compact POS Table
+          pw.TableHelper.fromTextArray(
+            border: pw.TableBorder.all(color: borderGrey, width: 0.5),
+            headerDecoration: const pw.BoxDecoration(color: lightGrey),
+            headerHeight: isCompactPos ? 18 : 22,
+            headerStyle: pw.TextStyle(font: bold, fontSize: isCompactPos ? 7.5 : 8, color: slateDark),
+            cellStyle: pw.TextStyle(font: regular, fontSize: isCompactPos ? 7.5 : 8, color: slateDark),
+            cellPadding: pw.EdgeInsets.symmetric(horizontal: isCompactPos ? 3 : 4, vertical: isCompactPos ? 2.5 : 4),
+            headers: [
+              'S.N.',
+              'Items & Description',
+              if (customSettings.showHsnColumn) 'HSN/SAC',
+              if (customSettings.showUnitColumn) 'Qty',
+              'Rate',
+              if (customSettings.showDiscountColumn) 'Disc',
+              if (customSettings.showTaxColumn) 'Tax %',
+              'Amount',
+            ],
+            columnWidths: tableColWidths,
+            cellAlignments: tableCellAlignments,
+            data: List<List<String>>.generate(lines.length, (i) {
+              final line = lines[i];
+              final qtyStr = _qty(line.quantity);
+              final unitSuffix = (line.unit != null && line.unit!.trim().isNotEmpty) ? ' ${line.unit!.trim()}' : '';
+              return [
+                '${i + 1}',
+                line.name +
+                    (line.batchNumber != null && line.batchNumber!.isNotEmpty ? ' (B: ${line.batchNumber})' : '') +
+                    (line.serialNumber != null && line.serialNumber!.isNotEmpty ? ' (S: ${line.serialNumber})' : ''),
+                if (customSettings.showHsnColumn) line.hsn ?? '-',
+                if (customSettings.showUnitColumn) '$qtyStr$unitSuffix',
+                money(line.price),
+                if (customSettings.showDiscountColumn)
+                  line.discountPercent > 0
+                      ? '${_qty(line.discountPercent)}%'
+                      : (line.discount > 0 ? money(line.discount) : '-'),
+                if (customSettings.showTaxColumn) '${line.gstRate}%',
+                money(line.taxable + line.tax),
+              ];
+            }),
+          ),
+        ],
 
         // ==========================================
         // 5. BOTTOM SUMMARY & SETTLEMENT SPLIT
@@ -768,16 +1432,30 @@ Future<Uint8List> buildDocumentPdf({
                 _calcRow('Round Off', (roundOff > 0 ? '+ ' : '') + money(roundOff), regular, slateMuted),
               pw.Divider(color: borderGrey, thickness: 0.5),
               pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                decoration: const pw.BoxDecoration(
-                  color: lightGrey,
-                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(2)),
+                padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                decoration: pw.BoxDecoration(
+                  color: themeStyle == 'billbook_stylish' ? primaryColor : lightGrey,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
                 ),
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Total Amount', style: pw.TextStyle(font: bold, fontSize: 10, color: primaryColor)),
-                    pw.Text(money(total), style: pw.TextStyle(font: bold, fontSize: 10, color: primaryColor)),
+                    pw.Text(
+                      'Total Amount',
+                      style: pw.TextStyle(
+                        font: bold,
+                        fontSize: 9.5,
+                        color: themeStyle == 'billbook_stylish' ? PdfColors.white : primaryColor,
+                      ),
+                    ),
+                    pw.Text(
+                      money(total),
+                      style: pw.TextStyle(
+                        font: bold,
+                        fontSize: 10,
+                        color: themeStyle == 'billbook_stylish' ? PdfColors.white : primaryColor,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -805,10 +1483,12 @@ Future<Uint8List> buildDocumentPdf({
           return pw.Column(
             children: [
               pw.Container(
-                decoration: const pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: borderGrey, width: 0.8),
-                  ),
+                decoration: pw.BoxDecoration(
+                  border: themeStyle == 'modern_minimal'
+                      ? null
+                      : const pw.Border(
+                          bottom: pw.BorderSide(color: borderGrey, width: 0.8),
+                        ),
                 ),
                 child: pw.Row(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -818,11 +1498,13 @@ Future<Uint8List> buildDocumentPdf({
                       flex: 3,
                       child: pw.Container(
                         padding: const pw.EdgeInsets.all(8),
-                        decoration: const pw.BoxDecoration(
-                          border: pw.Border(
-                            right: pw.BorderSide(color: borderGrey, width: 0.8),
-                          ),
-                        ),
+                        decoration: themeStyle == 'modern_minimal'
+                            ? null
+                            : const pw.BoxDecoration(
+                                border: pw.Border(
+                                  right: pw.BorderSide(color: borderGrey, width: 0.8),
+                                ),
+                              ),
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [

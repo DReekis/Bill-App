@@ -34,12 +34,184 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
 
   static const List<Map<String, String>> _curatedColors = [
     {'name': 'Navy Blue', 'hex': '#1E3A8A'},
-    {'name': 'Emerald Green', 'hex': '#065F46'},
-    {'name': 'Slate Grey', 'hex': '#1E293B'},
-    {'name': 'Wine Crimson', 'hex': '#831843'},
     {'name': 'Royal Indigo', 'hex': '#4338CA'},
+    {'name': 'Emerald Green', 'hex': '#065F46'},
     {'name': 'Teal Ocean', 'hex': '#0F766E'},
+    {'name': 'Wine Crimson', 'hex': '#831843'},
+    {'name': 'Ruby Maroon', 'hex': '#991B1B'},
+    {'name': 'Sunset Amber', 'hex': '#D97706'},
+    {'name': 'Charcoal Slate', 'hex': '#1E293B'},
+    {'name': 'Deep Violet', 'hex': '#6B21A8'},
   ];
+
+  static const List<_InvoiceTemplateOption> _templateOptions = [
+    _InvoiceTemplateOption(
+      id: 'billbook_stylish',
+      name: 'Billbook Modern',
+      tag: 'POPULAR',
+      description: 'Vibrant branded header banner, colored table header, rounded party cards & highlighted totals.',
+      icon: Icons.auto_awesome_rounded,
+      accentColor: Color(0xFF1E3A8A),
+    ),
+    _InvoiceTemplateOption(
+      id: 'classic_grid',
+      name: 'Classic GST Grid',
+      tag: 'STANDARD',
+      description: 'Traditional boxed grid layout with outer boundary border & boxed cells.',
+      icon: Icons.grid_view_rounded,
+      accentColor: Color(0xFF334155),
+    ),
+    _InvoiceTemplateOption(
+      id: 'modern_minimal',
+      name: 'Modern Minimalist',
+      tag: 'SLEEK',
+      description: 'Borderless clean design with 4px vertical brand stripe & airy modern typography.',
+      icon: Icons.crop_portrait_rounded,
+      accentColor: Color(0xFF0F766E),
+    ),
+    _InvoiceTemplateOption(
+      id: 'gst_tax_pro',
+      name: 'GST Enterprise Pro',
+      tag: 'B2B AUDIT',
+      description: 'Explicit CGST & SGST columns per line item, statutory totals & auditor compliance.',
+      icon: Icons.account_balance_rounded,
+      accentColor: Color(0xFF4338CA),
+    ),
+    _InvoiceTemplateOption(
+      id: 'compact_pos',
+      name: 'Compact Retail POS',
+      tag: 'SPACE SAVER',
+      description: 'Condensed single-page slip layout for retail & high-volume counter billing.',
+      icon: Icons.receipt_long_rounded,
+      accentColor: Color(0xFFD97706),
+    ),
+  ];
+
+  static Color _parseHexColorSafe(String hex) {
+    try {
+      final clean = hex.replaceAll('#', '').trim();
+      if (clean.length == 6) {
+        return Color(int.parse('FF$clean', radix: 16));
+      } else if (clean.length == 8) {
+        return Color(int.parse(clean, radix: 16));
+      }
+    } catch (_) {}
+    return const Color(0xFF1E3A8A);
+  }
+
+  Future<void> _showCustomHexColorDialog() async {
+    final hexCtrl = TextEditingController(text: _settings?.primaryColorHex ?? '#1E3A8A');
+    Color previewCol = _parseHexColorSafe(hexCtrl.text);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.palette_rounded, color: StitchColors.primary),
+                SizedBox(width: 8),
+                Text('Custom Brand Hex Color', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Enter your company brand hex code or tap a vibrant tone below:',
+                  style: TextStyle(fontSize: 12, color: StitchColors.textSecondary),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: previewCol,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: StitchColors.outline),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: hexCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Hex Color Code',
+                          hintText: '#1E3A8A',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                        onChanged: (val) {
+                          setDlgState(() {
+                            previewCol = _parseHexColorSafe(val);
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text('Quick Vibrant Presets:', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    '#2563EB', '#0D9488', '#059669', '#E11D48', '#EA580C', '#7C3AED', '#4B5563', '#0284C7'
+                  ].map((hex) {
+                    final c = _parseHexColorSafe(hex);
+                    return InkWell(
+                      onTap: () {
+                        setDlgState(() {
+                          hexCtrl.text = hex;
+                          previewCol = c;
+                        });
+                      },
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: c,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2)],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final cleaned = hexCtrl.text.trim();
+                  if (cleaned.isNotEmpty) {
+                    final formattedHex = cleaned.startsWith('#') ? cleaned : '#$cleaned';
+                    setState(() {
+                      _settings = _settings?.copyWith(primaryColorHex: formattedHex);
+                    });
+                  }
+                  Navigator.pop(ctx);
+                },
+                style: FilledButton.styleFrom(backgroundColor: StitchColors.primary),
+                child: const Text('Apply Color'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -443,12 +615,68 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
   }
 
   Widget _buildMobileTabs() {
+    final activeTemplate = _templateOptions.firstWhere(
+      (t) => t.id == _settings?.themeStyle || (t.id == 'billbook_stylish' && _settings?.themeStyle == 'modern_band'),
+      orElse: () => _templateOptions.first,
+    );
+
     return TabBarView(
       controller: _tabController,
       children: [
-        SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: _buildControlsList(),
+        Stack(
+          children: [
+            SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 85),
+              child: _buildControlsList(),
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 12,
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(12),
+                color: StitchColors.primary,
+                child: InkWell(
+                  onTap: () => _tabController.animateTo(1),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: _parseHexColorSafe(_settings?.primaryColorHex ?? '#1E3A8A'),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 1.5),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              activeTemplate.name,
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                        const Row(
+                          children: [
+                            Text('View Live Preview', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12)),
+                            SizedBox(width: 4),
+                            Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 12),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         Container(
           color: const Color(0xFFF1F5F9),
@@ -460,7 +688,10 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
   }
 
   Widget _buildPdfPreviewWidget() {
+    final settingsKey = '${_settings?.themeStyle}_${_settings?.primaryColorHex}_${_settings?.showHsnColumn}_${_settings?.showUnitColumn}_${_settings?.showDiscountColumn}_${_settings?.showTaxColumn}_${_settings?.showShipTo}_${_settings?.showBankDetails}_${_settings?.showUpiQr}_${_settings?.showSignatureBox}_${_settings?.bankQrPlacement}_${_settings?.signaturePlacement}_${_settings?.logoPlacement}_${_settings?.showHsnSummaryTable}_${_settings?.showTerms}_${_settings?.showDeclaration}_${_settings?.signatureImagePath}_${_business?.logoPath}_${_titleController.text}_${_declarationController.text}';
+
     return PdfPreview(
+      key: ValueKey(settingsKey),
       build: (format) => _generatePreviewPdf(),
       allowPrinting: true,
       allowSharing: true,
@@ -472,6 +703,101 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
     );
   }
 
+  Widget _buildTemplateGallery(InvoiceCustomizationSettings settings) {
+    final currentStyle = settings.themeStyle;
+
+    return SizedBox(
+      height: 124,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: _templateOptions.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (ctx, i) {
+          final opt = _templateOptions[i];
+          final isSelected = currentStyle == opt.id || (opt.id == 'billbook_stylish' && currentStyle == 'modern_band');
+
+          return InkWell(
+            onTap: () {
+              setState(() {
+                _settings = _settings?.copyWith(themeStyle: opt.id);
+              });
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 210,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isSelected ? StitchColors.primaryContainer.withValues(alpha: 0.35) : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isSelected ? StitchColors.primary : StitchColors.outline.withValues(alpha: 0.6),
+                  width: isSelected ? 2 : 1,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: StitchColors.primary.withValues(alpha: 0.12),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        )
+                      ]
+                    : null,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isSelected ? StitchColors.primary : opt.accentColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          opt.tag,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: isSelected ? Colors.white : opt.accentColor,
+                          ),
+                        ),
+                      ),
+                      if (isSelected)
+                        const Icon(Icons.check_circle_rounded, color: StitchColors.primary, size: 20)
+                      else
+                        Icon(opt.icon, color: StitchColors.textSecondary, size: 18),
+                    ],
+                  ),
+                  Text(
+                    opt.name,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: isSelected ? StitchColors.primary : StitchColors.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    opt.description,
+                    style: const TextStyle(fontSize: 10, color: StitchColors.textSecondary, height: 1.25),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildControlsList() {
     final settings = _settings!;
     final biz = _business!;
@@ -480,9 +806,89 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ==========================================
-        // 1. BUSINESS DETAILS & BRANDING
+        // 1. TEMPLATE SELECTION & BRAND PALETTE
         // ==========================================
-        _sectionHeader(Icons.business_rounded, 'Business Details & Branding'),
+        _sectionHeader(Icons.palette_outlined, '1. Template Style & Brand Palette'),
+        AppCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Select Invoice Template:', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: StitchColors.textPrimary)),
+                  Text('Swipe to choose', style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _buildTemplateGallery(settings),
+              const Divider(height: 24),
+              const Text('Theme Accent Color:', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: StitchColors.textPrimary)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  ..._curatedColors.map((c) {
+                    final isSelected = settings.primaryColorHex.toUpperCase() == c['hex']!.toUpperCase();
+                    final col = _parseHexColorSafe(c['hex']!);
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          _settings = _settings?.copyWith(primaryColorHex: c['hex']!);
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isSelected ? col.withValues(alpha: 0.15) : Colors.transparent,
+                          border: Border.all(color: isSelected ? col : StitchColors.outline, width: isSelected ? 2 : 1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(color: col, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(c['name']!, style: TextStyle(fontSize: 11.5, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500)),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  ActionChip(
+                    onPressed: _showCustomHexColorDialog,
+                    avatar: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: _parseHexColorSafe(settings.primaryColorHex),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1),
+                      ),
+                    ),
+                    label: const Text('+ Custom Hex', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                    backgroundColor: StitchColors.surfaceVariant,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // ==========================================
+        // 2. BUSINESS DETAILS & BRANDING
+        // ==========================================
+        _sectionHeader(Icons.business_rounded, '2. Business Details & Header Branding'),
         AppCard(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -604,46 +1010,6 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
                   hint: 'TAX INVOICE / BILL OF SUPPLY / ORIGINAL',
                 ),
               ),
-              const SizedBox(height: 16),
-              // Primary Palette Colors
-              const Text('Theme Accent Color:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: StitchColors.textSecondary)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _curatedColors.map((c) {
-                  final isSelected = settings.primaryColorHex.toUpperCase() == c['hex']!.toUpperCase();
-                  final col = Color(int.parse('FF${c['hex']!.replaceAll('#', '')}', radix: 16));
-                  return InkWell(
-                    onTap: () {
-                      setState(() {
-                        _settings = _settings?.copyWith(primaryColorHex: c['hex']!);
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isSelected ? col.withValues(alpha: 0.15) : Colors.transparent,
-                        border: Border.all(color: isSelected ? col : StitchColors.outline, width: isSelected ? 2 : 1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 14,
-                            height: 14,
-                            decoration: BoxDecoration(color: col, shape: BoxShape.circle),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(c['name']!, style: TextStyle(fontSize: 11.5, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500)),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
             ],
           ),
         ),
@@ -651,9 +1017,9 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
         const SizedBox(height: 20),
 
         // ==========================================
-        // 2. ITEM TABLE COLUMN VISIBILITY TOGGLES
+        // 3. ITEM TABLE COLUMN VISIBILITY TOGGLES
         // ==========================================
-        _sectionHeader(Icons.table_chart_outlined, 'Line Items Table Columns'),
+        _sectionHeader(Icons.table_chart_outlined, '3. Line Items Table Columns'),
         AppCard(
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
           child: Column(
@@ -672,9 +1038,9 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
         const SizedBox(height: 20),
 
         // ==========================================
-        // 3. PARTY & STATUTORY FIELDS
+        // 4. PARTY & STATUTORY FIELDS
         // ==========================================
-        _sectionHeader(Icons.business_center_outlined, 'Party & Statutory Formatting'),
+        _sectionHeader(Icons.business_center_outlined, '4. Party & Statutory Details'),
         AppCard(
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
           child: Column(
@@ -695,15 +1061,14 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
         const SizedBox(height: 20),
 
         // ==========================================
-        // 4. FOOTER PLACEMENT & LAYOUT (SETTLEMENT, QR, TERMS, SIGNATURE)
+        // 5. BANK DETAILS & UPI PAYMENT QR
         // ==========================================
-        _sectionHeader(Icons.dashboard_customize_outlined, 'Footer Placement & Layout'),
+        _sectionHeader(Icons.account_balance_outlined, '5. Bank Details & UPI Payment QR'),
         AppCard(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Bank & QR Placement Selector
               const Text('Bank Details & Payment QR Placement:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
               const SizedBox(height: 6),
               SegmentedButton<String>(
@@ -724,10 +1089,21 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
               const SizedBox(height: 12),
               _buildCompactToggle('Show Bank Account Details', settings.showBankDetails, (v) => setState(() => _settings = _settings?.copyWith(showBankDetails: v))),
               _buildCompactToggle('Show Dynamic NPCI UPI QR Code', settings.showUpiQr, (v) => setState(() => _settings = _settings?.copyWith(showUpiQr: v))),
+            ],
+          ),
+        ),
 
-              const Divider(height: 24),
+        const SizedBox(height: 20),
 
-              // Authorized Signatory Placement
+        // ==========================================
+        // 6. SIGNATORY, STAMP & DECLARATIONS
+        // ==========================================
+        _sectionHeader(Icons.dashboard_customize_outlined, '6. Signatory, Stamp & Declarations'),
+        AppCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               const Text('Authorized Signatory Placement:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
               const SizedBox(height: 6),
               SegmentedButton<String>(
@@ -778,17 +1154,14 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
                   ),
                 ],
               ),
-
               const Divider(height: 24),
-
-              // Terms & Declarations Visibility & Placement
+              // Terms & Declarations
               const Text('Terms & Declarations Visibility:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
               const SizedBox(height: 6),
               _buildCompactToggle('Show Terms & Conditions', settings.showTerms, (v) => setState(() => _settings = _settings?.copyWith(showTerms: v))),
               _buildCompactToggle('Show Statutory Declaration', settings.showDeclaration, (v) => setState(() => _settings = _settings?.copyWith(showDeclaration: v))),
               _buildCompactToggle('Show HSN/SAC Breakdown Table', settings.showHsnSummaryTable, (v) => setState(() => _settings = _settings?.copyWith(showHsnSummaryTable: v))),
               const SizedBox(height: 14),
-              // Custom declaration / terms override
               TextField(
                 controller: _declarationController,
                 maxLines: 3,
@@ -847,3 +1220,22 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
     );
   }
 }
+
+class _InvoiceTemplateOption {
+  final String id;
+  final String name;
+  final String tag;
+  final String description;
+  final IconData icon;
+  final Color accentColor;
+
+  const _InvoiceTemplateOption({
+    required this.id,
+    required this.name,
+    required this.tag,
+    required this.description,
+    required this.icon,
+    required this.accentColor,
+  });
+}
+

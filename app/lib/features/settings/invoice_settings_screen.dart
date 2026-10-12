@@ -58,6 +58,7 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
   List<BankAccount> _bankAccounts = [];
 
   Business? _business;
+  InvoiceCustomizationSettings? _customizationSettings;
   bool _loading = true;
   bool _saving = false;
 
@@ -93,16 +94,37 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
   int get _bizId =>
       widget.businessId ?? context.read<Session>().businessId ?? 1;
 
+  String _getTemplateName(String style) {
+    switch (style) {
+      case 'billbook_stylish':
+      case 'modern_band':
+        return 'Billbook Modern';
+      case 'modern_minimal':
+      case 'minimal_clean':
+        return 'Modern Minimalist';
+      case 'gst_tax_pro':
+        return 'GST Enterprise Pro';
+      case 'compact_pos':
+      case 'retail_pos':
+        return 'Compact Retail POS';
+      case 'classic_grid':
+      default:
+        return 'Classic GST Grid';
+    }
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     final repo = Repository.instance;
     final b = await repo.getBusiness(_bizId);
     final banks = await repo.bankAccounts(_bizId);
+    final cust = await repo.getInvoiceCustomizationSettings(_bizId);
 
     if (!mounted) return;
     setState(() {
       _business = b;
       _bankAccounts = banks;
+      _customizationSettings = cust;
       if (b != null) {
         _invPrefix.text = b.invoicePrefix;
         _invSequence.text = b.invoiceSequence.toString();
@@ -538,13 +560,30 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
                       child: const Icon(Icons.auto_awesome_rounded, color: StitchColors.primary, size: 22),
                     ),
                     const SizedBox(width: 14),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Customize Commercial Invoice Theme', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: StitchColors.primary)),
-                          SizedBox(height: 2),
-                          Text('Live split-screen preview, column toggles, HSN matrix, and branding', style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                          Row(
+                            children: [
+                              const Text('Invoice Theme & Templates', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: StitchColors.primary)),
+                              const SizedBox(width: 8),
+                              if (_customizationSettings != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: StitchColors.primary.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _getTemplateName(_customizationSettings!.themeStyle),
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: StitchColors.primary),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          const Text('Billbook stylish templates, live preview, column toggles & branding', style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
                         ],
                       ),
                     ),

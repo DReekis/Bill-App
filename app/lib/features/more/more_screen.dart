@@ -279,6 +279,7 @@ class _MoreTabState extends State<MoreTab> {
         title: t('Invoice settings', 'बिल सेटिंग्स', 'ইনভয়েস সেটিংস'),
         searchKeywords: const [
           'invoice', 'settings', 'bill', 'receipt', 'print', 'printer', 'thermal', 'template', 'prefix', 'customization',
+          'billbook', 'theme', 'color', 'design',
           'बिल', 'सेटिंग्स', 'प्रिंट', 'ইনভয়েস', 'রশিদ'
         ],
         visible: session.canManageBusinessSettings,
