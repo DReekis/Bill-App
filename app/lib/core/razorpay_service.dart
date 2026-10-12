@@ -187,7 +187,13 @@ class RazorpayService {
 
       final orderData = jsonDecode(res.body);
       final orderId = orderData['orderId'] as String;
-      final keyId = orderData['keyId'] as String? ?? 'rzp_test_TlVBcJ5F1D187V';
+      final keyId = (orderData['keyId'] as String?)?.trim() ?? '';
+      if (keyId.isEmpty) {
+        return const RazorpayCheckoutResult(
+          success: false,
+          message: 'Payment Gateway is not configured on the server.',
+        );
+      }
       final amount = orderData['amount'] as int;
       _activeOrderId = orderId;
 
