@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -31,6 +30,24 @@ import '../../l10n/app_localizations.dart';
 
 export '../customers/parties_tab.dart' show PartiesTab;
 
+class _SettingsItem {
+  final IconData icon;
+  final String title;
+  final List<String> searchKeywords;
+  final VoidCallback onTap;
+  final Widget? trailing;
+  final bool visible;
+
+  const _SettingsItem({
+    required this.icon,
+    required this.title,
+    this.searchKeywords = const [],
+    required this.onTap,
+    this.trailing,
+    this.visible = true,
+  });
+}
+
 class MoreTab extends StatefulWidget {
   const MoreTab({super.key});
   @override
@@ -38,6 +55,8 @@ class MoreTab extends StatefulWidget {
 }
 
 class _MoreTabState extends State<MoreTab> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
   Business? business;
 
   Future<void> _load() async {
@@ -56,9 +75,14 @@ class _MoreTabState extends State<MoreTab> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
-    final sync = context.watch<SyncEngine>();
     final l10n = context.l10n;
     final isBn = session.localeCode == 'bn';
     final isHi = session.localeCode == 'hi';
@@ -71,6 +95,239 @@ class _MoreTabState extends State<MoreTab> {
     void nav(Widget screen) {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen)).then((_) => _load());
     }
+
+    final allItems = <_SettingsItem>[
+      _SettingsItem(
+        icon: Icons.workspace_premium_rounded,
+        title: t('Subscription & Plans', 'सब्सक्रिप्शन और प्लान', 'সাবস্ক্রিপশন ও প্ল্যান'),
+        searchKeywords: const [
+          'subscription', 'plans', 'plan', 'pricing', 'tier', 'upgrade', 'premium', 'pro', 'billing', 'license',
+          'सब्सक्रिप्शन', 'प्लान', 'সাবস্ক্রিপশন', 'প্ল্যান'
+        ],
+        onTap: () => nav(const SubscriptionPlansScreen()),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            SubscriptionService.instance.currentTier.displayName,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF2563EB),
+            ),
+          ),
+        ),
+      ),
+      _SettingsItem(
+        icon: Icons.swap_horiz_rounded,
+        title: t('Switch business', 'व्यापार बदलें', 'ব্যবসা পরিবর্তন'),
+        searchKeywords: const [
+          'switch', 'business', 'company', 'shop', 'store', 'change', 'firm',
+          'व्यापार', 'दुकान', 'ব্যবসা', 'দোকান'
+        ],
+        visible: session.canManageBusinessSettings,
+        onTap: () => showBusinessSwitcher(context).then((changed) {
+          if (changed == true) _load();
+        }),
+      ),
+      _SettingsItem(
+        icon: Icons.storefront_rounded,
+        title: t('Business Profile & Details', 'व्यापार प्रोफ़ाइल व विवरण', 'ব্যবসার প্রোফাইল ও বিবরণ'),
+        searchKeywords: const [
+          'business', 'profile', 'edit', 'details', 'name', 'address', 'gstin', 'phone', 'logo', 'terms', 'bank',
+          'कंपनी', 'प्रोफ़ाइल', 'विवरण', 'কোম্পানি', 'প্রোফাইল'
+        ],
+        visible: session.canManageBusinessSettings,
+        onTap: () => nav(const BusinessEditScreen()),
+      ),
+      _SettingsItem(
+        icon: Icons.receipt_long_outlined,
+        title: t('All Transactions', 'सभी लेन-देन', 'সকল লেনদেন'),
+        searchKeywords: const [
+          'transactions', 'transaction', 'all', 'history', 'sales', 'purchases', 'invoices', 'bills', 'orders',
+          'लेन-देन', 'बिक्री', 'खरीद', 'लेनदेन', 'বিক্রয়', 'ক্রয়'
+        ],
+        onTap: () => nav(const TransactionListScreen()),
+      ),
+      _SettingsItem(
+        icon: Icons.account_balance_outlined,
+        title: t('GST Compliance Center', 'जीएसटी केंद्र', 'জিএসটি কেন্দ্র'),
+        searchKeywords: const [
+          'gst', 'compliance', 'tax', 'gstr1', 'gstr3b', 'gstr-1', 'gstr-3b', 'returns', 'hsn', 'filing',
+          'जीएसटी', 'टैक्स', 'জিএসটি', 'ট্যাক্স', 'কর'
+        ],
+        visible: session.canManageBusinessSettings || session.canExportTally,
+        onTap: () => nav(const GstCenterScreen()),
+      ),
+      _SettingsItem(
+        icon: Icons.account_balance_wallet_outlined,
+        title: t('Cash & Bank Accounts Hub', 'कैश व बैंक खाते', 'ক্যাশ ও ব্যাংক অ্যাকাউন্ট'),
+        searchKeywords: const [
+          'cash', 'bank', 'accounts', 'wallet', 'balance', 'ledger', 'cheque', 'passbook', 'deposit', 'withdrawal',
+          'कैश', 'बैंक', 'खाता', 'ক্যাশ', 'ব্যাংক', 'অ্যাকাউন্ট'
+        ],
+        visible: session.canViewBankBalances,
+        onTap: () => nav(const CashBankHubScreen()),
+      ),
+      _SettingsItem(
+        icon: Icons.bar_chart_rounded,
+        title: t('Reports & analytics', 'रिपोर्ट्स', 'রিপোর্ট ও विश्लेषण'),
+        searchKeywords: const [
+          'reports', 'analytics', 'profit', 'loss', 'p&l', 'daybook', 'sales report', 'stock', 'summary', 'chart',
+          'रिपोर्ट', 'लाभ', 'हानि', 'রিপোর্ট', 'লাভ', 'ক্ষতি'
+        ],
+        onTap: () => nav(const ReportsScreen()),
+      ),
+      _SettingsItem(
+        icon: Icons.upload_file_rounded,
+        title: t('Bulk import', 'डेटा आयात', 'বাল্ক আমদানি'),
+        searchKeywords: const [
+          'bulk', 'import', 'excel', 'csv', 'spreadsheet', 'parties', 'items', 'customers', 'upload',
+          'आयात', 'एक्सेल', 'আমদানি', 'এক্সেল'
+        ],
+        visible: session.canManageBusinessSettings,
+        onTap: () => nav(const ImportScreen()),
+      ),
+      _SettingsItem(
+        icon: Icons.history_rounded,
+        title: t('MCA Audit Trail', 'ऑडिट लॉग', 'অডিট লগ'),
+        searchKeywords: const [
+          'mca', 'audit', 'trail', 'log', 'history', 'compliance', 'security', 'timeline', 'activity',
+          'ऑडिट', 'लॉग', 'অডিট', 'লগ'
+        ],
+        visible: session.canViewAuditTrail,
+        onTap: () => nav(const AuditTrailScreen()),
+      ),
+      _SettingsItem(
+        icon: Icons.cloud_upload_outlined,
+        title: t('Cloud Backup & Restore', 'क्लाउड बैकअप व रिस्टोर', 'ক্লাউড ব্যাকআপ ও রিস্টোর'),
+        searchKeywords: const [
+          'cloud', 'backup', 'restore', 'aws', 's3', 'online', 'drive', 'save', 'sync',
+          'क्लाउड', 'बैकअप', 'रिस्टोर', 'ক্লাউড', 'ব্যাকআপ', 'রিস্টোর'
+        ],
+        visible: session.canManageBusinessSettings,
+        onTap: () => CloudBackupSheet.show(context),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: session.isCloudLinked
+                ? const Color(0xFF16A34A).withValues(alpha: 0.1)
+                : const Color(0xFF64748B).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            session.isCloudLinked ? 'AWS S3' : 'Local',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: session.isCloudLinked ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+            ),
+          ),
+        ),
+      ),
+      _SettingsItem(
+        icon: Icons.backup_outlined,
+        title: t('Data Export & Archive', 'डेटा निर्यात व संग्रह', 'ডাটা এক্সপোর্ট ও আর্কাইভ'),
+        searchKeywords: const [
+          'data', 'export', 'archive', 'download', 'backup', 'tally', 'json', 'sqlite', 'zip',
+          'डेटा', 'निर्यात', 'ডাটা', 'এক্সপোর্ট'
+        ],
+        visible: session.canManageBusinessSettings || session.canExportTally,
+        onTap: () => nav(const BackupExportScreen()),
+      ),
+      _SettingsItem(
+        icon: Icons.translate_rounded,
+        title: 'Language / भाषा (${session.localeCode == 'bn' ? 'বাংলা' : (session.localeCode == 'hi' ? 'हिन्दी' : 'English')})',
+        searchKeywords: const [
+          'language', 'locale', 'english', 'hindi', 'bengali', 'translation', 'bhasha',
+          'भाषा', 'हिन्दी', 'ইংরেজি', 'বাংলা', 'ভাষা'
+        ],
+        onTap: () => _languageSelector(context, session),
+      ),
+      _SettingsItem(
+        icon: Icons.security_rounded,
+        title: t('Screen security (block capture)', 'स्क्रीन सुरक्षा (स्क्रीनशॉट रोकें)', 'স্ক্রিন সুরক্ষা (ক্যাপচার রোধ)'),
+        searchKeywords: const [
+          'screen', 'security', 'screenshot', 'capture', 'privacy', 'block', 'protect',
+          'स्क्रीन', 'सुरक्षा', 'स्क्रीनशॉट', 'স্ক্রিন', 'সুরক্ষা'
+        ],
+        onTap: () => session.setFlagSecure(!session.flagSecureEnabled),
+        trailing: Switch(
+          value: session.flagSecureEnabled,
+          onChanged: (val) => session.setFlagSecure(val),
+        ),
+      ),
+      _SettingsItem(
+        icon: Icons.fingerprint_rounded,
+        title: t('Biometric unlock (Fingerprint/Face)', 'बायोमेट्रिक अनलॉक', 'বায়োমেট্রিক আনলক'),
+        searchKeywords: const [
+          'biometric', 'fingerprint', 'face', 'faceid', 'touchid', 'unlock', 'security',
+          'बायोमेट्रिक', 'फिंगरप्रिंट', 'বায়োমেট্রিক'
+        ],
+        visible: session.hasPin,
+        onTap: () => session.setBiometricEnabled(!session.biometricEnabled),
+        trailing: Switch(
+          value: session.biometricEnabled,
+          onChanged: (val) => session.setBiometricEnabled(val),
+        ),
+      ),
+      _SettingsItem(
+        icon: Icons.tune_rounded,
+        title: t('Invoice settings', 'बिल सेटिंग्स', 'ইনভয়েস সেটিংস'),
+        searchKeywords: const [
+          'invoice', 'settings', 'bill', 'receipt', 'print', 'printer', 'thermal', 'template', 'prefix', 'customization',
+          'बिल', 'सेटिंग्स', 'प्रिंट', 'ইনভয়েস', 'রশিদ'
+        ],
+        visible: session.canManageBusinessSettings,
+        onTap: () => nav(const InvoiceSettingsScreen()),
+      ),
+      _SettingsItem(
+        icon: Icons.lock_rounded,
+        title: session.hasPin
+            ? t('App lock · PIN set', 'ऐप लॉक · पिन सेट है', 'অ্যাপ লক · পিন সেট আছে')
+            : t('App lock (set PIN)', 'ऐप लॉक (पिन सेट करें)', 'অ্যাপ লক (পিন সেট করুন)'),
+        searchKeywords: const [
+          'lock', 'app lock', 'pin', 'passcode', 'password', 'security', 'protect',
+          'पिन', 'ऐप लॉक', 'पासकोड', 'লক', 'পিন'
+        ],
+        onTap: () => _pinSettings(context),
+      ),
+      _SettingsItem(
+        icon: Icons.badge_outlined,
+        title: t('Staff & Role Permissions', 'स्टाफ व अनुमतियां', 'কর্মী ও অনুমতি'),
+        searchKeywords: const [
+          'staff', 'users', 'roles', 'permissions', 'team', 'employee', 'cashier', 'salesman', 'delivery', 'access',
+          'स्टाफ', 'अनुमति', 'कर्मचारी', 'কর্মী', 'অনুমতি'
+        ],
+        visible: session.canManageStaff,
+        onTap: () => nav(const StaffListScreen()),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: StitchColors.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            session.role.label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: StitchColors.primary),
+          ),
+        ),
+      ),
+    ];
+
+    final isSearching = _searchQuery.trim().isNotEmpty;
+    final query = _searchQuery.trim().toLowerCase();
+    final visibleItems = allItems.where((i) => i.visible).toList();
+    final filteredItems = isSearching
+        ? visibleItems
+            .where((item) =>
+                item.title.toLowerCase().contains(query) ||
+                item.searchKeywords.any((k) => k.toLowerCase().contains(query)))
+            .toList()
+        : visibleItems;
 
     return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 90), children: [
       Row(children: [
@@ -85,7 +342,70 @@ class _MoreTabState extends State<MoreTab> {
           ),
       ]),
       const SizedBox(height: 10),
-      _buildActivePersonaCard(context, session),
+      _buildSearchBar(context, isBn, isHi),
+      const SizedBox(height: 14),
+      if (isSearching) ...[
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10, left: 4, right: 4),
+          child: Row(
+            children: [
+              Text(
+                '${filteredItems.length} ${filteredItems.length == 1 ? t('setting found', 'सेटिंग मिली', 'সেটিংস পাওয়া গেছে') : t('settings found', 'सेटिंग्स मिलीं', 'সেটিংস পাওয়া গেছে')}',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.textSecondary),
+              ),
+              const Spacer(),
+              InkWell(
+                onTap: () {
+                  _searchController.clear();
+                  if (mounted) setState(() => _searchQuery = '');
+                },
+                child: Text(
+                  t('Clear search', 'खोज हटाएं', 'অনুসন্ধান মুছুন'),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: StitchColors.primary),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (filteredItems.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: StitchColors.surfaceVariant.withValues(alpha: 0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.search_off_rounded, size: 36, color: StitchColors.textTertiary),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  t('No settings found', 'कोई सेटिंग नहीं मिली', 'কোনো সেটিংস পাওয়া যায়নি'),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  t('No settings match "$_searchQuery".', '"$_searchQuery" के लिए कोई परिणाम नहीं मिला।', '"$_searchQuery"-এর জন্য কোনো সেটিংস মেলেনি।'),
+                  style: const TextStyle(fontSize: 13, color: StitchColors.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    _searchController.clear();
+                    if (mounted) setState(() => _searchQuery = '');
+                  },
+                  icon: const Icon(Icons.clear_rounded, size: 16),
+                  label: Text(t('Clear search', 'खोज हटाएं', 'অনুসন্ধান মুছুন')),
+                ),
+              ],
+            ),
+          ),
+      ] else ...[
+        _buildActivePersonaCard(context, session),
       const SizedBox(height: 12),
       InkWell(
         onTap: () => showBusinessSwitcher(context).then((changed) {
@@ -120,141 +440,63 @@ class _MoreTabState extends State<MoreTab> {
       const SizedBox(height: 12),
       _buildSubscriptionBannerCard(context),
       const SizedBox(height: 18),
-      _menuTile(
-        context,
-        Icons.workspace_premium_rounded,
-        t('Subscription & Plans', 'सब्सक्रिप्शन और प्लान', 'সাবস্ক্রিপশন ও প্ল্যান'),
-        () => nav(const SubscriptionPlansScreen()),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2563EB).withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            SubscriptionService.instance.currentTier.displayName,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF2563EB),
-            ),
-          ),
-        ),
-      ),
-      if (session.canManageBusinessSettings)
-        _menuTile(context, Icons.swap_horiz_rounded, t('Switch business', 'व्यापार बदलें', 'ব্যবসা পরিবর্তন'), () => showBusinessSwitcher(context).then((changed) {
-          if (changed == true) _load();
-        })),
-      _menuTile(context, Icons.receipt_long_outlined, t('All Transactions', 'सभी लेन-देन', 'সকল লেনদেন'), () => nav(const TransactionListScreen())),
-      if (session.canManageBusinessSettings || session.canExportTally)
-        _menuTile(context, Icons.account_balance_outlined, t('GST Compliance Center', 'जीएसटी केंद्र', 'জিএসটি কেন্দ্র'), () => nav(const GstCenterScreen())),
-      if (session.canViewBankBalances)
-        _menuTile(context, Icons.account_balance_wallet_outlined, t('Cash & Bank Accounts Hub', 'कैश व बैंक खाते', 'ক্যাশ ও ব্যাংক অ্যাকাউন্ট'), () => nav(const CashBankHubScreen())),
-      _menuTile(context, Icons.bar_chart_rounded, t('Reports & analytics', 'रिपोर्ट्स', 'রিপোর্ট ও বিশ্লেষণ'), () => nav(const ReportsScreen())),
-      if (session.canManageBusinessSettings)
-        _menuTile(context, Icons.upload_file_rounded, t('Bulk import', 'डेटा आयात', 'বাল্ক আমদানি'), () => nav(const ImportScreen())),
-      if (session.canViewAuditTrail)
-        _menuTile(context, Icons.history_rounded, t('MCA Audit Trail', 'ऑडिट लॉग', 'অডিট লগ'), () => nav(const AuditTrailScreen())),
-      _menuTile(context, Icons.cloud_sync_rounded, t('Data sync', 'डेटा सिंक', 'ডাটা সিঙ্ক'), () => _syncMenu(context, sync), trailing: sync.pendingCount > 0
-          ? Text('${sync.pendingCount} ${t('pending', 'बाकी', 'বাকি')}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.warning))
-          : null),
-      if (session.canManageBusinessSettings)
+      ],
+      for (final item in filteredItems)
         _menuTile(
           context,
-          Icons.cloud_upload_outlined,
-          t('Cloud Backup & Restore', 'क्लाउड बैकअप व रिस्टोर', 'ক্লাউড ব্যাকআপ ও রিস্টোর'),
-        () => CloudBackupSheet.show(context),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: session.isCloudLinked
-                ? const Color(0xFF16A34A).withValues(alpha: 0.1)
-                : const Color(0xFF64748B).withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            session.isCloudLinked ? 'AWS S3' : 'Local',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: session.isCloudLinked ? const Color(0xFF16A34A) : const Color(0xFF64748B),
-            ),
-          ),
+          item.icon,
+          item.title,
+          item.onTap,
+          trailing: item.trailing,
         ),
-      ),
-      if (session.canManageBusinessSettings || session.canExportTally)
-        _menuTile(context, Icons.backup_outlined, t('Data Export & Archive', 'डेटा निर्यात व संग्रह', 'ডাটা এক্সপোর্ট ও আর্কাইভ'), () => nav(const BackupExportScreen())),
-      _menuTile(
-        context,
-        Icons.translate_rounded,
-        'Language / ভাষা (${session.localeCode == 'bn' ? 'বাংলা' : (session.localeCode == 'hi' ? 'हिन्दी' : 'English')})',
-        () => _languageSelector(context, session),
-      ),
-      _menuTile(
-        context,
-        Icons.security_rounded,
-        t('Screen security (block capture)', 'स्क्रीन सुरक्षा (स्क्रीनशॉट रोकें)', 'স্ক্রিন সুরক্ষা (ক্যাপচার রোধ)'),
-        () => session.setFlagSecure(!session.flagSecureEnabled),
-        trailing: Switch(
-          value: session.flagSecureEnabled,
-          onChanged: (val) => session.setFlagSecure(val),
-        ),
-      ),
-      if (session.hasPin)
-        _menuTile(
-          context,
-          Icons.fingerprint_rounded,
-          t('Biometric unlock (Fingerprint/Face)', 'बायोमेट्रिक अनलॉक', 'বায়োমেট্রিক আনলক'),
-          () => session.setBiometricEnabled(!session.biometricEnabled),
-          trailing: Switch(
-            value: session.biometricEnabled,
-            onChanged: (val) => session.setBiometricEnabled(val),
-          ),
-        ),
-      if (session.canManageBusinessSettings)
-        _menuTile(context, Icons.tune_rounded, t('Invoice settings', 'बिल सेटिंग्स', 'ইনভয়েস সেটিংস'), () => nav(const InvoiceSettingsScreen())),
-      if (session.canManageBusinessSettings)
-        _menuTile(
-          context,
-          Icons.gpp_good_rounded,
-          t('GSTIN Autofill API Key', 'GSTIN ऑटो-फिल API कुंजी', 'GSTIN অটো-ফিল API কি'),
-        () => _showGstnApiKeyDialog(context, session),
-        trailing: session.gstnApiKey.isNotEmpty
-            ? const Icon(Icons.check_circle_rounded, color: StitchColors.success, size: 18)
-            : const Icon(Icons.warning_amber_rounded, color: StitchColors.warning, size: 18),
-      ),
-      _menuTile(
-        context,
-        Icons.lock_rounded,
-        session.hasPin
-            ? t('App lock · PIN set', 'ऐप लॉक · पिन सेट है', 'অ্যাপ লক · পিন সেট আছে')
-            : t('App lock (set PIN)', 'ऐप लॉक (पिन सेट करें)', 'অ্যাপ লক (পিন সেট করুন)'),
-        () => _pinSettings(context),
-      ),
-      if (session.canManageStaff)
-        _menuTile(
-          context,
-          Icons.badge_outlined,
-          t('Staff & Role Permissions', 'स्टाफ व अनुमतियां', 'কর্মী ও অনুমতি'),
-        () => nav(const StaffListScreen()),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: StitchColors.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            session.role.label,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: StitchColors.primary),
-          ),
-        ),
-      ),
       const SizedBox(height: 18),
       const Padding(
         padding: EdgeInsets.symmetric(horizontal: 4, vertical: 30),
         child: Text('Billket • local-first', style: TextStyle(fontSize: 11, color: StitchColors.textTertiary)),
       ),
     ]);
+  }
+
+
+  Widget _buildSearchBar(BuildContext context, bool isBn, bool isHi) {
+    String t(String en, String hi, String bn) {
+      if (isBn) return bn;
+      if (isHi) return hi;
+      return en;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: StitchColors.surfaceVariant.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: StitchColors.outline),
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (val) {
+          if (mounted) setState(() => _searchQuery = val);
+        },
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        decoration: InputDecoration(
+          hintText: t('Search settings & features...', 'सेटिंग्स व फीचर्स खोजें...', 'সেটিংস ও ফিচার খুঁজুন...'),
+          hintStyle: const TextStyle(fontSize: 13.5, color: StitchColors.textTertiary),
+          prefixIcon: const Icon(Icons.search_rounded, color: StitchColors.primary, size: 20),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18, color: StitchColors.textSecondary),
+                  tooltip: t('Clear', 'हटाएं', 'মুছুন'),
+                  onPressed: () {
+                    _searchController.clear();
+                    if (mounted) setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          isDense: true,
+        ),
+      ),
+    );
   }
 
   Widget _buildActivePersonaCard(BuildContext context, Session session) {
@@ -637,83 +879,6 @@ class _MoreTabState extends State<MoreTab> {
     );
   }
 
-  void _showGstnApiKeyDialog(BuildContext context, Session session) {
-    final controller = TextEditingController(text: session.gstnApiKey);
-    final isBn = session.localeCode == 'bn';
-    final isHi = session.localeCode == 'hi';
-    String t(String en, String hi, String bn) {
-      if (isBn) return bn;
-      if (isHi) return hi;
-      return en;
-    }
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.gpp_good_rounded, color: StitchColors.primary),
-            const SizedBox(width: 8),
-            Text(
-              t('GSTIN Autofill API Key', 'GSTIN ऑटो-फिल API कुंजी', 'GSTIN অটো-ফিল API কি'),
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              t(
-                'Enter your free API key (e.g. from gstincheck.co.in) to automatically fetch full business names and addresses for any GSTIN. If blank, smart offline resolution is used.',
-                'gstincheck.co.in से API कुंजी दर्ज करें ताकि GSTIN डालने पर पार्टी का नाम और पता अपने आप भर सके। यदि कुंजी नहीं है, तो ऐप स्मार्ट ऑफलाइन पद्धति का उपयोग करेगा।',
-                'GSTIN দিয়ে স্বয়ংক্রিয়ভাবে নাম ও ঠিকানা পেতে gstincheck.co.in থেকে ফ্রি API কি লিখুন। ফাঁকা রাখলে অফলাইন পদ্ধতি ব্যবহৃত হবে।',
-              ),
-              style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              decoration: InputDecoration(
-                labelText: 'API Key',
-                hintText: 'e.g. gstin_live_...',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (session.gstnApiKey.isNotEmpty)
-            TextButton(
-              onPressed: () async {
-                await session.saveGstnApiKey('');
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (context.mounted) {
-                  showAppMessage(context, t('API key cleared', 'API कुंजी हटा दी गई', 'API কি মোছা হয়েছে'));
-                }
-              },
-              child: Text(t('Clear', 'हटाएं', 'মুছুন'), style: const TextStyle(color: StitchColors.error)),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(t('Cancel', 'रद्द करें', 'বাতিল')),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await session.saveGstnApiKey(controller.text.trim());
-              if (ctx.mounted) Navigator.pop(ctx);
-              if (context.mounted) {
-                showAppMessage(context, t('GSTIN API key saved', 'GSTIN API कुंजी सहेजी गई', 'GSTIN API কি সংরক্ষিত হয়েছে'));
-              }
-            },
-            child: Text(t('Save', 'सहेजें', 'সংরক্ষণ')),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCloudAccountTile(BuildContext context, Session session) {
     final isLinked = session.isCloudLinked;
     return InkWell(
@@ -872,262 +1037,6 @@ class _MoreTabState extends State<MoreTab> {
     );
   }
 
-  void _syncMenu(BuildContext context, SyncEngine sync) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) {
-          final isOnline = sync.isOnline;
-          final pending = sync.pendingCount;
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: (isOnline ? StitchColors.success : StitchColors.warning)
-                              .withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          isOnline ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
-                          color: isOnline ? StitchColors.success : StitchColors.warning,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              isOnline ? 'Cloud Sync Online' : 'Offline Mode (Local Safe)',
-                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-                            ),
-                            Text(
-                              isOnline
-                                  ? 'Connected to backend server'
-                                  : 'Changes will sync automatically when reconnected',
-                              style: const TextStyle(fontSize: 12.5, color: StitchColors.textSecondary),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Check Connection',
-                        icon: const Icon(Icons.refresh_rounded, size: 20),
-                        onPressed: () async {
-                          await sync.checkConnectivity();
-                          setModalState(() {});
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  // Server URL configuration card
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: StitchColors.surfaceVariant,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: StitchColors.outline),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.dns_rounded, size: 20, color: StitchColors.textSecondary),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Backend Server URL',
-                                  style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
-                              Text(
-                                sync.apiClient.baseUrl,
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => _editServerUrl(context, sync, setModalState),
-                          child: const Text('Edit'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  // Sync queue metrics
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                          decoration: BoxDecoration(
-                            color: StitchColors.surface,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: StitchColors.outline),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Pending Changes',
-                                  style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
-                              const SizedBox(height: 4),
-                              Text(
-                                '$pending item${pending == 1 ? '' : 's'}',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: pending > 0 ? StitchColors.warning : StitchColors.success,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                          decoration: BoxDecoration(
-                            color: StitchColors.surface,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: StitchColors.outline),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Last Synced',
-                                  style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
-                              const SizedBox(height: 4),
-                              Text(
-                                sync.lastSyncedAt == null
-                                    ? 'Never'
-                                    : DateFormat('hh:mm a').format(sync.lastSyncedAt!),
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (sync.lastError != null) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: StitchColors.error.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline_rounded, size: 16, color: StitchColors.error),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              sync.lastError!,
-                              style: const TextStyle(fontSize: 11.5, color: StitchColors.error),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 46,
-                    child: FilledButton.icon(
-                      onPressed: sync.syncing
-                          ? null
-                          : () async {
-                              await sync.syncNow(force: true);
-                              setModalState(() {});
-                              if (context.mounted) {
-                                showAppMessage(
-                                  context,
-                                  sync.pendingCount == 0
-                                      ? 'All changes synchronized successfully'
-                                      : '${sync.pendingCount} change(s) remaining in queue',
-                                );
-                              }
-                            },
-                      icon: sync.syncing
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.sync_rounded),
-                      label: Text(sync.syncing ? 'Synchronizing...' : 'Sync Now'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _editServerUrl(BuildContext context, SyncEngine sync, StateSetter setModalState) {
-    final controller = TextEditingController(text: sync.apiClient.baseUrl);
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Backend Server URL', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Enter backend URL (e.g. http://10.0.2.2:4000 for emulator, or http://localhost:4000 via adb reverse).',
-              style: TextStyle(fontSize: 12.5, color: StitchColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'Server URL',
-                prefixIcon: Icon(Icons.link_rounded),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final newUrl = controller.text.trim();
-              if (newUrl.isNotEmpty) {
-                await sync.apiClient.setBaseUrl(newUrl);
-                await sync.checkConnectivity();
-                setModalState(() {});
-              }
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('Save & Test'),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class BackupExportScreen extends StatefulWidget {
