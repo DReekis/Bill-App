@@ -6,9 +6,11 @@ import 'package:provider/provider.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
 import '../../core/permission_service.dart';
+import '../../core/physical_barcode_scanner.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../inventory/product_form.dart';
+import 'hardware_scanner_dialog.dart';
 
 /// Camera barcode scanner for rapid counter POS item lookup.
 class BarcodeScannerScreen extends StatefulWidget {
@@ -204,6 +206,11 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen>
         ),
         actions: [
           IconButton(
+            tooltip: 'Physical Scanner (USB/Bluetooth)',
+            icon: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white),
+            onPressed: () => HardwareScannerDialog.show(context),
+          ),
+          IconButton(
             tooltip: 'Toggle Flashlight',
             icon: Icon(
               _torchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
@@ -221,92 +228,128 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen>
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          // Live Camera Stream
-          MobileScanner(
-            controller: _controller,
-            errorBuilder: (context, error, child) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.videocam_off_rounded, color: Colors.white70, size: 52),
-                      const SizedBox(height: 14),
-                      Text(
-                        error.errorCode == MobileScannerErrorCode.permissionDenied
-                            ? 'Camera Permission Required'
-                            : 'Camera Error: ${error.errorCode.name}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        error.errorCode == MobileScannerErrorCode.permissionDenied
-                            ? 'Please allow camera permission in phone Settings to scan product barcodes.'
-                            : (error.errorDetails?.message ?? 'Could not start camera feed.'),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.white70, fontSize: 13),
-                      ),
-                      const SizedBox(height: 16),
-                      if (error.errorCode == MobileScannerErrorCode.permissionDenied) ...[
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(backgroundColor: StitchColors.primary),
-                          icon: const Icon(Icons.security_rounded, size: 18),
-                          label: const Text('Grant Camera Permission'),
-                          onPressed: () async {
-                            final granted = await PermissionService.requestCameraPermission(context);
-                            if (granted) _controller.start();
-                          },
+      body: PhysicalBarcodeScannerListener(
+        onBarcodeScanned: (code) => _handleBarcode(code),
+        child: Stack(
+          children: [
+            // Live Camera Stream
+            MobileScanner(
+              controller: _controller,
+              errorBuilder: (context, error, child) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.videocam_off_rounded, color: Colors.white70, size: 52),
+                        const SizedBox(height: 14),
+                        Text(
+                          error.errorCode == MobileScannerErrorCode.permissionDenied
+                              ? 'Camera Permission Required'
+                              : 'Camera Error: ${error.errorCode.name}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
+                        Text(
+                          error.errorCode == MobileScannerErrorCode.permissionDenied
+                              ? 'Please allow camera permission in phone Settings to scan product barcodes.'
+                              : (error.errorDetails?.message ?? 'Could not start camera feed.'),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                        const SizedBox(height: 16),
+                        if (error.errorCode == MobileScannerErrorCode.permissionDenied) ...[
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(backgroundColor: StitchColors.primary),
+                            icon: const Icon(Icons.security_rounded, size: 18),
+                            label: const Text('Grant Camera Permission'),
+                            onPressed: () async {
+                              final granted = await PermissionService.requestCameraPermission(context);
+                              if (granted) _controller.start();
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white38)),
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text('Retry Camera'),
+                          onPressed: () => _controller.start(),
+                        ),
                       ],
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white38)),
-                        icon: const Icon(Icons.refresh_rounded, size: 18),
-                        label: const Text('Retry Camera'),
-                        onPressed: () => _controller.start(),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              );
-            },
-            onDetect: (capture) {
-              final barcodes = capture.barcodes;
-              for (final b in barcodes) {
-                if (b.rawValue != null && b.rawValue!.isNotEmpty) {
-                  _handleBarcode(b.rawValue!);
-                  break;
+                );
+              },
+              onDetect: (capture) {
+                final barcodes = capture.barcodes;
+                for (final b in barcodes) {
+                  if (b.rawValue != null && b.rawValue!.isNotEmpty) {
+                    _handleBarcode(b.rawValue!);
+                    break;
+                  }
                 }
-              }
-            },
-          ),
+              },
+            ),
 
-          // Reticle Overlay
-          Positioned.fill(
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  color: Colors.black.withValues(alpha: 0.6),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.crop_free_rounded, color: Colors.white70, size: 18),
-                      SizedBox(width: 8),
-                      Text(
-                        'Align barcode within frame',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+            // Reticle Overlay
+            Positioned.fill(
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    color: Colors.black.withValues(alpha: 0.6),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.crop_free_rounded, color: Colors.white70, size: 18),
+                            SizedBox(width: 8),
+                            Text(
+                              'Align barcode within frame',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        GestureDetector(
+                          onTap: () => HardwareScannerDialog.show(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.usb_rounded, color: Color(0xFF4ADE80), size: 14),
+                                SizedBox(width: 4),
+                                Icon(Icons.bluetooth_rounded, color: Color(0xFF60A5FA), size: 14),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Physical Scanner Ready (USB / Bluetooth)',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
                 const Spacer(),
                 // Centered Viewfinder Window
                 Center(
@@ -403,6 +446,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen>
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 }

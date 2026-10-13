@@ -11,6 +11,7 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
 import 'invoice_customization_screen.dart';
+import '../sales/hardware_scanner_dialog.dart';
 
 class InvoiceSettingsScreen extends StatefulWidget {
   const InvoiceSettingsScreen({super.key, this.businessId});
@@ -1029,6 +1030,42 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
                     ),
                   ),
                 ],
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // 6. POS Hardware: Physical Barcode Scanner
+            _buildSectionCard(
+              title: 'POS Hardware: Physical Barcode Scanner',
+              subtitle: 'Connect wired USB scanner guns, wireless 2.4GHz dongles, or Bluetooth HID barcode scanners for instant counter checkout.',
+              icon: Icons.qr_code_scanner_rounded,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 20),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'Hardware scanner support is active. Plug into USB port or pair via Bluetooth to scan directly into bills.',
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Color(0xFF166534)),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => HardwareScannerDialog.show(context),
+                        icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                        label: const Text('Test Scanner', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                        style: TextButton.styleFrom(foregroundColor: const Color(0xFF16A34A)),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ],

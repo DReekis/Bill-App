@@ -9,6 +9,8 @@ import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../../core/subscription_service.dart';
+import '../../core/physical_barcode_scanner.dart';
+import '../sales/barcode_scanner_screen.dart';
 import '../subscription/upgrade_paywall_sheet.dart';
 
 class ProductFormSheet extends StatefulWidget {
@@ -193,32 +195,58 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.product != null;
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Text(editing ? 'Edit product' : 'Add product',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              const Spacer(),
-              IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close_rounded)),
-            ]),
-            const SizedBox(height: 6),
-            AppTextField(controller: _name, label: 'Product / item name *'),
-            const SizedBox(height: 12),
-            Row(children: [
-              Expanded(child: AppTextField(controller: _brand, label: 'Brand')),
-              const SizedBox(width: 12),
-              Expanded(child: AppTextField(controller: _sku, label: 'SKU')),
-            ]),
-            const SizedBox(height: 12),
-            Row(children: [
-              Expanded(child: AppTextField(controller: _category, label: 'Category')),
-              const SizedBox(width: 12),
-              Expanded(child: AppTextField(controller: _barcode, label: 'Barcode')),
-            ]),
+    return PhysicalBarcodeScannerListener(
+      onBarcodeScanned: (code) {
+        setState(() => _barcode.text = code);
+        showAppMessage(context, 'Barcode scanned: $code');
+      },
+      child: Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Text(editing ? 'Edit product' : 'Add product',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                const Spacer(),
+                IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.close_rounded)),
+              ]),
+              const SizedBox(height: 6),
+              AppTextField(controller: _name, label: 'Product / item name *'),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: AppTextField(controller: _brand, label: 'Brand')),
+                const SizedBox(width: 12),
+                Expanded(child: AppTextField(controller: _sku, label: 'SKU')),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: AppTextField(controller: _category, label: 'Category')),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppTextField(
+                    controller: _barcode,
+                    label: 'Barcode',
+                    suffix: IconButton(
+                      tooltip: 'Scan Barcode',
+                      icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
+                      onPressed: () async {
+                        final res = await Navigator.push<dynamic>(
+                          context,
+                          MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
+                        );
+                        if (res == null || !mounted) return;
+                        if (res is Product) {
+                          setState(() => _barcode.text = res.barcode ?? res.sku ?? '');
+                        } else if (res is String) {
+                          setState(() => _barcode.text = res.trim());
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ]),
             const SizedBox(height: 12),
             Row(children: [
               Expanded(child: AppTextField(controller: _hsn, label: 'HSN code')),
@@ -435,6 +463,7 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
           ]),
         ),
       ),
-    );
+    ),
+  );
   }
 }

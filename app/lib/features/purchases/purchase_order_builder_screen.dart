@@ -11,6 +11,8 @@ import '../../utils/widgets.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import '../inventory/product_form.dart';
 import '../sales/barcode_scanner_screen.dart';
+import '../sales/hardware_scanner_dialog.dart';
+import '../../core/physical_barcode_scanner.dart';
 import '../sales/sales_order_builder_screen.dart';
 import '../suppliers/supplier_form.dart';
 import 'purchase_order_detail_screen.dart';
@@ -95,24 +97,23 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
   }
 
   void _scanBarcode() async {
-    final code = await Navigator.push<String>(
+    final res = await Navigator.push<dynamic>(
       context,
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
     );
-    if (code == null || code.trim().isEmpty || !mounted) return;
+    if (res == null || !mounted) return;
 
-    final trimmed = code.trim();
-    final allProds = products ?? const <Product>[];
-    final match = allProds.cast<Product?>().firstWhere(
-          (p) => p?.barcode == trimmed || p?.sku == trimmed,
-          orElse: () => null,
-        );
-
-    if (match == null) {
-      if (mounted) showAppMessage(context, 'No product with barcode "$trimmed" found', error: true);
+    if (res is Product) {
+      _addProduct(res);
       return;
     }
 
+    if (res is String && res.trim().isNotEmpty) {
+      _handleDirectBarcodeScan(res.trim());
+    }
+  }
+
+  void _addProduct(Product match) {
     final existingIndex = lines.indexWhere((l) => l.product.id == match.id);
     setState(() {
       if (existingIndex >= 0) {
@@ -126,6 +127,26 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
       }
     });
     if (mounted) showAppMessage(context, 'Scanned: ${match.name}');
+  }
+
+  void _handleDirectBarcodeScan(String rawCode) {
+    final trimmed = rawCode.trim();
+    if (trimmed.isEmpty) return;
+    final allProds = products ?? const <Product>[];
+    final lower = trimmed.toLowerCase();
+    final match = allProds.cast<Product?>().firstWhere(
+          (p) => (p?.barcode?.trim().toLowerCase() == lower) ||
+              (p?.sku?.trim().toLowerCase() == lower) ||
+              (p?.itemCode?.trim().toLowerCase() == lower),
+          orElse: () => null,
+        );
+
+    if (match == null) {
+      if (mounted) showAppMessage(context, 'No product with barcode "$trimmed" found', error: true);
+      return;
+    }
+
+    _addProduct(match);
   }
 
   void _showSupplierPickerSheet() {
@@ -430,18 +451,25 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
   Widget build(BuildContext context) {
     final totalPaise = lines.fold<int>(0, (sum, l) => sum + l.subtotalPaise);
 
-    return Scaffold(
-      backgroundColor: StitchColors.surface,
-      appBar: AppBar(
-        title: const Text('New Purchase Order', style: TextStyle(fontWeight: FontWeight.w700)),
-        actions: [
-          IconButton(
-            tooltip: 'Scan Barcode',
-            icon: const Icon(Icons.qr_code_scanner_rounded),
-            onPressed: _scanBarcode,
-          ),
-        ],
-      ),
+    return PhysicalBarcodeScannerListener(
+      onBarcodeScanned: _handleDirectBarcodeScan,
+      child: Scaffold(
+        backgroundColor: StitchColors.surface,
+        appBar: AppBar(
+          title: const Text('New Purchase Order', style: TextStyle(fontWeight: FontWeight.w700)),
+          actions: [
+            IconButton(
+              tooltip: 'Hardware Barcode Scanner (USB/Bluetooth)',
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              onPressed: () => HardwareScannerDialog.show(context),
+            ),
+            IconButton(
+              tooltip: 'Camera Barcode Scanner',
+              icon: const Icon(Icons.camera_alt_outlined),
+              onPressed: _scanBarcode,
+            ),
+          ],
+        ),
       body: Column(
         children: [
           // Order Type Selector (BillBook Style: Sell Order vs Purchase Order)
@@ -858,6 +886,7 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 }

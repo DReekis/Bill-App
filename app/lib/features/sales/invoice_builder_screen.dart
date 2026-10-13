@@ -17,6 +17,8 @@ import '../customers/customer_form.dart';
 import '../inventory/product_form.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import 'barcode_scanner_screen.dart';
+import 'hardware_scanner_dialog.dart';
+import '../../core/physical_barcode_scanner.dart';
 import '../../core/subscription_service.dart';
 import '../subscription/upgrade_paywall_sheet.dart';
 
@@ -844,6 +846,146 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
       }
     });
     _saveDraft();
+  }
+
+  Future<void> _handleDirectBarcodeScan(String rawCode) async {
+    final clean = rawCode.trim();
+    if (clean.isEmpty) return;
+
+    final session = context.read<Session>();
+    final bizId = session.businessId;
+    if (bizId == null) return;
+
+    await _refreshProducts();
+    if (!mounted) return;
+
+    final allProds = products ?? await Repository.instance.products(bizId);
+    Product? found;
+    final lower = clean.toLowerCase();
+    for (final p in allProds) {
+      if ((p.barcode?.trim().toLowerCase() == lower) ||
+          (p.sku?.trim().toLowerCase() == lower) ||
+          (p.itemCode?.trim().toLowerCase() == lower)) {
+        found = p;
+        break;
+      }
+    }
+
+    if (!mounted) return;
+
+    if (found != null) {
+      final matched = found;
+      setState(() {
+        final existingIndex = lines.indexWhere((l) => l.product.id != null && l.product.id == matched.id);
+        if (existingIndex >= 0) {
+          lines[existingIndex].qty += 1;
+          showAppMessage(context, 'Scanned ${matched.name} (Qty: ${_trimNum(lines[existingIndex].qty)})');
+        } else {
+          lines.add(_LineEdit(
+            product: matched,
+            qty: 1,
+            price: matched.salePrice,
+            discountPercent: 0,
+            gstRate: matched.gstRate,
+            taxIncluded: matched.taxIncluded,
+          ));
+          showAppMessage(context, 'Scanned and added ${matched.name}');
+        }
+      });
+      _saveDraft();
+    } else {
+      _showBarcodeNotFoundSheet(clean);
+    }
+  }
+
+  Future<void> _showBarcodeNotFoundSheet(String code) async {
+    final session = context.read<Session>();
+    final bizId = session.businessId;
+    if (bizId == null) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: StitchColors.warning.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.qr_code_scanner_rounded,
+                        color: StitchColors.warning, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Unrecognized Barcode',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No product in your catalog matches code "$code".',
+                style: const TextStyle(fontSize: 13.5, color: StitchColors.textSecondary),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Dismiss'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Add Product'),
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        await showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (context) => ProductFormSheet(
+                            businessId: bizId,
+                            initialBarcode: code,
+                            onSaved: _refreshProducts,
+                            onSavedProduct: (p) {
+                              setState(() {
+                                lines.add(_LineEdit(
+                                  product: p,
+                                  qty: 1,
+                                  price: p.salePrice,
+                                  discountPercent: 0,
+                                  gstRate: p.gstRate,
+                                  taxIncluded: p.taxIncluded,
+                                ));
+                              });
+                              _saveDraft();
+                              showAppMessage(this.context, 'Added ${p.name} to bill');
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _addItem() async {
@@ -1919,19 +2061,26 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   @override
   Widget build(BuildContext context) {
     final q = quote;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.existingInvoiceId != null
-            ? (invoiceNumber != null ? 'Edit Invoice $invoiceNumber' : 'Edit Invoice')
-            : 'New sale'),
-        actions: [
-          IconButton(
-            tooltip: 'Scan barcode',
-            icon: const Icon(Icons.qr_code_scanner_rounded),
-            onPressed: _scanBarcode,
-          ),
-        ],
-      ),
+    return PhysicalBarcodeScannerListener(
+      onBarcodeScanned: _handleDirectBarcodeScan,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.existingInvoiceId != null
+              ? (invoiceNumber != null ? 'Edit Invoice $invoiceNumber' : 'Edit Invoice')
+              : 'New sale'),
+          actions: [
+            IconButton(
+              tooltip: 'Hardware Barcode Scanner (USB/Bluetooth)',
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              onPressed: () => HardwareScannerDialog.show(context),
+            ),
+            IconButton(
+              tooltip: 'Camera barcode scanner',
+              icon: const Icon(Icons.camera_alt_outlined),
+              onPressed: _scanBarcode,
+            ),
+          ],
+        ),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 120), children: [
         // Top Document Meta: Invoice Number & Date
         Row(
@@ -2180,7 +2329,8 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           ]),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _invoiceDiscountRow(QuoteResult q) => Padding(

@@ -12,6 +12,8 @@ import '../customers/customer_form.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import '../inventory/product_form.dart';
 import 'barcode_scanner_screen.dart';
+import 'hardware_scanner_dialog.dart';
+import '../../core/physical_barcode_scanner.dart';
 
 class QuotationBuilderScreen extends StatefulWidget {
   const QuotationBuilderScreen({super.key, this.businessId, this.customerId, this.existingQuotation});
@@ -376,6 +378,30 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
     showAppMessage(context, 'Added ${product.name} to quotation');
   }
 
+  void _handleDirectBarcodeScan(String rawCode) {
+    final clean = rawCode.trim();
+    if (clean.isEmpty) return;
+    final allProds = products ?? const <Product>[];
+    final lower = clean.toLowerCase();
+    Product? found;
+    for (final p in allProds) {
+      if ((p.barcode?.trim().toLowerCase() == lower) ||
+          (p.sku?.trim().toLowerCase() == lower) ||
+          (p.itemCode?.trim().toLowerCase() == lower)) {
+        found = p;
+        break;
+      }
+    }
+    if (found != null) {
+      setState(() {
+        _addOrMergeProduct(found!, quantity: 1);
+      });
+      showAppMessage(context, 'Scanned: ${found.name}');
+    } else {
+      showAppMessage(context, 'No product with barcode "$clean" found', error: true);
+    }
+  }
+
   Future<void> _showCustomQtyDialog(int index) async {
     final l = lines[index];
     final controller = TextEditingController(text: _formatQty(l.qty));
@@ -550,18 +576,25 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
         ? customerId
         : null;
 
-    return Scaffold(
-      backgroundColor: StitchColors.surface,
-      appBar: AppBar(
-        title: Text(widget.existingQuotation != null ? 'Edit Quotation' : 'New Quotation', style: const TextStyle(fontWeight: FontWeight.w700)),
-        actions: [
-          IconButton(
-            tooltip: 'Scan Barcode',
-            icon: const Icon(Icons.qr_code_scanner_rounded),
-            onPressed: _scanBarcode,
-          ),
-        ],
-      ),
+    return PhysicalBarcodeScannerListener(
+      onBarcodeScanned: _handleDirectBarcodeScan,
+      child: Scaffold(
+        backgroundColor: StitchColors.surface,
+        appBar: AppBar(
+          title: Text(widget.existingQuotation != null ? 'Edit Quotation' : 'New Quotation', style: const TextStyle(fontWeight: FontWeight.w700)),
+          actions: [
+            IconButton(
+              tooltip: 'Hardware Barcode Scanner (USB/Bluetooth)',
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              onPressed: () => HardwareScannerDialog.show(context),
+            ),
+            IconButton(
+              tooltip: 'Camera Barcode Scanner',
+              icon: const Icon(Icons.camera_alt_outlined),
+              onPressed: _scanBarcode,
+            ),
+          ],
+        ),
       body: Column(
         children: [
           // Top Document Meta: Estimate Number & Date
@@ -978,7 +1011,8 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 }
 
