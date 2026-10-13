@@ -3,11 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
-import 'package:billket/core/models.dart';
 import 'package:billket/core/session.dart';
 import 'package:billket/core/physical_barcode_scanner.dart';
 import 'package:billket/features/sales/hardware_scanner_dialog.dart';
-import 'package:billket/features/sales/barcode_scanner_screen.dart';
 
 void main() {
   setUp(() {

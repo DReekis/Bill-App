@@ -311,5 +311,113 @@ void main() {
         expect(String.fromCharCodes(bytes.sublist(0, 5)), '%PDF-');
       }
     });
+
+    test('buildDocumentPdf renders multi-page invoice with closing container at end', () async {
+      final testBank = BankAccount(
+        id: 1,
+        businessId: 1,
+        bankName: 'Axis Bank, DHARMANAGAR',
+        accountName: 'Bishwajit Dhar',
+        accountNumber: '923010060652484',
+        ifsc: 'UTIB0000708',
+      );
+
+      final multiLines = List.generate(
+        25,
+        (i) => InvoiceLine(
+          name: 'Item ${i + 1} Industrial PVC Pipe 20mm',
+          hsn: '39174000',
+          quantity: (i + 1) * 10,
+          unit: 'Pcs',
+          price: 4500,
+          discount: 0,
+          taxable: (i + 1) * 45000,
+          tax: (i + 1) * 8100,
+          gstRate: 18,
+        ),
+      );
+
+      final totalTaxable = multiLines.fold(0, (s, l) => s + l.taxable);
+      final totalTax = multiLines.fold(0, (s, l) => s + l.tax);
+      final grandTotal = totalTaxable + totalTax;
+
+      final settings = InvoiceCustomizationSettings(
+        themeStyle: 'billbook_stylish',
+        primaryColorHex: '#6B21A8',
+        showBankDetails: true,
+        showUpiQr: true,
+        showTerms: true,
+        showDeclaration: true,
+        showHsnSummaryTable: true,
+        bankQrPlacement: 'left',
+      );
+
+      final pdfBytes = await buildDocumentPdf(
+        business: testBusiness,
+        title: 'Tax Invoice',
+        number: 'MT/2026-27/01137',
+        date: '2026-08-28',
+        partyName: 'BALAJI ENTERPRISE',
+        lines: multiLines,
+        subtotal: totalTaxable,
+        discount: 0,
+        taxable: totalTaxable,
+        igst: 0,
+        cgst: totalTax ~/ 2,
+        sgst: totalTax - (totalTax ~/ 2),
+        roundOff: 0,
+        total: grandTotal,
+        outstandingPaise: 0,
+        bankAccount: testBank,
+        termsText: '1. Goods once sold will not be taken back.\n2. Interest @18% p.a. charged if payment not made within due date.',
+        settings: settings,
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+    });
+
+    test('buildDocumentPdf renders with bankQrPlacement right cleanly', () async {
+      final testBank = BankAccount(
+        id: 1,
+        businessId: 1,
+        bankName: 'Bank Of India, Dharmanagar',
+        accountName: 'MAHADEV TRADERS',
+        accountNumber: '502320110000274',
+        ifsc: 'BKID0005023',
+      );
+
+      final settings = InvoiceCustomizationSettings(
+        themeStyle: 'classic_grid',
+        showBankDetails: true,
+        showUpiQr: true,
+        showTerms: true,
+        bankQrPlacement: 'right',
+      );
+
+      final pdfBytes = await buildDocumentPdf(
+        business: testBusiness,
+        title: 'Tax Invoice',
+        number: 'INV-RIGHT-001',
+        date: '2026-08-28',
+        partyName: 'SARADA DEBI ENTERPRISE',
+        lines: testLines,
+        subtotal: 88000,
+        discount: 1000,
+        taxable: 87000,
+        igst: 0,
+        cgst: 2175,
+        sgst: 2175,
+        roundOff: 0,
+        total: 91350,
+        outstandingPaise: 91350,
+        bankAccount: testBank,
+        termsText: 'Payment due upon receipt.',
+        settings: settings,
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+    });
   });
 }
