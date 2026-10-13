@@ -935,6 +935,7 @@ class InvoiceCustomizationSettings {
     this.declarationText =
         'We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct.',
     this.customTitleOverride,
+    this.businessNameOverride,
     DateTime? updatedAt,
   }) : updatedAt = updatedAt ?? DateTime.now();
 
@@ -966,6 +967,7 @@ class InvoiceCustomizationSettings {
   String? signatureImagePath;
   String declarationText;
   String? customTitleOverride;
+  String? businessNameOverride;
   DateTime updatedAt;
 
   Map<String, Object?> toMap() => {
@@ -997,6 +999,7 @@ class InvoiceCustomizationSettings {
         'signature_image_path': signatureImagePath,
         'declaration_text': declarationText,
         'custom_title_override': customTitleOverride,
+        'business_name_override': businessNameOverride,
         'updated_at': updatedAt.toIso8601String(),
       };
 
@@ -1031,6 +1034,7 @@ class InvoiceCustomizationSettings {
         declarationText: map['declaration_text'] as String? ??
             'We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct.',
         customTitleOverride: map['custom_title_override'] as String?,
+        businessNameOverride: map['business_name_override'] as String?,
         updatedAt: map['updated_at'] != null
             ? DateTime.tryParse(map['updated_at'] as String) ?? DateTime.now()
             : DateTime.now(),
@@ -1063,6 +1067,7 @@ class InvoiceCustomizationSettings {
     String? signatureImagePath,
     String? declarationText,
     String? customTitleOverride,
+    String? businessNameOverride,
   }) =>
       InvoiceCustomizationSettings(
         id: id,
@@ -1093,6 +1098,7 @@ class InvoiceCustomizationSettings {
         signatureImagePath: signatureImagePath ?? this.signatureImagePath,
         declarationText: declarationText ?? this.declarationText,
         customTitleOverride: customTitleOverride ?? this.customTitleOverride,
+        businessNameOverride: businessNameOverride ?? this.businessNameOverride,
         updatedAt: DateTime.now(),
       );
 }

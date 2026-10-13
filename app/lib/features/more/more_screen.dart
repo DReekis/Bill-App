@@ -25,6 +25,7 @@ import '../auth/login_screen.dart';
 import '../backup/cloud_backup_sheet.dart';
 import 'import_screen.dart';
 import '../subscription/subscription_plans_screen.dart';
+import '../sales/hardware_scanner_dialog.dart';
 import '../../core/subscription_service.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -284,6 +285,15 @@ class _MoreTabState extends State<MoreTab> {
         ],
         visible: session.canManageBusinessSettings,
         onTap: () => nav(const InvoiceSettingsScreen()),
+      ),
+      _SettingsItem(
+        icon: Icons.qr_code_scanner_rounded,
+        title: t('POS Hardware & Scanners', 'पीओएस हार्डवेयर व स्कैनर', 'পিওএস হার্ডওয়্যার ও স্ক্যানার'),
+        searchKeywords: const [
+          'pos', 'hardware', 'scanner', 'barcode', 'usb', 'bluetooth', 'gun', 'scan', 'device', 'laser',
+          'हार्डवेयर', 'स्कैनर', 'বারকোড', 'স্ক্যানার'
+        ],
+        onTap: () => HardwareScannerDialog.show(context),
       ),
       _SettingsItem(
         icon: Icons.lock_rounded,

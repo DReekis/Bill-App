@@ -249,6 +249,7 @@ class AppDatabase {
           signature_image_path TEXT,
           declaration_text TEXT NOT NULL DEFAULT 'We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct.',
           custom_title_override TEXT,
+          business_name_override TEXT,
           updated_at TEXT NOT NULL
         );
       ''');
@@ -260,6 +261,7 @@ class AppDatabase {
     await _addColumnIfNotExists(db, 'invoice_customization_settings', 'show_declaration', 'INTEGER NOT NULL DEFAULT 1');
     await _addColumnIfNotExists(db, 'invoice_customization_settings', 'bank_qr_placement', "TEXT NOT NULL DEFAULT 'left'");
     await _addColumnIfNotExists(db, 'invoice_customization_settings', 'signature_placement', "TEXT NOT NULL DEFAULT 'right'");
+    await _addColumnIfNotExists(db, 'invoice_customization_settings', 'business_name_override', 'TEXT');
 
     await _addColumnIfNotExists(db, 'businesses', 'subscription_tier', "TEXT DEFAULT 'free'");
     await _addColumnIfNotExists(db, 'businesses', 'subscription_status', "TEXT DEFAULT 'active'");
@@ -854,6 +856,7 @@ class AppDatabase {
         signature_image_path TEXT,
         declaration_text TEXT NOT NULL DEFAULT 'We declare that this invoice shows the actual price of the goods/services described and that all particulars are true and correct.',
         custom_title_override TEXT,
+        business_name_override TEXT,
         updated_at TEXT NOT NULL
       )
     ''');

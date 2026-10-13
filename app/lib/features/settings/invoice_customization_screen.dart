@@ -31,6 +31,7 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
   // Controllers
   final _titleController = TextEditingController();
   final _declarationController = TextEditingController();
+  final _brandNameController = TextEditingController();
 
   static const List<Map<String, String>> _curatedColors = [
     {'name': 'Navy Blue', 'hex': '#1E3A8A'},
@@ -225,6 +226,7 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
     _tabController.dispose();
     _titleController.dispose();
     _declarationController.dispose();
+    _brandNameController.dispose();
     super.dispose();
   }
 
@@ -243,6 +245,9 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
       _bankAccounts = banks.where((b) => !b.inactive).toList();
       _titleController.text = settings.customTitleOverride ?? '';
       _declarationController.text = settings.declarationText;
+      _brandNameController.text = settings.businessNameOverride?.isNotEmpty == true
+          ? settings.businessNameOverride!
+          : (biz?.name ?? '');
       _loading = false;
     });
   }
@@ -512,11 +517,18 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
     if (_settings == null || _business == null) return;
     setState(() => _saving = true);
     try {
+      final brandText = _brandNameController.text.trim();
       final updated = _settings!.copyWith(
         customTitleOverride: _titleController.text.trim().isEmpty ? null : _titleController.text.trim(),
         declarationText: _declarationController.text.trim(),
+        businessNameOverride: brandText.isEmpty ? null : brandText,
       );
       await Repository.instance.saveInvoiceCustomizationSettings(updated);
+      if (brandText.isNotEmpty && _business != null && _business!.name != brandText) {
+        final updatedBiz = _business!.copyWith(name: brandText);
+        await Repository.instance.updateBusiness(updatedBiz);
+        _business = updatedBiz;
+      }
       setState(() => _settings = updated);
       if (mounted) {
         showAppMessage(context, 'Invoice customization settings saved successfully');
@@ -534,9 +546,11 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
     if (_business == null || _settings == null) {
       return Uint8List(0);
     }
+    final brandText = _brandNameController.text.trim();
     final currentSettings = _settings!.copyWith(
       customTitleOverride: _titleController.text.trim().isEmpty ? null : _titleController.text.trim(),
       declarationText: _declarationController.text.trim(),
+      businessNameOverride: brandText.isEmpty ? null : brandText,
     );
 
     BankAccount? primaryBank;
@@ -688,7 +702,7 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
   }
 
   Widget _buildPdfPreviewWidget() {
-    final settingsKey = '${_settings?.themeStyle}_${_settings?.primaryColorHex}_${_settings?.showHsnColumn}_${_settings?.showUnitColumn}_${_settings?.showDiscountColumn}_${_settings?.showTaxColumn}_${_settings?.showShipTo}_${_settings?.showBankDetails}_${_settings?.showUpiQr}_${_settings?.showSignatureBox}_${_settings?.bankQrPlacement}_${_settings?.signaturePlacement}_${_settings?.logoPlacement}_${_settings?.showHsnSummaryTable}_${_settings?.showTerms}_${_settings?.showDeclaration}_${_settings?.signatureImagePath}_${_business?.logoPath}_${_titleController.text}_${_declarationController.text}';
+    final settingsKey = '${_settings?.themeStyle}_${_settings?.primaryColorHex}_${_settings?.showHsnColumn}_${_settings?.showUnitColumn}_${_settings?.showDiscountColumn}_${_settings?.showTaxColumn}_${_settings?.showShipTo}_${_settings?.showBankDetails}_${_settings?.showUpiQr}_${_settings?.showSignatureBox}_${_settings?.bankQrPlacement}_${_settings?.signaturePlacement}_${_settings?.logoPlacement}_${_settings?.showHsnSummaryTable}_${_settings?.showTerms}_${_settings?.showDeclaration}_${_settings?.signatureImagePath}_${_business?.logoPath}_${_titleController.text}_${_declarationController.text}_${_brandNameController.text}';
 
     return PdfPreview(
       key: ValueKey(settingsKey),
@@ -895,6 +909,14 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Logo and Business Overview
+              AppTextField(
+                controller: _brandNameController,
+                label: 'Brand / Business Name on Invoices',
+                hint: 'e.g. Balaji Enterprises, Apex Store',
+                icon: Icons.storefront_rounded,
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -935,7 +957,10 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(biz.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                        Text(
+                          _brandNameController.text.trim().isNotEmpty ? _brandNameController.text.trim() : biz.name,
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                        ),
                         const SizedBox(height: 2),
                         if (biz.displayInvoicePhone.isNotEmpty)
                           Text('📞 ${biz.displayInvoicePhone}', style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),

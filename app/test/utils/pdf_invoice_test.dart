@@ -51,6 +51,14 @@ void main() {
       );
       expect(getBusinessUpiId(biz), 'merchant@paytm');
     });
+
+    test('getEffectiveBusinessName respects businessNameOverride over business.name', () {
+      final biz = Business(name: 'Dhar Enterprises Pvt Ltd');
+      final settings = InvoiceCustomizationSettings(businessNameOverride: 'Balaji Supermarket');
+      expect(getEffectiveBusinessName(biz, settings), 'Balaji Supermarket');
+      expect(getEffectiveBusinessName(biz, null), 'Dhar Enterprises Pvt Ltd');
+      expect(getEffectiveBusinessName(biz, InvoiceCustomizationSettings(businessNameOverride: '  ')), 'Dhar Enterprises Pvt Ltd');
+    });
   });
 
   group('PDF & Thermal Print Generation tests', () {

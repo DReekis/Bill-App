@@ -35,13 +35,22 @@ String getBusinessUpiId(Business business) {
   return 'merchant@upi';
 }
 
+String getEffectiveBusinessName(Business business, [InvoiceCustomizationSettings? customSettings]) {
+  final override = customSettings?.businessNameOverride?.trim();
+  if (override != null && override.isNotEmpty) {
+    return override;
+  }
+  return business.name;
+}
+
 String generateUpiPaymentUri({
   required Business business,
   required String invoiceNumber,
   required int amountPaise,
+  InvoiceCustomizationSettings? customSettings,
 }) {
   final vpa = getBusinessUpiId(business);
-  final payeeName = Uri.encodeComponent(business.name.trim());
+  final payeeName = Uri.encodeComponent(getEffectiveBusinessName(business, customSettings).trim());
   final amount = (amountPaise / 100).toStringAsFixed(2);
   final note = Uri.encodeComponent('Invoice $invoiceNumber');
   return 'upi://pay?pa=$vpa&pn=$payeeName&am=$amount&cu=INR&tn=$note';
@@ -449,7 +458,7 @@ Future<Uint8List> buildDocumentPdf({
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
-                        business.name.toUpperCase(),
+                        getEffectiveBusinessName(business, customSettings).toUpperCase(),
                         style: pw.TextStyle(font: bold, fontSize: 13.5, color: primaryColor),
                       ),
                       if (customSettings.showAddress) ...[
@@ -602,7 +611,7 @@ Future<Uint8List> buildDocumentPdf({
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
-                        business.name.toUpperCase(),
+                        getEffectiveBusinessName(business, customSettings).toUpperCase(),
                         style: pw.TextStyle(font: bold, fontSize: 13.5, color: primaryColor),
                       ),
                       if (customSettings.showAddress && (business.address?.isNotEmpty == true || business.city?.isNotEmpty == true))
@@ -652,7 +661,7 @@ Future<Uint8List> buildDocumentPdf({
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text(business.name.toUpperCase(), style: pw.TextStyle(font: bold, fontSize: 10, color: primaryColor)),
+                    pw.Text(getEffectiveBusinessName(business, customSettings).toUpperCase(), style: pw.TextStyle(font: bold, fontSize: 10, color: primaryColor)),
                     if (business.gstin?.isNotEmpty == true && customSettings.showGstin)
                       pw.Text('GSTIN: ${business.gstin}', style: pw.TextStyle(font: bold, fontSize: 7, color: slateDark)),
                     if (business.displayInvoicePhone.isNotEmpty && customSettings.showPhone)
@@ -696,7 +705,7 @@ Future<Uint8List> buildDocumentPdf({
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
-                        business.name.toUpperCase(),
+                        getEffectiveBusinessName(business, customSettings).toUpperCase(),
                         style: pw.TextStyle(font: bold, fontSize: 13, color: primaryColor),
                       ),
                       if (customSettings.showAddress) ...[
@@ -1621,7 +1630,7 @@ Future<Uint8List> buildDocumentPdf({
                             pw.RichText(
                               text: pw.TextSpan(children: [
                                 pw.TextSpan(text: 'Name: ', style: pw.TextStyle(font: regular, fontSize: 7, color: slateDark)),
-                                pw.TextSpan(text: bankAccount.accountName ?? business.name, style: pw.TextStyle(font: bold, fontSize: 7, color: slateDark)),
+                                pw.TextSpan(text: bankAccount.accountName ?? getEffectiveBusinessName(business, customSettings), style: pw.TextStyle(font: bold, fontSize: 7, color: slateDark)),
                               ]),
                             ),
                             pw.RichText(
@@ -1692,7 +1701,7 @@ Future<Uint8List> buildDocumentPdf({
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(
-                  'For : ${business.name.toUpperCase()}',
+                  'For : ${getEffectiveBusinessName(business, customSettings).toUpperCase()}',
                   style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark),
                   textAlign: pw.TextAlign.center,
                 ),
@@ -1858,6 +1867,7 @@ Future<Uint8List> buildThermalReceiptPdf({
   required int outstandingPaise,
   String? notes,
   InvoicePaperSize paperSize = InvoicePaperSize.roll80mm,
+  InvoiceCustomizationSettings? settings,
 }) async {
   final doc = pw.Document();
   final mono = pw.Font.courier();
@@ -1876,7 +1886,7 @@ Future<Uint8List> buildThermalReceiptPdf({
         children: [
           pw.Center(
             child: pw.Text(
-              business.name.toUpperCase(),
+              getEffectiveBusinessName(business, settings).toUpperCase(),
               style: pw.TextStyle(font: monoBold, fontSize: titleSize),
               textAlign: pw.TextAlign.center,
             ),
