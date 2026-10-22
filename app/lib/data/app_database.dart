@@ -216,6 +216,7 @@ class AppDatabase {
     await _addColumnIfNotExists(db, 'invoices', 'lr_rr_number', 'TEXT');
     await _addColumnIfNotExists(db, 'invoices', 'reverse_charge', 'INTEGER DEFAULT 0');
     await _addColumnIfNotExists(db, 'invoices', 'custom_fields_json', "TEXT DEFAULT '{}'");
+    await _addColumnIfNotExists(db, 'invoices', 'charges_json', "TEXT DEFAULT '[]'");
     await _addColumnIfNotExists(db, 'invoice_items', 'unit', 'TEXT');
 
     try {
@@ -453,7 +454,8 @@ class AppDatabase {
         eway_bill_number TEXT,
         lr_rr_number TEXT,
         reverse_charge INTEGER DEFAULT 0,
-        custom_fields_json TEXT DEFAULT '{}'
+        custom_fields_json TEXT DEFAULT '{}',
+        charges_json TEXT DEFAULT '[]'
       )
     ''');
 

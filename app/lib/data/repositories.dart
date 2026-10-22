@@ -813,6 +813,7 @@ class Repository {
     String? lrRrNumber,
     bool reverseCharge = false,
     String? customFieldsJson,
+    List<InvoiceCharge> charges = const [],
   }) async {
     final db = await _database;
     String finalNumber = number;
@@ -885,6 +886,7 @@ class Repository {
         'lr_rr_number': lrRrNumber,
         'reverse_charge': reverseCharge ? 1 : 0,
         'custom_fields_json': customFieldsJson ?? '{}',
+        'charges_json': jsonEncode(charges.map((c) => c.toMap()).toList()),
       });
 
       // Automatically advance invoice_sequence in businesses table
@@ -1009,6 +1011,32 @@ class Repository {
           'note': 'GST output $finalNumber',
         });
       }
+      final tcsPaise = quote.tcsTotal.paise;
+      if (tcsPaise > 0) {
+        await txn.insert('ledger', {
+          'business_id': businessId,
+          'date': date,
+          'account': 'tax:tcs',
+          'debit': 0,
+          'credit': tcsPaise,
+          'ref_type': 'invoice',
+          'ref_id': invoiceId,
+          'note': 'TCS Tax Liability $finalNumber',
+        });
+      }
+      final chargesPaise = quote.chargesSubtotal.paise;
+      if (chargesPaise > 0) {
+        await txn.insert('ledger', {
+          'business_id': businessId,
+          'date': date,
+          'account': 'income:charges',
+          'debit': 0,
+          'credit': chargesPaise,
+          'ref_type': 'invoice',
+          'ref_id': invoiceId,
+          'note': 'Additional Charges $finalNumber',
+        });
+      }
       await txn.insert('ledger', {
         'business_id': businessId,
         'date': date,
@@ -1122,6 +1150,7 @@ class Repository {
     String? lrRrNumber,
     bool reverseCharge = false,
     String? customFieldsJson,
+    List<InvoiceCharge> charges = const [],
   }) async {
     final db = await _database;
     Map<String, Object?>? beforeAudit;
@@ -1337,6 +1366,32 @@ class Repository {
           'note': 'GST output $number',
         });
       }
+      final tcsPaise = quote.tcsTotal.paise;
+      if (tcsPaise > 0) {
+        await txn.insert('ledger', {
+          'business_id': businessId,
+          'date': date,
+          'account': 'tax:tcs',
+          'debit': 0,
+          'credit': tcsPaise,
+          'ref_type': 'invoice',
+          'ref_id': invoiceId,
+          'note': 'TCS Tax Liability $number',
+        });
+      }
+      final chargesPaise = quote.chargesSubtotal.paise;
+      if (chargesPaise > 0) {
+        await txn.insert('ledger', {
+          'business_id': businessId,
+          'date': date,
+          'account': 'income:charges',
+          'debit': 0,
+          'credit': chargesPaise,
+          'ref_type': 'invoice',
+          'ref_id': invoiceId,
+          'note': 'Additional Charges $number',
+        });
+      }
       final total = quote.total.paise;
       await txn.insert('ledger', {
         'business_id': businessId,
@@ -1421,6 +1476,7 @@ class Repository {
         'lr_rr_number': lrRrNumber,
         'reverse_charge': reverseCharge ? 1 : 0,
         'custom_fields_json': customFieldsJson ?? '{}',
+        'charges_json': jsonEncode(charges.map((c) => c.toMap()).toList()),
       }, where: 'id = ?', whereArgs: [invoiceId]);
     });
 

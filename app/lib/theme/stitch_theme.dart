@@ -136,6 +136,11 @@ ThemeData buildStitchTheme() {
         borderSide: const BorderSide(color: StitchColors.primary, width: 1.6),
       ),
       labelStyle: const TextStyle(color: StitchColors.textSecondary),
+      hintStyle: const TextStyle(
+        color: Color(0xFF94A3B8),
+        fontWeight: FontWeight.w400,
+        fontSize: 14,
+      ),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,

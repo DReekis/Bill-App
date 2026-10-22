@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,6 +56,7 @@ class _LineEdit {
 
 class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   List<_LineEdit> lines = [];
+  List<InvoiceCharge> charges = [];
   Business? business;
   List<Customer>? customers;
   List<Product>? products;
@@ -106,26 +108,33 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
 
   QuoteResult? get quote => _quoteFor();
 
-  QuoteResult? _quoteFor({bool? intraStateOverride}) =>
-      lines.isEmpty ? null : BillingEngine.calculateQuote(
-            lines: lines.map((l) => LineCalcInput(
-              quantity: l.qty,
-              price: l.price,
-              discountPercent: l.discountPercent,
-              gstRate: l.gstRate,
-              taxIncluded: l.taxIncluded,
-            )).toList(),
-            invoiceDiscount: invoiceDiscountType == 'percent'
-                ? InvoiceDiscountInput.percent(invoiceDiscountValue)
-                : invoiceDiscountType == 'flat'
-                    ? InvoiceDiscountInput.flat(invoiceDiscountValue)
-                    : const InvoiceDiscountInput.none(),
-            gstEnabled: business?.taxRegistered ?? false,
-            businessTaxRegistered: business?.taxRegistered ?? false,
-            businessState: _clean(business?.state),
-            customerState: _clean(placeOfSupply ?? (shipToDifferent ? shipToState : customerState)),
-            intraStateOverride: manualIntraStateOverride ?? intraStateOverride,
-          );
+  QuoteResult? _quoteFor({bool? intraStateOverride}) {
+    if (lines.isEmpty && charges.isEmpty) return null;
+    final hasTaxable = lines.any((l) => l.gstRate > 0) || charges.any((c) => c.gstRate > 0);
+    final isTaxReg = (business?.taxRegistered ?? false) || hasTaxable;
+    final effectivePos = placeOfSupply ?? (shipToDifferent ? shipToState : (customerState ?? business?.state));
+
+    return BillingEngine.calculateQuote(
+      lines: lines.map((l) => LineCalcInput(
+        quantity: l.qty,
+        price: l.price,
+        discountPercent: l.discountPercent,
+        gstRate: l.gstRate,
+        taxIncluded: l.taxIncluded,
+      )).toList(),
+      charges: charges,
+      invoiceDiscount: invoiceDiscountType == 'percent'
+          ? InvoiceDiscountInput.percent(invoiceDiscountValue)
+          : invoiceDiscountType == 'flat'
+              ? InvoiceDiscountInput.flat(invoiceDiscountValue)
+              : const InvoiceDiscountInput.none(),
+      gstEnabled: isTaxReg,
+      businessTaxRegistered: isTaxReg,
+      businessState: _clean(business?.state),
+      customerState: _clean(effectivePos),
+      intraStateOverride: manualIntraStateOverride ?? intraStateOverride,
+    );
+  }
 
   Future<void> _load() async {
     final businessId = context.read<Session>().businessId;
@@ -155,7 +164,23 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
         }
 
         final existingLines = <_LineEdit>[];
+        final existingCharges = <InvoiceCharge>[...inv.charges];
         for (final l in inv.lines) {
+          if (l.productId == null &&
+              (l.name.toLowerCase().contains('tcs') ||
+                  l.name.toLowerCase().contains('delivery') ||
+                  l.name.toLowerCase().contains('shipping') ||
+                  l.name.toLowerCase().contains('packaging') ||
+                  l.name.toLowerCase().contains('charge'))) {
+            existingCharges.add(InvoiceCharge(
+              name: l.name,
+              amount: l.taxable,
+              gstRate: l.gstRate,
+              hsn: l.hsn,
+              chargeType: l.name.toLowerCase().contains('tcs') ? 'tcs' : 'charge',
+            ));
+            continue;
+          }
           Product? prod;
           if (l.productId != null && prods.isNotEmpty) {
             for (final p in prods) {
@@ -174,13 +199,14 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             taxIncluded: false,
           );
 
+          final isIncl = prod.taxIncluded || (l.tax > 0 && (l.taxable + l.tax) == (l.price * l.quantity).round());
           existingLines.add(_LineEdit(
             product: prod,
             qty: l.quantity,
             price: l.price,
             discountPercent: l.discountPercent,
             gstRate: l.gstRate,
-            taxIncluded: false,
+            taxIncluded: isIncl,
             unit: l.unit ?? prod.unit,
             batch: l.batchNumber,
             serial: l.serialNumber,
@@ -214,6 +240,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           initialPaymentMode = inv.paymentMode;
           existingNotes = inv.notes;
           lines = existingLines;
+          charges = existingCharges;
         });
         return;
       }
@@ -320,11 +347,12 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     final businessId = context.read<Session>().businessId;
     if (businessId == null) return;
     final prefs = await SharedPreferences.getInstance();
-    if (lines.isEmpty && customerId == null) {
+    if (lines.isEmpty && charges.isEmpty && customerId == null) {
       await prefs.remove(_draftKey(businessId));
       return;
     }
     final data = {
+      'charges': charges.map((c) => c.toMap()).toList(),
       'customerId': customerId,
       'customerName': customerName,
       'customerState': customerState,
@@ -363,7 +391,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   }
 
   Future<void> _checkDraft(int bizId) async {
-    if (widget.existingInvoiceId != null || widget.customerId != null || lines.isNotEmpty) return;
+    if (widget.existingInvoiceId != null || widget.customerId != null || lines.isNotEmpty || charges.isNotEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_draftKey(bizId));
     if (raw == null || raw.isEmpty) return;
@@ -480,8 +508,17 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           }
         }
 
+        final draftCharges = (decoded['charges'] as List?) ?? [];
+        final restoredCharges = <InvoiceCharge>[];
+        for (final c in draftCharges) {
+          if (c is Map) {
+            restoredCharges.add(InvoiceCharge.fromMap(Map<String, dynamic>.from(c)));
+          }
+        }
+
         setState(() {
           lines = restored;
+          charges = restoredCharges;
           customerId = decoded['customerId'] as int?;
           customerName = decoded['customerName'] as String?;
           customerState = decoded['customerState'] as String?;
@@ -1088,192 +1125,48 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     _saveDraft();
   }
 
-  Future<void> _addCharge() async {
-    final nameController = TextEditingController(text: 'Delivery / Shipping');
-    final amountController = TextEditingController();
-    final hsnController = TextEditingController(text: '9965');
-    int gstRate = 18;
-    String selectedPreset = 'Delivery / Shipping';
-    String? amountError;
+  void _removeCharge(InvoiceCharge charge) {
+    setState(() => charges.remove(charge));
+    _saveDraft();
+  }
 
-    final presets = [
-      {'name': 'Delivery / Shipping', 'hsn': '9965', 'gst': 18},
-      {'name': 'TCS (Tax Collected at Source)', 'hsn': '9999', 'gst': 0},
-      {'name': 'Packaging & Forwarding', 'hsn': '9968', 'gst': 18},
-      {'name': 'Installation / Labour', 'hsn': '9987', 'gst': 18},
-      {'name': 'Handling Fee', 'hsn': '9997', 'gst': 18},
-      {'name': 'Custom Charge', 'hsn': '', 'gst': 0},
-    ];
+  Future<void> _addCharge([InvoiceCharge? existingCharge, int? editIndex]) async {
+    final q = quote;
+    final currentInvoiceBase = q != null && q.taxable.paise > 0
+        ? (q.taxable.paise / 100.0)
+        : (lines.isNotEmpty ? lines.fold<double>(0.0, (s, l) => s + (l.qty * l.price / 100.0)) : 0.0);
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-          child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: StitchColors.primary.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.toll_outlined, color: StitchColors.primary, size: 22),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Add Charge / TCS / Service',
-                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  const Text('Quick Presets:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: presets.map((p) {
-                      final isSelected = selectedPreset == p['name'];
-                      return ChoiceChip(
-                        label: Text(p['name'] as String, style: TextStyle(fontSize: 11.5, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500)),
-                        selected: isSelected,
-                        onSelected: (val) {
-                          if (val) {
-                            setSheetState(() {
-                              selectedPreset = p['name'] as String;
-                              if (selectedPreset == 'Custom Charge') {
-                                nameController.text = '';
-                                hsnController.text = '';
-                                gstRate = 0;
-                              } else {
-                                nameController.text = p['name'] as String;
-                                hsnController.text = p['hsn'] as String;
-                                gstRate = p['gst'] as int;
-                              }
-                            });
-                          }
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: nameController,
-                    decoration: inputDecoration('Charge / Description', hint: 'e.g. Delivery Charge, TCS @ 0.1%'),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: amountController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          autofocus: true,
-                          onChanged: (_) {
-                            if (amountError != null) {
-                              setSheetState(() => amountError = null);
-                            }
-                          },
-                          decoration: inputDecoration('Amount (₹)', hint: '0.00').copyWith(
-                            errorText: amountError,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<int>(
-                          key: ValueKey('charge-gst-$gstRate'),
-                          initialValue: gstRate,
-                          decoration: inputDecoration('GST %'),
-                          items: const [
-                            DropdownMenuItem(value: 0, child: Text('0% (Exempt/TCS)')),
-                            DropdownMenuItem(value: 5, child: Text('5%')),
-                            DropdownMenuItem(value: 12, child: Text('12%')),
-                            DropdownMenuItem(value: 18, child: Text('18%')),
-                            DropdownMenuItem(value: 28, child: Text('28%')),
-                          ],
-                          onChanged: (v) => setSheetState(() => gstRate = v ?? 0),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: hsnController,
-                    decoration: inputDecoration('HSN / SAC Code (optional)', hint: 'e.g. 9965'),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Cancel'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () {
-                            final rawName = nameController.text.trim();
-                            final effectiveName = rawName.isNotEmpty
-                                ? rawName
-                                : (selectedPreset != 'Custom Charge' ? selectedPreset : 'Extra Charge');
-                            final cleanAmtStr = amountController.text
-                                .replaceAll('₹', '')
-                                .replaceAll(',', '')
-                                .replaceAll(' ', '')
-                                .trim();
-                            final amt = double.tryParse(cleanAmtStr);
-                            if (amt == null || amt <= 0) {
-                              setSheetState(() {
-                                amountError = 'Enter a valid amount';
-                              });
-                              return;
-                            }
-                            final pricePaise = (amt * 100).round();
-                            setState(() {
-                              lines.add(_LineEdit(
-                                product: Product(
-                                  id: null,
-                                  name: effectiveName,
-                                  hsn: hsnController.text.trim().isEmpty ? null : hsnController.text.trim(),
-                                  salePrice: pricePaise,
-                                  gstRate: gstRate,
-                                  taxIncluded: false,
-                                ),
-                                qty: 1,
-                                price: pricePaise,
-                                discountPercent: 0,
-                                gstRate: gstRate,
-                                taxIncluded: false,
-                              ));
-                            });
-                            _saveDraft();
-                            Navigator.pop(ctx);
-                            showAppMessage(context, 'Added $effectiveName (${formatPaise(pricePaise)})');
-                          },
-                          child: const Text('Add Charge'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ChargeEditorSheet(
+        existingCharge: existingCharge,
+        editIndex: editIndex,
+        currentInvoiceBase: currentInvoiceBase,
+        onDelete: (existingCharge != null && editIndex != null)
+            ? () {
+                setState(() => charges.removeAt(editIndex));
+                _saveDraft();
+                showAppMessage(context, 'Removed ${existingCharge.name}');
+              }
+            : null,
+        onSave: (charge) {
+          setState(() {
+            if (existingCharge != null && editIndex != null) {
+              charges[editIndex] = charge;
+            } else {
+              charges.add(charge);
+            }
+          });
+          _saveDraft();
+          showAppMessage(
+            context,
+            existingCharge != null
+                ? 'Updated ${charge.name} (${formatPaise(charge.amount)})'
+                : 'Added ${charge.name} (${formatPaise(charge.amount)})',
+          );
+        },
       ),
     );
   }
@@ -1354,7 +1247,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                     child: const Text('Full', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
                   ),
                 ),
-                if (biz.taxRegistered) ...[
+                if (biz.taxRegistered || q.taxTotal.paise > 0) ...[
                   const SizedBox(height: 12),
                   SegmentedButton<String>(
                     showSelectedIcon: false,
@@ -1629,6 +1522,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           gstType: gstType,
           quote: q,
           lines: invoiceLines,
+          charges: charges,
           paymentMode: amountPaid > 0 ? (mode ?? 'Cash') : null,
           notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
           amountPaid: amountPaid,
@@ -1660,6 +1554,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           gstType: gstType,
           quote: q,
           lines: invoiceLines,
+          charges: charges,
           paymentMode: amountPaid > 0 ? (mode ?? 'Cash') : null,
           notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
           amountPaid: amountPaid,
@@ -2203,26 +2098,37 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
         _buildTransportAndStatutoryCard(),
         const SizedBox(height: 10),
         _buildTaxModeAndRcmCard(),
-        const SizedBox(height: 12),
-        Row(children: [
-          const Expanded(child: Text('Items & Charges', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800))),
-          IconButton(
-            tooltip: 'Scan barcode',
-            icon: const Icon(Icons.qr_code_scanner_rounded, size: 20, color: StitchColors.primary),
-            onPressed: _scanBarcode,
-          ),
-          TextButton.icon(
-            onPressed: _addCharge,
-            icon: const Icon(Icons.toll_outlined, size: 16),
-            label: const Text('Add charge'),
-          ),
-          TextButton.icon(
-            onPressed: _addItem,
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Add item'),
-          ),
-        ]),
-        if (lines.isEmpty)
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            const Text(
+              'Items',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: StitchColors.textPrimary),
+            ),
+            if (lines.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: StitchColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${lines.length}',
+                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: StitchColors.primary),
+                ),
+              ),
+            ],
+            const Spacer(),
+            IconButton(
+              tooltip: 'Scan barcode',
+              icon: const Icon(Icons.qr_code_scanner_rounded, size: 20, color: StitchColors.primary),
+              onPressed: _scanBarcode,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (lines.isEmpty && charges.isEmpty)
           AppEmptyState(
             icon: Icons.shopping_cart_outlined,
             title: 'No items yet',
@@ -2265,11 +2171,152 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
               ],
             ),
           )
-        else
+        else ...[
           ...lines.map((l) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _LineTile(line: l, onTap: () => _editLine(l), onRemove: () => _removeLine(l)),
               )),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _addItem,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Add Product'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    side: BorderSide(color: StitchColors.primary.withValues(alpha: 0.6)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _addCharge,
+                  icon: const Icon(Icons.toll_outlined, size: 16),
+                  label: const Text('Add Charge / TCS'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    side: BorderSide(color: StitchColors.outline.withValues(alpha: 0.8)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (charges.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            AppCard(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.receipt_outlined, size: 16, color: StitchColors.primary),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Additional Charges & TCS',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.primary),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: _addCharge,
+                        icon: const Icon(Icons.add_rounded, size: 14),
+                        label: const Text('Add', style: TextStyle(fontSize: 12)),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 14),
+                  ...charges.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final c = entry.value;
+                    return Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _addCharge(c, idx),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: (c.isTcs ? const Color(0xFF7C3AED) : StitchColors.primary).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Icon(
+                                  c.isTcs ? Icons.account_balance_outlined : Icons.local_shipping_outlined,
+                                  size: 15,
+                                  color: c.isTcs ? const Color(0xFF7C3AED) : StitchColors.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            c.name,
+                                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (c.isTcs) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: const Text('Sec 206C',
+                                                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Color(0xFF7C3AED))),
+                                          ),
+                                        ],
+                                        const SizedBox(width: 6),
+                                        const Icon(Icons.edit_outlined, size: 13, color: StitchColors.textTertiary),
+                                      ],
+                                    ),
+                                    if (c.gstRate > 0 || c.hsn != null)
+                                      Text(
+                                        '${c.hsn != null ? "SAC: ${c.hsn} • " : ""}GST: ${c.gstRate}%',
+                                        style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              Text(formatPaise(c.amount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded, size: 16, color: StitchColors.error),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                onPressed: () => _removeCharge(c),
+                                tooltip: 'Remove charge',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
+        ],
         if (q != null) ...[
           const SizedBox(height: 8),
           AppCard(
@@ -2284,15 +2331,21 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                 _summaryRow('SGST', formatPaise(q.sgst.paise)),
               ],
               if (q.igst.paise > 0) _summaryRow('IGST', formatPaise(q.igst.paise)),
+              if (q.chargesSubtotal.paise > 0)
+                _summaryRow('Additional charges', formatPaise(q.chargesSubtotal.paise)),
+              if (q.chargesTax.paise > 0)
+                _summaryRow('Charges GST', formatPaise(q.chargesTax.paise)),
+              if (q.tcsTotal.paise > 0)
+                _summaryRow('TCS (Sec 206C)', formatPaise(q.tcsTotal.paise)),
               if (q.roundOff.paise != 0)
                 _summaryRow('Round off', '${q.roundOff.paise > 0 ? '+' : '-'}${formatPaise(q.roundOff.paise.abs())}'),
               const Divider(height: 16),
               _summaryRow('Grand total', formatPaise(q.total.paise), bold: true),
-              if (customerState == null && (business?.taxRegistered ?? false))
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text('No customer state selected — applying interstate GST.',
-                      style: TextStyle(fontSize: 11, color: StitchColors.warning)),
+              if (customerState == null && business?.state != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text('Walk-in customer — local intra-state GST applies (${business!.state}).',
+                      style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
                 ),
             ]),
           ),
@@ -2306,9 +2359,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                 Text(formatPaise(q?.total.paise ?? 0), style: moneyStyle(fontSize: 18, weight: FontWeight.w800, color: StitchColors.textPrimary)),
                 Text(
-                  lines.isEmpty
+                  lines.isEmpty && charges.isEmpty
                       ? 'No items added'
-                      : '${lines.length} ${lines.length == 1 ? "item" : "items"}',
+                      : '${lines.length} ${lines.length == 1 ? "item" : "items"}${charges.isNotEmpty ? " • ${charges.length} ${charges.length == 1 ? 'charge' : 'charges'}" : ""}',
                   style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary),
                 ),
               ]),
@@ -2316,14 +2369,14 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             Expanded(
               child: AsyncButton(
                 loading: saving,
-                icon: lines.isEmpty
+                icon: (lines.isEmpty && charges.isEmpty)
                     ? Icons.add_rounded
                     : (widget.existingInvoiceId != null ? Icons.save_rounded : Icons.receipt_long_rounded),
-                label: lines.isEmpty
+                label: (lines.isEmpty && charges.isEmpty)
                     ? 'Add items'
                     : (widget.existingInvoiceId != null ? 'Update invoice' : 'Save & checkout'),
-                backgroundColor: lines.isEmpty ? const Color(0xFF4A6DA7) : StitchColors.primary,
-                onPressed: lines.isEmpty ? _addItem : _checkout,
+                backgroundColor: (lines.isEmpty && charges.isEmpty) ? const Color(0xFF4A6DA7) : StitchColors.primary,
+                onPressed: (lines.isEmpty && charges.isEmpty) ? _addItem : _checkout,
               ),
             ),
           ]),
@@ -2461,6 +2514,7 @@ class _LineTile extends StatelessWidget {
       price: line.price,
       discountPercent: line.discountPercent,
       gstRate: line.gstRate,
+      taxIncluded: line.taxIncluded,
     ));
     final isCustomCharge = line.product.id == null;
     return InkWell(
@@ -2498,7 +2552,10 @@ class _LineTile extends StatelessWidget {
                 final qtyWithUnit = unitStr.isNotEmpty
                     ? '${_qty(line.qty)} $unitStr'
                     : _qty(line.qty);
-                return Text('$qtyWithUnit × ${formatPaise(line.price)}  ${line.discountPercent > 0 ? '· ${_qty(line.discountPercent)}% off  ' : ''}${line.gstRate > 0 ? '· GST ${line.gstRate}%' : '· GST 0%'}',
+                final gstStr = line.gstRate > 0
+                    ? (line.taxIncluded ? '· GST ${line.gstRate}% (Incl.)' : '· GST ${line.gstRate}%')
+                    : '· GST 0%';
+                return Text('$qtyWithUnit × ${formatPaise(line.price)}  ${line.discountPercent > 0 ? '· ${_qty(line.discountPercent)}% off  ' : ''}$gstStr',
                     style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary));
               }),
             ]),
@@ -2531,6 +2588,7 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
   late final TextEditingController batchController;
   late final TextEditingController serialController;
   late int gstRate;
+  late bool taxIncluded;
   String? unit;
   String? qtyError;
   String? priceError;
@@ -2546,11 +2604,23 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
     batchController = TextEditingController(text: line.batch ?? '');
     serialController = TextEditingController(text: line.serial ?? '');
     gstRate = line.gstRate;
+    taxIncluded = line.taxIncluded;
     unit = line.unit ?? line.product.unit;
+
+    qtyController.addListener(_onFieldChanged);
+    priceController.addListener(_onFieldChanged);
+    discountController.addListener(_onFieldChanged);
+  }
+
+  void _onFieldChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    qtyController.removeListener(_onFieldChanged);
+    priceController.removeListener(_onFieldChanged);
+    discountController.removeListener(_onFieldChanged);
     nameController.dispose();
     qtyController.dispose();
     priceController.dispose();
@@ -2582,7 +2652,7 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
             hsn: widget.line.product.hsn,
             salePrice: price,
             gstRate: gstRate,
-            taxIncluded: widget.line.taxIncluded,
+            taxIncluded: taxIncluded,
           )
         : widget.line.product;
     final update = _LineEdit(
@@ -2591,7 +2661,7 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
       price: price,
       discountPercent: double.tryParse(discountController.text.replaceAll('%', '').trim()) ?? 0,
       gstRate: gstRate,
-      taxIncluded: widget.line.taxIncluded,
+      taxIncluded: taxIncluded,
       unit: unit,
       batch: batchController.text.trim().isEmpty ? null : batchController.text.trim(),
       serial: serialController.text.trim().isEmpty ? null : serialController.text.trim(),
@@ -2617,6 +2687,17 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: StitchColors.outline.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
             if (line.product.id == null) ...[
               TextField(controller: nameController, decoration: inputDecoration('Charge / Description')),
               const SizedBox(height: 12),
@@ -2658,11 +2739,27 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
                   initialValue: (unit != null && kStandardUnits.any((u) => u.code == unit)) ? unit : null,
                   decoration: inputDecoration('Unit'),
                   isDense: true,
+                  selectedItemBuilder: (context) {
+                    return [
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('None', style: TextStyle(fontSize: 13, color: StitchColors.textSecondary), overflow: TextOverflow.ellipsis),
+                      ),
+                      ...kStandardUnits.map((u) => Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              u.code,
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          )),
+                    ];
+                  },
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('None', style: TextStyle(fontSize: 12))),
+                    const DropdownMenuItem(value: null, child: Text('None', style: TextStyle(fontSize: 13))),
                     ...kStandardUnits.map((u) => DropdownMenuItem(
                           value: u.code,
-                          child: Text('${u.code} (${u.name})', style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                          child: Text('${u.code}  ·  ${u.name}', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
                         )),
                   ],
                   onChanged: (val) => setState(() => unit = val),
@@ -2701,12 +2798,818 @@ class _LineEditorSheetState extends State<_LineEditorSheet> {
                 ),
               ),
             ]),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(
+                color: StitchColors.surfaceVariant.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: StitchColors.outline.withValues(alpha: 0.3)),
+              ),
+              padding: const EdgeInsets.all(3),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => taxIncluded = false),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        decoration: BoxDecoration(
+                          color: !taxIncluded ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(7),
+                          boxShadow: !taxIncluded
+                              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4, offset: const Offset(0, 1))]
+                              : null,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '+ GST (Excl. Tax)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: !taxIncluded ? FontWeight.w700 : FontWeight.w500,
+                            color: !taxIncluded ? StitchColors.primary : StitchColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => taxIncluded = true),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        decoration: BoxDecoration(
+                          color: taxIncluded ? Colors.white : Colors.transparent,
+                          borderRadius: BorderRadius.circular(7),
+                          boxShadow: taxIncluded
+                              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4, offset: const Offset(0, 1))]
+                              : null,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Inc. GST (Incl. Tax)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: taxIncluded ? FontWeight.w700 : FontWeight.w500,
+                            color: taxIncluded ? StitchColors.primary : StitchColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Builder(builder: (context) {
+              final cleanQty = qtyController.text.replaceAll(',', '').trim();
+              final qty = double.tryParse(cleanQty) ?? 0;
+              final price = _toPaise(priceController.text);
+              final disc = double.tryParse(discountController.text.replaceAll('%', '').trim()) ?? 0;
+              final calc = BillingEngine.calculateLine(LineCalcInput(
+                quantity: qty,
+                price: price,
+                discountPercent: disc,
+                gstRate: gstRate,
+                taxIncluded: taxIncluded,
+              ));
+              final totalPaise = calc.taxable.paise + calc.tax.paise;
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: StitchColors.primary.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: StitchColors.primary.withValues(alpha: 0.15)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Taxable: ${formatPaise(calc.taxable.paise)}',
+                            style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
+                        if (gstRate > 0)
+                          Text(
+                            'GST ($gstRate%): +${formatPaise(calc.tax.paise)} ${taxIncluded ? "(incl.)" : ""}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: StitchColors.primary),
+                          ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text('Line Total', style: TextStyle(fontSize: 10.5, color: StitchColors.textSecondary)),
+                        Text(
+                          formatPaise(totalPaise),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: StitchColors.primary),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
               child: FilledButton(onPressed: _apply, child: const Text('Apply')),
             ),
           ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChargeEditorSheet extends StatefulWidget {
+  const _ChargeEditorSheet({
+    this.existingCharge,
+    this.editIndex,
+    required this.currentInvoiceBase,
+    this.onDelete,
+    required this.onSave,
+  });
+
+  final InvoiceCharge? existingCharge;
+  final int? editIndex;
+  final double currentInvoiceBase;
+  final VoidCallback? onDelete;
+  final ValueChanged<InvoiceCharge> onSave;
+
+  @override
+  State<_ChargeEditorSheet> createState() => _ChargeEditorSheetState();
+}
+
+class _ChargeEditorSheetState extends State<_ChargeEditorSheet> {
+  late final TextEditingController nameController;
+  late final TextEditingController amountController;
+  late final TextEditingController baseAmountController;
+  late final TextEditingController percentController;
+  late final TextEditingController hsnController;
+
+  late bool isPercentMode;
+  late String selectedPreset;
+  late int gstRate;
+  String? amountError;
+  bool _isRecalculating = false;
+
+  static const List<Map<String, dynamic>> _presets = [
+    {
+      'name': 'Delivery / Shipping',
+      'label': 'Shipping',
+      'icon': Icons.local_shipping_outlined,
+      'hsn': '9965',
+      'gst': 18,
+      'isPercent': false,
+    },
+    {
+      'name': 'TCS (Tax Collected at Source)',
+      'label': 'TCS (Sec 206C)',
+      'icon': Icons.account_balance_outlined,
+      'hsn': '9999',
+      'gst': 0,
+      'isPercent': true,
+    },
+    {
+      'name': 'Packaging & Forwarding',
+      'label': 'Packaging',
+      'icon': Icons.inventory_2_outlined,
+      'hsn': '9968',
+      'gst': 18,
+      'isPercent': false,
+    },
+    {
+      'name': 'Installation / Labour',
+      'label': 'Labour / Service',
+      'icon': Icons.build_circle_outlined,
+      'hsn': '9987',
+      'gst': 18,
+      'isPercent': false,
+    },
+    {
+      'name': 'Handling Fee',
+      'label': 'Handling',
+      'icon': Icons.handshake_outlined,
+      'hsn': '9997',
+      'gst': 18,
+      'isPercent': false,
+    },
+    {
+      'name': 'Custom Charge',
+      'label': 'Custom',
+      'icon': Icons.edit_note_rounded,
+      'hsn': '',
+      'gst': 0,
+      'isPercent': false,
+    },
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existingCharge;
+    final isEditing = existing != null;
+
+    final initialName = isEditing ? existing.name : 'Delivery / Shipping';
+    final initialAmt = isEditing && existing.amount > 0 ? (existing.amount / 100.0).toStringAsFixed(2) : '';
+    final initialHsn = isEditing ? (existing.hsn ?? '') : '9965';
+    gstRate = isEditing ? existing.gstRate : 18;
+
+    selectedPreset = isEditing
+        ? (existing.isTcs ? 'TCS (Tax Collected at Source)' : existing.name)
+        : 'Delivery / Shipping';
+
+    isPercentMode = isEditing && existing.isTcs;
+
+    final baseStr = widget.currentInvoiceBase > 0 ? widget.currentInvoiceBase.toStringAsFixed(2) : '';
+    final defaultPct = (selectedPreset.contains('TCS') || initialName.toLowerCase().contains('tcs')) ? '0.1' : '1.0';
+
+    nameController = TextEditingController(text: initialName);
+    amountController = TextEditingController(text: initialAmt);
+    baseAmountController = TextEditingController(text: baseStr);
+    percentController = TextEditingController(text: defaultPct);
+    hsnController = TextEditingController(text: initialHsn);
+
+    if (isPercentMode && initialAmt.isEmpty) {
+      _recalculatePercent();
+    }
+
+    baseAmountController.addListener(_onPercentInputsChanged);
+    percentController.addListener(_onPercentInputsChanged);
+  }
+
+  void _onPercentInputsChanged() {
+    if (!isPercentMode || _isRecalculating) return;
+    _recalculatePercent();
+  }
+
+  void _recalculatePercent() {
+    final base = double.tryParse(baseAmountController.text.trim()) ?? 0.0;
+    final pct = double.tryParse(percentController.text.trim()) ?? 0.0;
+    if (base > 0 && pct > 0) {
+      final calc = (base * pct) / 100.0;
+      final rounded = (calc * 100).round() / 100.0;
+      _isRecalculating = true;
+      amountController.text = rounded.toStringAsFixed(2);
+      _isRecalculating = false;
+    }
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    baseAmountController.removeListener(_onPercentInputsChanged);
+    percentController.removeListener(_onPercentInputsChanged);
+    nameController.dispose();
+    amountController.dispose();
+    baseAmountController.dispose();
+    percentController.dispose();
+    hsnController.dispose();
+    super.dispose();
+  }
+
+  void _selectPreset(Map<String, dynamic> p) {
+    setState(() {
+      selectedPreset = p['name'] as String;
+      if (selectedPreset == 'Custom Charge') {
+        nameController.text = '';
+        hsnController.text = '';
+        gstRate = 0;
+        isPercentMode = false;
+        amountController.text = '';
+      } else {
+        nameController.text = p['name'] as String;
+        hsnController.text = p['hsn'] as String;
+        gstRate = p['gst'] as int;
+        isPercentMode = p['isPercent'] == true;
+        if (isPercentMode) {
+          percentController.text = selectedPreset.contains('TCS') ? '0.1' : '1.0';
+          if (baseAmountController.text.isEmpty && widget.currentInvoiceBase > 0) {
+            baseAmountController.text = widget.currentInvoiceBase.toStringAsFixed(2);
+          }
+          _recalculatePercent();
+        }
+      }
+    });
+  }
+
+  void _submit() {
+    final rawName = nameController.text.trim();
+    final effectiveName = rawName.isNotEmpty
+        ? rawName
+        : (selectedPreset != 'Custom Charge' ? selectedPreset : 'Extra Charge');
+    final cleanAmtStr = amountController.text
+        .replaceAll('₹', '')
+        .replaceAll(',', '')
+        .replaceAll(' ', '')
+        .trim();
+    final amt = double.tryParse(cleanAmtStr);
+    if (amt == null || amt <= 0) {
+      setState(() {
+        amountError = 'Enter a valid amount';
+      });
+      return;
+    }
+    final pricePaise = (amt * 100).round();
+    final isTcsCharge = selectedPreset.contains('TCS') || effectiveName.toLowerCase().contains('tcs');
+    final newCharge = InvoiceCharge(
+      name: effectiveName,
+      amount: pricePaise,
+      gstRate: gstRate,
+      hsn: hsnController.text.trim().isEmpty ? null : hsnController.text.trim(),
+      chargeType: isTcsCharge ? 'tcs' : 'charge',
+    );
+
+    widget.onSave(newCharge);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditing = widget.existingCharge != null;
+    final isTcs = selectedPreset.contains('TCS') || nameController.text.toLowerCase().contains('tcs');
+    final accentColor = isTcs ? const Color(0xFF7C3AED) : StitchColors.primary;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                // Header Row
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isTcs ? Icons.account_balance_outlined : Icons.toll_outlined,
+                        color: accentColor,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isEditing ? 'Edit Additional Charge / TCS' : 'Add Additional Charge / TCS',
+                            style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
+                          ),
+                          Text(
+                            isEditing ? 'Update amount, percentage or tax details' : 'Shipping, packaging, labour, or statutory TCS',
+                            style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isEditing && widget.onDelete != null)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, size: 20, color: StitchColors.error),
+                        tooltip: 'Remove Charge',
+                        onPressed: () {
+                          widget.onDelete!();
+                          Navigator.of(context).pop();
+                        },
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20, color: StitchColors.textSecondary),
+                      onPressed: () => Navigator.of(context).pop(),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Presets Horizontal Row
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _presets.map((p) {
+                      final isSelected = selectedPreset == p['name'];
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          avatar: Icon(p['icon'] as IconData, size: 14, color: isSelected ? Colors.white : StitchColors.textSecondary),
+                          label: Text(p['label'] as String),
+                          labelStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected ? Colors.white : StitchColors.textPrimary,
+                          ),
+                          selected: isSelected,
+                          selectedColor: (p['name'] as String).contains('TCS') ? const Color(0xFF7C3AED) : StitchColors.primary,
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          showCheckmark: false,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none),
+                          onSelected: (val) {
+                            if (val) _selectPreset(p);
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Charge Name Field
+                TextField(
+                  controller: nameController,
+                  decoration: inputDecoration('Charge Name / Description', hint: 'e.g. Delivery Charge, TCS @ 0.1%'),
+                ),
+                const SizedBox(height: 14),
+
+                // Mode Selector Toggle (Fixed vs Percent)
+                Container(
+                  height: 40,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: StitchColors.outline),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => isPercentMode = false),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: !isPercentMode ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: !isPercentMode
+                                  ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 3, offset: const Offset(0, 1))]
+                                  : null,
+                            ),
+                            child: Text(
+                              'Fixed Amount (₹)',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: !isPercentMode ? FontWeight.w700 : FontWeight.w500,
+                                color: !isPercentMode ? StitchColors.primary : StitchColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              isPercentMode = true;
+                              if (baseAmountController.text.isEmpty && widget.currentInvoiceBase > 0) {
+                                baseAmountController.text = widget.currentInvoiceBase.toStringAsFixed(2);
+                              }
+                              _recalculatePercent();
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isPercentMode ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: isPercentMode
+                                  ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 3, offset: const Offset(0, 1))]
+                                  : null,
+                            ),
+                            child: Text(
+                              '% Calculate from Amount',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: isPercentMode ? FontWeight.w700 : FontWeight.w500,
+                                color: isPercentMode ? accentColor : StitchColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // If in Percent Mode: Base Amount & Rate (%) inputs
+                if (isPercentMode) ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: baseAmountController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: inputDecoration('Main / Bill Amount (₹)', hint: '0.00'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: percentController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: inputDecoration('Rate (%)', hint: '0.1'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Helper buttons and quick rate chips
+                  Row(
+                    children: [
+                      if (widget.currentInvoiceBase > 0 &&
+                          baseAmountController.text.trim() != widget.currentInvoiceBase.toStringAsFixed(2))
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: InkWell(
+                            onTap: () {
+                              baseAmountController.text = widget.currentInvoiceBase.toStringAsFixed(2);
+                              _recalculatePercent();
+                            },
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: StitchColors.primary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.sync_rounded, size: 13, color: StitchColors.primary),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Use Bill Total (₹${widget.currentInvoiceBase.toStringAsFixed(2)})',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: StitchColors.primary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: (isTcs
+                                    ? ['0.075', '0.1', '0.5', '1.0', '2.0']
+                                    : ['0.5', '1.0', '2.0', '5.0', '10.0', '18.0'])
+                                .map((pct) {
+                              final isSelected = percentController.text.trim() == pct;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: InkWell(
+                                  onTap: () {
+                                    percentController.text = pct;
+                                    _recalculatePercent();
+                                  },
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? accentColor : const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      '$pct%',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                        color: isSelected ? Colors.white : StitchColors.textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Live Calculated Result Banner
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: isTcs ? const Color(0xFFFAF5FF) : const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: isTcs ? const Color(0xFFE9D5FF) : const Color(0xFFBBF7D0)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.calculate_outlined, color: accentColor, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Calculated: ₹${amountController.text.isEmpty ? "0.00" : amountController.text}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: isTcs ? const Color(0xFF6B21A8) : const Color(0xFF15803D),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${percentController.text}% of ₹${baseAmountController.text.isEmpty ? "0" : baseAmountController.text}',
+                          style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+
+                // Charge Amount Field
+                TextField(
+                  controller: amountController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0F172A),
+                  ),
+                  onChanged: (_) {
+                    if (amountError != null) {
+                      setState(() => amountError = null);
+                    }
+                  },
+                  decoration: inputDecoration(
+                    isPercentMode ? 'Final Charge Amount (₹)' : 'Charge Amount (₹)',
+                    hint: '0.00',
+                  ).copyWith(
+                    errorText: amountError,
+                  ),
+                ),
+
+                // If in Fixed Mode: Show quick amount chips
+                if (!isPercentMode) ...[
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: ['50', '100', '150', '200', '250', '500'].map((amt) {
+                        final isSelected = amountController.text.trim() == amt || amountController.text.trim() == '$amt.00';
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                amountController.text = amt;
+                                amountError = null;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: isSelected ? StitchColors.primary : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(
+                                '₹$amt',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  color: isSelected ? Colors.white : StitchColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+
+                // Tax & SAC Code Row
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: DropdownButtonFormField<int>(
+                        key: ValueKey('charge-gst-$gstRate'),
+                        initialValue: gstRate,
+                        isExpanded: true,
+                        decoration: inputDecoration('GST Rate'),
+                        items: const [
+                          DropdownMenuItem(value: 0, child: Text('0% (Exempt / TCS)', style: TextStyle(fontSize: 13))),
+                          DropdownMenuItem(value: 5, child: Text('5% GST', style: TextStyle(fontSize: 13))),
+                          DropdownMenuItem(value: 12, child: Text('12% GST', style: TextStyle(fontSize: 13))),
+                          DropdownMenuItem(value: 18, child: Text('18% GST', style: TextStyle(fontSize: 13))),
+                          DropdownMenuItem(value: 28, child: Text('28% GST', style: TextStyle(fontSize: 13))),
+                        ],
+                        onChanged: (v) => setState(() => gstRate = v ?? 0),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: hsnController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(8),
+                        ],
+                        decoration: inputDecoration('SAC Code', hint: '9965'),
+                      ),
+                    ),
+                  ],
+                ),
+                if (isTcs) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFAF5FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE9D5FF)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded, color: Color(0xFF7C3AED), size: 16),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'TCS (Sec 206C) is treated as a statutory tax liability, strictly separate from sales income.',
+                            style: TextStyle(fontSize: 11.5, color: Color(0xFF6B21A8), fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+
+                // Action Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: FilledButton(
+                          onPressed: _submit,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: accentColor,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text(
+                            isEditing ? 'Update Charge' : 'Add Charge',
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

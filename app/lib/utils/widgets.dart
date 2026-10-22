@@ -68,15 +68,18 @@ class AppCard extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final Widget child;
   @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: padding,
-        decoration: BoxDecoration(
-          color: StitchColors.background,
+  Widget build(BuildContext context) => Material(
+        color: StitchColors.background,
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: StitchColors.outline),
+          side: const BorderSide(color: StitchColors.outline),
         ),
-        child: child,
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          width: double.infinity,
+          padding: padding,
+          child: child,
+        ),
       );
 }
 

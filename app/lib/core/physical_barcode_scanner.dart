@@ -97,8 +97,13 @@ class PhysicalBarcodeScanner {
     final focus = FocusManager.instance.primaryFocus;
     if (focus == null) return false;
     if (focus.debugLabel == 'EditableText') return true;
-    final widget = focus.context?.widget;
-    if (widget is Focus && widget.debugLabel == 'EditableText') return true;
+    final ctx = focus.context;
+    if (ctx != null) {
+      if (ctx.widget is EditableText) return true;
+      if (ctx.findAncestorStateOfType<EditableTextState>() != null) return true;
+      final widget = ctx.widget;
+      if (widget is Focus && widget.debugLabel == 'EditableText') return true;
+    }
     return false;
   }
 

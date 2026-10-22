@@ -70,7 +70,14 @@ class QuoteResult {
     required this.roundOff,
     required this.total,
     required this.intraState,
-  });
+    this.charges = const [],
+    Money? chargesSubtotal,
+    Money? chargesTax,
+    Money? tcsTotal,
+  })  : chargesSubtotal = chargesSubtotal ?? Money.zero(),
+        chargesTax = chargesTax ?? Money.zero(),
+        tcsTotal = tcsTotal ?? Money.zero();
+
   final List<LineCalcResult> lines;
   final Money subtotal;
   final Money itemDiscount;
@@ -83,8 +90,13 @@ class QuoteResult {
   final Money roundOff;
   final Money total;
   final bool intraState;
+  final List<InvoiceCharge> charges;
+  final Money chargesSubtotal;
+  final Money chargesTax;
+  final Money tcsTotal;
 
   Money get taxTotal => cgst + sgst + igst + cess;
+  Money get chargesTotal => chargesSubtotal + chargesTax + tcsTotal;
 }
 
 int _round(num value) => value.round();
@@ -129,6 +141,7 @@ class BillingEngine {
   static QuoteResult calculateQuote({
     required List<LineCalcInput> lines,
     required InvoiceDiscountInput invoiceDiscount,
+    List<InvoiceCharge> charges = const [],
     bool gstEnabled = true,
     bool businessTaxRegistered = true,
     String? businessState,
@@ -160,17 +173,24 @@ class BillingEngine {
     final grossTaxable = taxable;
     taxable = taxable - invoiceDiscountAmount;
 
-    final sameState = businessState != null &&
+    final effectiveGstEnabled = gstEnabled ||
+        lines.any((l) => l.gstRate > 0) ||
+        charges.any((c) => c.gstRate > 0);
+    final effectiveTaxRegistered = businessTaxRegistered ||
+        lines.any((l) => l.gstRate > 0) ||
+        charges.any((c) => c.gstRate > 0);
+
+    final isExplicitInterstate = businessState != null &&
         customerState != null &&
-        IndianStates.isSameState(businessState, customerState);
-    final intraState = gstEnabled &&
-        businessTaxRegistered &&
-        (intraStateOverride ?? sameState);
+        !IndianStates.isSameState(businessState, customerState);
+    final intraState = effectiveGstEnabled &&
+        effectiveTaxRegistered &&
+        (intraStateOverride ?? !isExplicitInterstate);
 
     Money cgst = Money.zero();
     Money sgst = Money.zero();
     Money igst = Money.zero();
-    if (gstEnabled && businessTaxRegistered) {
+    if (effectiveGstEnabled && effectiveTaxRegistered) {
       final lineTax = computed.fold<int>(0, (sum, l) => sum + l.tax.paise);
       final gst = grossTaxable.isZero
           ? Money.zero()
@@ -184,7 +204,31 @@ class BillingEngine {
       }
     }
 
-    final net = taxable + cgst + sgst + igst;
+    // Sequence: [Subtotal of Items] -> [Apply Item GST] -> [Apply Charges/TCS] -> [Grand Total]
+    Money chargesSubtotal = Money.zero();
+    Money chargesTax = Money.zero();
+    Money tcsTotal = Money.zero();
+
+    for (final charge in charges) {
+      if (charge.isTcs) {
+        tcsTotal += Money(charge.amount);
+      } else {
+        chargesSubtotal += Money(charge.amount);
+        if (effectiveGstEnabled && effectiveTaxRegistered && charge.gstRate > 0) {
+          final cTax = _round(charge.amount * charge.gstRate / 100);
+          chargesTax += Money(cTax);
+          if (intraState) {
+            final half = _round(cTax / 2);
+            cgst += Money(half);
+            sgst += Money(cTax - half);
+          } else {
+            igst += Money(cTax);
+          }
+        }
+      }
+    }
+
+    final net = taxable + cgst + sgst + igst + chargesSubtotal + tcsTotal;
     final roundedToRupee = Money(_round(net.paise / 100) * 100);
     final roundOff = roundedToRupee - net;
     final total = net + roundOff;
@@ -202,6 +246,10 @@ class BillingEngine {
       roundOff: roundOff,
       total: total,
       intraState: intraState,
+      charges: charges,
+      chargesSubtotal: chargesSubtotal,
+      chargesTax: chargesTax,
+      tcsTotal: tcsTotal,
     );
   }
 

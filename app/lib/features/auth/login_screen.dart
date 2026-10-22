@@ -49,8 +49,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _staffLookingUp = false;
   bool _obscureStaffPin = true;
 
-  String? _errorMessage;
-
   @override
   void initState() {
     super.initState();
@@ -67,29 +65,177 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  String _friendlyAuthError(Object e, String serverUrl) {
-    final msg = e.toString();
+  Future<void> _showErrorPopup({
+    required String title,
+    required String message,
+    IconData icon = Icons.info_outline_rounded,
+    Color iconColor = const Color(0xFFEF4444),
+    Color iconBg = const Color(0xFFFEF2F2),
+    String buttonText = 'Okay',
+    bool showOfflineOption = false,
+  }) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        elevation: 8,
+        backgroundColor: Colors.white,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: iconColor, size: 28),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F172A),
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: Color(0xFF64748B),
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(
+                    buttonText,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
+                  ),
+                ),
+              ),
+              if (showOfflineOption && (widget.onOffline != null || Navigator.canPop(context))) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  height: 40,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _continueOffline();
+                    },
+                    icon: const Icon(Icons.offline_bolt_outlined, size: 16, color: Color(0xFF4F46E5)),
+                    label: const Text(
+                      'Continue Offline',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13.5,
+                        color: Color(0xFF4F46E5),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-    if (msg.contains('502') || msg.contains('Bad Gateway')) {
-      return 'Billket Cloud server is currently starting up or restarting (HTTP 502). Please wait 10 seconds and try again.';
-    }
-    if (msg.contains('504') || msg.contains('Gateway Timeout')) {
-      return 'Cloud server request timed out (HTTP 504). Please try again.';
-    }
-    if (msg.contains('SocketException') ||
-        msg.contains('TimeoutException') ||
-        msg.contains('Timed out') ||
-        msg.contains('Failed host lookup') ||
-        msg.contains('ClientException') ||
-        msg.contains('Connection refused') ||
-        msg.contains('Connection timed out')) {
-      return 'Cannot reach Billket Cloud at $serverUrl. Please ensure the cloud server is online and your internet is connected.';
+  ({String title, String message, IconData icon, bool isConnectionIssue}) _categorizeAuthError(Object e) {
+    final raw = e.toString();
+    final lower = raw.toLowerCase();
+
+    if (lower.contains('socketexception') ||
+        lower.contains('timeoutexception') ||
+        lower.contains('timed out') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('clientexception') ||
+        lower.contains('connection refused') ||
+        lower.contains('connection timed out') ||
+        lower.contains('network is unreachable')) {
+      return (
+        title: 'Unable to Connect',
+        message: 'Could not connect to the cloud server. Please ensure your device is connected to the internet and try again.',
+        icon: Icons.cloud_off_rounded,
+        isConnectionIssue: true,
+      );
     }
 
-    return msg
+    if (raw.contains('502') || lower.contains('bad gateway')) {
+      return (
+        title: 'Server Updating',
+        message: 'The cloud server is currently starting up or updating. Please wait a few moments and try again.',
+        icon: Icons.cloud_sync_rounded,
+        isConnectionIssue: true,
+      );
+    }
+
+    if (raw.contains('504') || lower.contains('gateway timeout')) {
+      return (
+        title: 'Connection Timed Out',
+        message: 'The cloud server took too long to respond. Please check your internet connection and try again.',
+        icon: Icons.timer_off_outlined,
+        isConnectionIssue: true,
+      );
+    }
+
+    if (lower.contains('invalid otp') || lower.contains('incorrect otp') || lower.contains('otp expired')) {
+      return (
+        title: 'Invalid OTP',
+        message: 'The OTP entered is incorrect or has expired. Please check and try again.',
+        icon: Icons.password_rounded,
+        isConnectionIssue: false,
+      );
+    }
+
+    if (lower.contains('too many requests') || raw.contains('429')) {
+      return (
+        title: 'Too Many Attempts',
+        message: 'Too many requests have been made from this device. Please wait a minute and try again.',
+        icon: Icons.hourglass_top_rounded,
+        isConnectionIssue: false,
+      );
+    }
+
+    String clean = raw
         .replaceAll('Exception: ', '')
         .replaceAll('PlatformException(', '')
-        .replaceAll(')', '');
+        .replaceAll(')', '')
+        .trim();
+
+    if (clean.isEmpty) {
+      clean = 'An unexpected error occurred. Please try again.';
+    }
+
+    return (
+      title: 'Sign In Failed',
+      message: clean,
+      icon: Icons.error_outline_rounded,
+      isConnectionIssue: false,
+    );
   }
 
   Future<void> _finishLogin(AuthSessionResult result, String successMessage) async {
@@ -143,13 +289,18 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleRequestOtp() async {
     final phone = _phoneController.text.trim();
     if (phone.length < 10) {
-      setState(() => _errorMessage = 'Please enter a valid 10-digit mobile number.');
+      _showErrorPopup(
+        title: 'Invalid Mobile Number',
+        message: 'Please enter a valid 10-digit mobile number.',
+        icon: Icons.phone_android_rounded,
+        iconColor: const Color(0xFF6366F1),
+        iconBg: const Color(0xFFEEF2FF),
+      );
       return;
     }
 
     setState(() {
       _phoneBusy = true;
-      _errorMessage = null;
     });
 
     final apiClient = SyncEngine.instance.apiClient;
@@ -187,8 +338,14 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _phoneBusy = false;
-        _errorMessage = _friendlyAuthError(e, apiClient.baseUrl);
       });
+      final err = _categorizeAuthError(e);
+      _showErrorPopup(
+        title: err.title,
+        message: err.message,
+        icon: err.icon,
+        showOfflineOption: err.isConnectionIssue,
+      );
     }
   }
 
@@ -196,17 +353,28 @@ class _LoginScreenState extends State<LoginScreen> {
     final phone = _phoneController.text.trim();
     final otp = _otpController.text.trim();
     if (phone.length < 10) {
-      setState(() => _errorMessage = 'Please enter a valid 10-digit mobile number.');
+      _showErrorPopup(
+        title: 'Invalid Mobile Number',
+        message: 'Please enter a valid 10-digit mobile number.',
+        icon: Icons.phone_android_rounded,
+        iconColor: const Color(0xFF6366F1),
+        iconBg: const Color(0xFFEEF2FF),
+      );
       return;
     }
     if (otp.length < 4) {
-      setState(() => _errorMessage = 'Please enter the OTP sent to your phone.');
+      _showErrorPopup(
+        title: 'Enter OTP',
+        message: 'Please enter the 6-digit OTP sent to your mobile number.',
+        icon: Icons.sms_outlined,
+        iconColor: const Color(0xFF6366F1),
+        iconBg: const Color(0xFFEEF2FF),
+      );
       return;
     }
 
     setState(() {
       _phoneBusy = true;
-      _errorMessage = null;
     });
 
     final apiClient = SyncEngine.instance.apiClient;
@@ -224,21 +392,32 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _phoneBusy = false;
-        _errorMessage = _friendlyAuthError(e, apiClient.baseUrl);
       });
+      final err = _categorizeAuthError(e);
+      _showErrorPopup(
+        title: err.title,
+        message: err.message,
+        icon: err.icon,
+        showOfflineOption: err.isConnectionIssue,
+      );
     }
   }
 
   Future<void> _handleStaffLookup() async {
     final phone = _staffPhoneController.text.trim();
     if (phone.length < 10) {
-      setState(() => _errorMessage = 'Please enter a valid 10-digit mobile number.');
+      _showErrorPopup(
+        title: 'Invalid Mobile Number',
+        message: 'Please enter a valid 10-digit mobile number.',
+        icon: Icons.phone_android_rounded,
+        iconColor: const Color(0xFF6366F1),
+        iconBg: const Color(0xFFEEF2FF),
+      );
       return;
     }
 
     setState(() {
       _staffLookingUp = true;
-      _errorMessage = null;
     });
 
     try {
@@ -263,18 +442,24 @@ class _LoginScreenState extends State<LoginScreen> {
           _staffLookingUp = false;
         });
       } else {
-        setState(() {
-          _staffLookingUp = false;
-          _errorMessage =
-              'Mobile number +91 $phone is not registered as a staff member. Please ask your Business Owner to add you under More ➔ Staff Management.';
-        });
+        setState(() => _staffLookingUp = false);
+        _showErrorPopup(
+          title: 'Staff Not Found',
+          message:
+              'Mobile number +91 $phone is not registered as a staff member. Please ask your Business Owner to add you under More ➔ Staff Management.',
+          icon: Icons.person_off_rounded,
+          iconColor: const Color(0xFFF59E0B),
+          iconBg: const Color(0xFFFFFBEB),
+        );
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _staffLookingUp = false;
-        _errorMessage = 'Error finding staff: $e';
-      });
+      setState(() => _staffLookingUp = false);
+      _showErrorPopup(
+        title: 'Lookup Failed',
+        message: 'Could not search for staff account. Please try again.',
+        icon: Icons.error_outline_rounded,
+      );
     }
   }
 
@@ -284,18 +469,34 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final pin = _staffPinController.text.trim();
     if (staff.pin == null || staff.pin!.isEmpty) {
-      setState(() => _errorMessage =
-          'No Security PIN has been configured for this staff account. Please ask the Business Owner to set a 4-digit PIN in Staff Management.');
+      _showErrorPopup(
+        title: 'PIN Not Set',
+        message:
+            'No Security PIN has been configured for this staff account. Please ask the Business Owner to set a 4-digit PIN in Staff Management.',
+        icon: Icons.lock_clock_rounded,
+        iconColor: const Color(0xFFF59E0B),
+        iconBg: const Color(0xFFFFFBEB),
+      );
       return;
     }
 
     if (pin.length < 4) {
-      setState(() => _errorMessage = 'Please enter your 4-digit Security PIN.');
+      _showErrorPopup(
+        title: 'Incomplete PIN',
+        message: 'Please enter your complete 4-digit Security PIN.',
+        icon: Icons.pin_outlined,
+        iconColor: const Color(0xFF6366F1),
+        iconBg: const Color(0xFFEEF2FF),
+      );
       return;
     }
 
     if (pin != staff.pin) {
-      setState(() => _errorMessage = 'Incorrect PIN. Please re-enter or check with your business owner.');
+      _showErrorPopup(
+        title: 'Incorrect PIN',
+        message: 'Incorrect PIN. Please re-enter or check with your business owner.',
+        icon: Icons.lock_outline_rounded,
+      );
       return;
     }
 
@@ -661,44 +862,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 36),
 
-                  // Error Banner
-                  if (_errorMessage != null) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF2F2),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFFECACA)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.info_outline_rounded, color: Color(0xFFDC2626), size: 20),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  _errorMessage!,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFF991B1B),
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.35,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
                   // Segmented Persona Selector (Business Owner vs Staff / Employee)
                   Container(
                     margin: const EdgeInsets.only(bottom: 20),
@@ -716,7 +879,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             onTap: () {
                               setState(() {
                                 _isStaffMode = false;
-                                _errorMessage = null;
                               });
                             },
                             child: Container(
@@ -766,7 +928,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             onTap: () {
                               setState(() {
                                 _isStaffMode = true;
-                                _errorMessage = null;
                               });
                             },
                             child: Container(
@@ -883,6 +1044,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             controller: _phoneController,
                             keyboardType: TextInputType.phone,
                             enabled: !_phoneBusy && !_otpSent,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0F172A),
+                              letterSpacing: 0.5,
+                            ),
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
                               LengthLimitingTextInputFormatter(10),
@@ -890,6 +1057,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             decoration: InputDecoration(
                               labelText: isBn ? 'মালিকের ফোন নম্বর' : isHi ? 'मालिक का मोबाइल नंबर' : 'Owner Mobile Number',
                               hintText: '9876543210',
+                              hintStyle: TextStyle(
+                                color: const Color(0xFF94A3B8).withValues(alpha: 0.6),
+                                fontWeight: FontWeight.w400,
+                                fontSize: 14.5,
+                                letterSpacing: 0.5,
+                              ),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -1117,6 +1290,12 @@ class _LoginScreenState extends State<LoginScreen> {
                               controller: _staffPhoneController,
                               keyboardType: TextInputType.phone,
                               enabled: !_staffLookingUp,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF0F172A),
+                                letterSpacing: 0.5,
+                              ),
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
                                 LengthLimitingTextInputFormatter(10),
@@ -1124,6 +1303,12 @@ class _LoginScreenState extends State<LoginScreen> {
                               decoration: InputDecoration(
                                 labelText: isBn ? 'স্টাফের ফোন নম্বর' : isHi ? 'स्टाफ का मोबाइल नंबर' : 'Staff Mobile Number',
                                 hintText: '9876500001',
+                                hintStyle: TextStyle(
+                                  color: const Color(0xFF94A3B8).withValues(alpha: 0.6),
+                                  fontWeight: FontWeight.w400,
+                                  fontSize: 14.5,
+                                  letterSpacing: 0.5,
+                                ),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),

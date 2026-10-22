@@ -317,26 +317,32 @@ void main() {
     expect(payTx.partyName, 'Beta Corp');
   });
 
-  test('adding charge line calculates real-time quote and persists correctly', () async {
+  test('adding charge and TCS calculates real-time quote, separates ledgers, and persists correctly', () async {
     final prodId = await addProduct(name: 'Gadget', sku: 'G-1', salePrice: 50000, stock: 10);
 
-    // 1. Initial product: ₹500
-    // 2. Add Delivery Charge: ₹100 @ 18% GST
-    final chargeInput = LineCalcInput(quantity: 1, price: 10000, gstRate: 18);
+    // 1. Initial product: ₹500 @ 18% GST
+    // 2. Add Delivery Charge: ₹100 @ 18% GST (non-TCS charge)
+    // 3. Add TCS charge: ₹5 (tax liability)
     final prodInput = LineCalcInput(quantity: 1, price: 50000, gstRate: 18);
+    final deliveryCharge = InvoiceCharge(name: 'Delivery / Shipping', amount: 10000, gstRate: 18, hsn: '9965');
+    final tcsCharge = InvoiceCharge(name: 'TCS @ 0.1%', amount: 500, gstRate: 0, chargeType: 'tcs');
 
-    final quoteWithCharge = BillingEngine.calculateQuote(
-      lines: [prodInput, chargeInput],
+    final quoteWithCharges = BillingEngine.calculateQuote(
+      lines: [prodInput],
+      charges: [deliveryCharge, tcsCharge],
       invoiceDiscount: const InvoiceDiscountInput.none(),
       businessTaxRegistered: true,
       businessState: 'Karnataka',
       customerState: 'Karnataka',
     );
 
-    // Taxable: 50000 + 10000 = 60000; Tax 18% = 10800; Total = 70800
-    expect(quoteWithCharge.taxable.paise, 60000);
-    expect(quoteWithCharge.cgst.paise + quoteWithCharge.sgst.paise, 10800);
-    expect(quoteWithCharge.total.paise, 70800);
+    // Pure item taxable = 50000. Total tax = 9000 (item) + 1800 (delivery) = 10800.
+    // Charges subtotal = 10000. TCS = 500. Total = 50000 + 10800 + 10000 + 500 = 71300.
+    expect(quoteWithCharges.taxable.paise, 50000);
+    expect(quoteWithCharges.cgst.paise + quoteWithCharges.sgst.paise, 10800);
+    expect(quoteWithCharges.chargesSubtotal.paise, 10000);
+    expect(quoteWithCharges.tcsTotal.paise, 500);
+    expect(quoteWithCharges.total.paise, 71300);
 
     final invId = await repo.finalizeSale(
       businessId: businessId,
@@ -345,7 +351,7 @@ void main() {
       customerName: 'Direct',
       date: '2026-09-12',
       gstType: 'intra',
-      quote: quoteWithCharge,
+      quote: quoteWithCharges,
       lines: [
         InvoiceLine(
           productId: prodId,
@@ -353,29 +359,41 @@ void main() {
           gstRate: 18,
           quantity: 1,
           price: 50000,
-          taxable: quoteWithCharge.lines[0].taxable.paise,
-          tax: quoteWithCharge.lines[0].tax.paise,
-        ),
-        InvoiceLine(
-          productId: null, // Custom Charge
-          name: 'Delivery / Shipping',
-          hsn: '9965',
-          gstRate: 18,
-          quantity: 1,
-          price: 10000,
-          taxable: quoteWithCharge.lines[1].taxable.paise,
-          tax: quoteWithCharge.lines[1].tax.paise,
+          taxable: quoteWithCharges.lines[0].taxable.paise,
+          tax: quoteWithCharges.lines[0].tax.paise,
         ),
       ],
-      amountPaid: 70800,
+      charges: [deliveryCharge, tcsCharge],
+      amountPaid: 71300,
     );
 
     final inv = await repo.invoice(businessId, invId);
     expect(inv, isNotNull);
-    expect(inv!.lines.length, 2);
-    expect(inv.lines[1].productId, isNull);
-    expect(inv.lines[1].name, 'Delivery / Shipping');
-    expect(inv.lines[1].price, 10000);
-    expect(inv.total, 70800);
+    // Product items array has ONLY the physical product!
+    expect(inv!.lines.length, 1);
+    expect(inv.lines[0].productId, prodId);
+    expect(inv.lines[0].name, 'Gadget');
+
+    // Dedicated charges array has both charges!
+    expect(inv.charges.length, 2);
+    expect(inv.charges[0].name, 'Delivery / Shipping');
+    expect(inv.charges[0].amount, 10000);
+    expect(inv.charges[1].name, 'TCS @ 0.1%');
+    expect(inv.charges[1].amount, 500);
+    expect(inv.charges[1].isTcs, isTrue);
+    expect(inv.total, 71300);
+
+    // Verify double-entry ledger postings:
+    final ledgerEntries = await db.query('ledger', where: 'ref_id = ? AND ref_type = ?', whereArgs: [invId, 'invoice']);
+    final salesEntry = ledgerEntries.firstWhere((e) => e['account'] == 'income:sales');
+    final gstEntry = ledgerEntries.firstWhere((e) => e['account'] == 'gst:output');
+    final tcsEntry = ledgerEntries.firstWhere((e) => e['account'] == 'tax:tcs');
+    final chargeEntry = ledgerEntries.firstWhere((e) => e['account'] == 'income:charges');
+
+    // Sales revenue must ONLY reflect product taxable (50000 paise), NOT contaminated by charges or TCS!
+    expect(salesEntry['credit'], 50000);
+    expect(gstEntry['credit'], 10800);
+    expect(tcsEntry['credit'], 500);
+    expect(chargeEntry['credit'], 10000);
   });
 }

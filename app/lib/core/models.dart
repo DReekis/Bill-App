@@ -560,6 +560,47 @@ class Product {
       );
 }
 
+class InvoiceCharge {
+  InvoiceCharge({
+    String? id,
+    required this.name,
+    required this.amount,
+    this.gstRate = 0,
+    this.hsn,
+    this.chargeType = 'charge',
+  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
+
+  final String id;
+  String name;
+  int amount; // in paise
+  int gstRate;
+  String? hsn;
+  String chargeType; // 'charge' or 'tcs'
+
+  bool get isTcs => chargeType == 'tcs' || name.toLowerCase().contains('tcs');
+
+  int get taxAmount => gstRate > 0 ? (amount * gstRate / 100).round() : 0;
+  int get totalAmount => amount + taxAmount;
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'amount': amount,
+        'gst_rate': gstRate,
+        'hsn': hsn,
+        'charge_type': chargeType,
+      };
+
+  factory InvoiceCharge.fromMap(Map<String, dynamic> map) => InvoiceCharge(
+        id: map['id']?.toString(),
+        name: map['name'] as String? ?? 'Charge',
+        amount: (map['amount'] as num?)?.toInt() ?? 0,
+        gstRate: (map['gst_rate'] as num?)?.toInt() ?? 0,
+        hsn: map['hsn'] as String?,
+        chargeType: map['charge_type'] as String? ?? 'charge',
+      );
+}
+
 class InvoiceLine {
   InvoiceLine({
     this.productId,
@@ -747,6 +788,7 @@ class Invoice {
     this.irn,
     this.isRecurring = false,
     this.lines = const [],
+    this.charges = const [],
     this.shipToName,
     this.shipToAddress,
     this.shipToState,
@@ -786,6 +828,7 @@ class Invoice {
   String? irn;
   bool isRecurring = false;
   List<InvoiceLine> lines;
+  List<InvoiceCharge> charges;
   String? shipToName;
   String? shipToAddress;
   String? shipToState;
@@ -861,6 +904,7 @@ class Invoice {
         'lr_rr_number': lrRrNumber,
         'reverse_charge': reverseCharge ? 1 : 0,
         'custom_fields_json': customFieldsJson,
+        'charges_json': jsonEncode(charges.map((c) => c.toMap()).toList()),
       };
 
   static Invoice fromMap(Map<String, Object?> map) => Invoice(
@@ -889,6 +933,21 @@ class Invoice {
         notes: map['notes'] as String?,
         irn: map['irn'] as String?,
         isRecurring: (map['is_recurring'] as int? ?? 0) == 1,
+        charges: () {
+          try {
+            final raw = map['charges_json'] as String?;
+            if (raw != null && raw.isNotEmpty) {
+              final decoded = jsonDecode(raw);
+              if (decoded is List) {
+                return decoded
+                    .whereType<Map<String, dynamic>>()
+                    .map(InvoiceCharge.fromMap)
+                    .toList();
+              }
+            }
+          } catch (_) {}
+          return <InvoiceCharge>[];
+        }(),
         shipToName: map['ship_to_name'] as String?,
         shipToAddress: map['ship_to_address'] as String?,
         shipToState: map['ship_to_state'] as String?,

@@ -97,6 +97,7 @@ Future<Uint8List> buildDocumentPdf({
   String? partyGstin,
   String? partyState,
   required List<InvoiceLine> lines,
+  List<InvoiceCharge> charges = const [],
   required int subtotal,
   required int discount,
   required int taxable,
@@ -192,9 +193,43 @@ Future<Uint8List> buildDocumentPdf({
           ? 'TAX INVOICE'
           : title.toUpperCase());
 
+  // Separate inventory product lines from charges
+  final productLines = lines
+      .where((l) =>
+          l.productId != null ||
+          (!l.name.toLowerCase().contains('tcs') &&
+              !l.name.toLowerCase().contains('delivery') &&
+              !l.name.toLowerCase().contains('shipping') &&
+              !l.name.toLowerCase().contains('packaging') &&
+              !l.name.toLowerCase().contains('handling') &&
+              !l.name.toLowerCase().contains('extra charge') &&
+              !l.name.toLowerCase().contains('custom charge')))
+      .toList();
+
+  final effectiveCharges = [
+    ...charges,
+    if (charges.isEmpty)
+      ...lines
+          .where((l) =>
+              l.productId == null &&
+              (l.name.toLowerCase().contains('tcs') ||
+                  l.name.toLowerCase().contains('delivery') ||
+                  l.name.toLowerCase().contains('shipping') ||
+                  l.name.toLowerCase().contains('packaging') ||
+                  l.name.toLowerCase().contains('handling') ||
+                  l.name.toLowerCase().contains('charge')))
+          .map((l) => InvoiceCharge(
+                name: l.name,
+                amount: l.taxable,
+                gstRate: l.gstRate,
+                hsn: l.hsn,
+                chargeType: l.name.toLowerCase().contains('tcs') ? 'tcs' : 'charge',
+              )),
+  ];
+
   // Aggregate HSN breakdown
   final hsnMap = <String, _GstBreakupItem>{};
-  for (final l in lines) {
+  for (final l in productLines) {
     final hsnCode = (l.hsn != null && l.hsn!.trim().isNotEmpty) ? l.hsn!.trim() : 'OTHER';
     final key = '${hsnCode}_${l.gstRate}';
     final item = hsnMap.putIfAbsent(key, () => _GstBreakupItem(hsn: hsnCode, gstRate: l.gstRate));
@@ -205,6 +240,22 @@ Future<Uint8List> buildDocumentPdf({
       final halfTax = l.tax ~/ 2;
       item.cgst += halfTax;
       item.sgst += (l.tax - halfTax);
+    }
+  }
+  for (final c in effectiveCharges) {
+    if (c.gstRate > 0 && !c.isTcs) {
+      final sacCode = (c.hsn != null && c.hsn!.trim().isNotEmpty) ? c.hsn!.trim() : 'SAC';
+      final key = '${sacCode}_${c.gstRate}';
+      final item = hsnMap.putIfAbsent(key, () => _GstBreakupItem(hsn: sacCode, gstRate: c.gstRate));
+      item.taxable += c.amount;
+      final cTax = c.taxAmount;
+      if (isInterState) {
+        item.igst += cTax;
+      } else {
+        final halfTax = cTax ~/ 2;
+        item.cgst += halfTax;
+        item.sgst += (cTax - halfTax);
+      }
     }
   }
   final hsnBreakupList = hsnMap.values.toList();
@@ -1212,8 +1263,8 @@ Future<Uint8List> buildDocumentPdf({
               headers: proHeaders,
               columnWidths: gstProWidths,
               cellAlignments: gstProAligns,
-              data: List<List<String>>.generate(lines.length, (i) {
-                final line = lines[i];
+              data: List<List<String>>.generate(productLines.length, (i) {
+                final line = productLines[i];
                 final qtyStr = _qty(line.quantity);
                 final unitSuffix = (line.unit != null && line.unit!.trim().isNotEmpty) ? ' ${line.unit!.trim()}' : '';
                 final halfTax = line.tax ~/ 2;
@@ -1274,8 +1325,8 @@ Future<Uint8List> buildDocumentPdf({
             columnWidths: tableColWidths,
             cellAlignments: tableCellAlignments,
             data: [
-              ...List<List<String>>.generate(lines.length, (i) {
-                final line = lines[i];
+              ...List<List<String>>.generate(productLines.length, (i) {
+                final line = productLines[i];
                 final qtyStr = _qty(line.quantity);
                 final unitSuffix = (line.unit != null && line.unit!.trim().isNotEmpty) ? ' ${line.unit!.trim()}' : '';
                 return [
@@ -1298,11 +1349,11 @@ Future<Uint8List> buildDocumentPdf({
                 '',
                 'SUBTOTAL',
                 if (customSettings.showHsnColumn) '',
-                if (customSettings.showUnitColumn) _qty(lines.fold(0.0, (sum, l) => sum + l.quantity)),
+                if (customSettings.showUnitColumn) _qty(productLines.fold(0.0, (sum, l) => sum + l.quantity)),
                 '',
                 if (customSettings.showDiscountColumn) '',
-                if (customSettings.showTaxColumn) money(lines.fold(0, (sum, l) => sum + l.tax)),
-                money(total),
+                if (customSettings.showTaxColumn) money(productLines.fold(0, (sum, l) => sum + l.tax)),
+                money(productLines.fold(0, (sum, l) => sum + l.taxable + l.tax)),
               ],
             ],
           ),
@@ -1331,8 +1382,8 @@ Future<Uint8List> buildDocumentPdf({
             ],
             columnWidths: tableColWidths,
             cellAlignments: tableCellAlignments,
-            data: List<List<String>>.generate(lines.length, (i) {
-              final line = lines[i];
+            data: List<List<String>>.generate(productLines.length, (i) {
+              final line = productLines[i];
               final qtyStr = _qty(line.quantity);
               final unitSuffix = (line.unit != null && line.unit!.trim().isNotEmpty) ? ' ${line.unit!.trim()}' : '';
               return [
@@ -1372,8 +1423,8 @@ Future<Uint8List> buildDocumentPdf({
             ],
             columnWidths: tableColWidths,
             cellAlignments: tableCellAlignments,
-            data: List<List<String>>.generate(lines.length, (i) {
-              final line = lines[i];
+            data: List<List<String>>.generate(productLines.length, (i) {
+              final line = productLines[i];
               final qtyStr = _qty(line.quantity);
               final unitSuffix = (line.unit != null && line.unit!.trim().isNotEmpty) ? ' ${line.unit!.trim()}' : '';
               return [
@@ -1396,20 +1447,93 @@ Future<Uint8List> buildDocumentPdf({
         ],
 
         // ==========================================
-        // 5. CALCULATIONS & AMOUNT IN WORDS
+        // 5. HSN/SAC TAX BREAKDOWN TABLE (STATUTORY)
+        // Strictly placed immediately following the Line Items Table
+        // ==========================================
+        if (customSettings.showHsnSummaryTable && hsnBreakupList.isNotEmpty) ...[
+          pw.SizedBox(height: 6),
+          pw.TableHelper.fromTextArray(
+            border: pw.TableBorder.all(color: borderGrey, width: 0.5),
+            headerDecoration: pw.BoxDecoration(color: softTint),
+            headerHeight: 18,
+            headerStyle: pw.TextStyle(font: bold, fontSize: 7, color: slateDark),
+            cellStyle: pw.TextStyle(font: regular, fontSize: 7),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            headers: [
+              'HSN/SAC',
+              'Taxable Value',
+              if (!isInterState) 'CGST Rate',
+              if (!isInterState) 'CGST Amt',
+              if (!isInterState) 'SGST Rate',
+              if (!isInterState) 'SGST Amt',
+              if (isInterState) 'IGST Rate',
+              if (isInterState) 'IGST Amt',
+              'Total Tax Amount',
+            ],
+            cellAlignments: {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerRight,
+              if (!isInterState) 2: pw.Alignment.center,
+              if (!isInterState) 3: pw.Alignment.centerRight,
+              if (!isInterState) 4: pw.Alignment.center,
+              if (!isInterState) 5: pw.Alignment.centerRight,
+              if (isInterState) 2: pw.Alignment.center,
+              if (isInterState) 3: pw.Alignment.centerRight,
+              if (!isInterState) 6: pw.Alignment.centerRight,
+              if (isInterState) 4: pw.Alignment.centerRight,
+            },
+            data: [
+              ...hsnBreakupList.map((h) => [
+                h.hsn,
+                money(h.taxable),
+                if (!isInterState) '${(h.gstRate / 2).toStringAsFixed(1)}%',
+                if (!isInterState) money(h.cgst),
+                if (!isInterState) '${(h.gstRate / 2).toStringAsFixed(1)}%',
+                if (!isInterState) money(h.sgst),
+                if (isInterState) '${h.gstRate}%',
+                if (isInterState) money(h.igst),
+                money(h.totalTax),
+              ]),
+              [
+                'Total',
+                money(hsnBreakupList.fold(0, (sum, i) => sum + i.taxable)),
+                if (!isInterState) '',
+                if (!isInterState) money(hsnBreakupList.fold(0, (sum, i) => sum + i.cgst)),
+                if (!isInterState) '',
+                if (!isInterState) money(hsnBreakupList.fold(0, (sum, i) => sum + i.sgst)),
+                if (isInterState) '',
+                if (isInterState) money(hsnBreakupList.fold(0, (sum, i) => sum + i.igst)),
+                money(hsnBreakupList.fold(0, (sum, i) => sum + i.totalTax)),
+              ],
+            ],
+          ),
+        ],
+
+        // ==========================================
+        // 6. FINANCIAL SUBTOTALS, CHARGES & AMOUNT IN WORDS
+        // Shows itemized tax details clearly above Total Amount for both Inc. & Excl. GST
         // ==========================================
         () {
           final calcColumn = pw.Column(
             children: [
-              _calcRow('Taxable Amount', money(taxable), regular, slateDark),
+              if (subtotal != taxable)
+                _calcRow('Subtotal', money(subtotal), regular, slateDark),
               if (discount > 0)
                 _calcRow('Total Discount', '- ${money(discount)}', regular, PdfColors.green800),
+              _calcRow('Taxable Amount', money(taxable), regular, slateDark),
               if (!isInterState) ...[
-                _calcRow('CGST', money(cgst), regular, slateDark),
-                _calcRow('SGST', money(sgst), regular, slateDark),
+                if (cgst > 0) _calcRow('CGST', money(cgst), regular, slateDark),
+                if (sgst > 0) _calcRow('SGST', money(sgst), regular, slateDark),
               ] else ...[
-                _calcRow('IGST', money(igst), regular, slateDark),
+                if (igst > 0) _calcRow('IGST', money(igst), regular, slateDark),
               ],
+              for (final c in effectiveCharges)
+                _calcRow(
+                  c.name + (c.gstRate > 0 ? ' (incl. ${c.gstRate}% GST)' : ''),
+                  money(c.totalAmount),
+                  regular,
+                  slateDark,
+                ),
               if (roundOff != 0)
                 _calcRow('Round Off', (roundOff > 0 ? '+ ' : '') + money(roundOff), regular, slateMuted),
               pw.Divider(color: borderGrey, thickness: 0.5),
@@ -1511,68 +1635,6 @@ Future<Uint8List> buildDocumentPdf({
             ),
           );
         }(),
-
-        // ==========================================
-        // 6. HSN/SAC TAX BREAKDOWN TABLE (STATUTORY)
-        // ==========================================
-        if (customSettings.showHsnSummaryTable && hsnBreakupList.isNotEmpty) ...[
-          pw.SizedBox(height: 6),
-          pw.TableHelper.fromTextArray(
-            border: pw.TableBorder.all(color: borderGrey, width: 0.5),
-            headerDecoration: pw.BoxDecoration(color: softTint),
-            headerHeight: 18,
-            headerStyle: pw.TextStyle(font: bold, fontSize: 7, color: slateDark),
-            cellStyle: pw.TextStyle(font: regular, fontSize: 7),
-            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            headers: [
-              'HSN/SAC',
-              'Taxable Value',
-              if (!isInterState) 'CGST Rate',
-              if (!isInterState) 'CGST Amt',
-              if (!isInterState) 'SGST Rate',
-              if (!isInterState) 'SGST Amt',
-              if (isInterState) 'IGST Rate',
-              if (isInterState) 'IGST Amt',
-              'Total Tax Amount',
-            ],
-            cellAlignments: {
-              0: pw.Alignment.centerLeft,
-              1: pw.Alignment.centerRight,
-              if (!isInterState) 2: pw.Alignment.center,
-              if (!isInterState) 3: pw.Alignment.centerRight,
-              if (!isInterState) 4: pw.Alignment.center,
-              if (!isInterState) 5: pw.Alignment.centerRight,
-              if (isInterState) 2: pw.Alignment.center,
-              if (isInterState) 3: pw.Alignment.centerRight,
-              if (!isInterState) 6: pw.Alignment.centerRight,
-              if (isInterState) 4: pw.Alignment.centerRight,
-            },
-            data: [
-              ...hsnBreakupList.map((h) => [
-                h.hsn,
-                money(h.taxable),
-                if (!isInterState) '${(h.gstRate / 2).toStringAsFixed(1)}%',
-                if (!isInterState) money(h.cgst),
-                if (!isInterState) '${(h.gstRate / 2).toStringAsFixed(1)}%',
-                if (!isInterState) money(h.sgst),
-                if (isInterState) '${h.gstRate}%',
-                if (isInterState) money(h.igst),
-                money(h.totalTax),
-              ]),
-              [
-                'Total',
-                money(hsnBreakupList.fold(0, (sum, i) => sum + i.taxable)),
-                if (!isInterState) '',
-                if (!isInterState) money(hsnBreakupList.fold(0, (sum, i) => sum + i.cgst)),
-                if (!isInterState) '',
-                if (!isInterState) money(hsnBreakupList.fold(0, (sum, i) => sum + i.sgst)),
-                if (isInterState) '',
-                if (isInterState) money(hsnBreakupList.fold(0, (sum, i) => sum + i.igst)),
-                money(hsnBreakupList.fold(0, (sum, i) => sum + i.totalTax)),
-              ],
-            ],
-          ),
-        ],
 
         // ==========================================
         // 7. FINAL BOTTOM CLOSING CONTAINER
@@ -1856,6 +1918,7 @@ Future<Uint8List> buildThermalReceiptPdf({
   String? dueDate,
   String? partyName,
   required List<InvoiceLine> lines,
+  List<InvoiceCharge> charges = const [],
   required int subtotal,
   required int discount,
   required int taxable,
@@ -1971,6 +2034,14 @@ Future<Uint8List> buildThermalReceiptPdf({
                 pw.Text(money(igst), style: pw.TextStyle(font: mono, fontSize: fontSize)),
               ],
             ),
+          for (final c in charges)
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(c.name, style: pw.TextStyle(font: mono, fontSize: fontSize)),
+                pw.Text(money(c.totalAmount), style: pw.TextStyle(font: mono, fontSize: fontSize)),
+              ],
+            ),
           pw.Divider(thickness: 1),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -2025,6 +2096,7 @@ Future<Uint8List> buildInvoicePdf({
       dueDate: invoice.dueDate,
       partyName: invoice.customerName,
       lines: invoice.lines,
+      charges: invoice.charges,
       subtotal: invoice.subtotal,
       discount: invoice.discount,
       taxable: invoice.taxable,
@@ -2048,6 +2120,7 @@ Future<Uint8List> buildInvoicePdf({
     customer: customer,
     partyName: invoice.customerName,
     lines: invoice.lines,
+    charges: invoice.charges,
     subtotal: invoice.subtotal,
     discount: invoice.discount,
     taxable: invoice.taxable,
