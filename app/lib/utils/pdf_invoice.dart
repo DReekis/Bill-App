@@ -125,6 +125,9 @@ Future<Uint8List> buildDocumentPdf({
   bool reverseCharge = false,
   String? customFieldsJson,
   String? irn,
+  String? paymentMode,
+  String? deliveryDeclaration,
+  String? docTypeSubBadge,
 }) async {
   final doc = pw.Document();
   final regular = pw.Font.helvetica();
@@ -186,12 +189,263 @@ Future<Uint8List> buildDocumentPdf({
       ((shipToName != null && shipToName.trim().isNotEmpty) ||
           (shipToAddress != null && shipToAddress.trim().isNotEmpty));
 
-  final effectiveTitle = customSettings.customTitleOverride != null &&
-          customSettings.customTitleOverride!.trim().isNotEmpty
-      ? customSettings.customTitleOverride!.trim().toUpperCase()
-      : (title.toLowerCase().contains('tax') || business.taxRegistered
-          ? 'TAX INVOICE'
-          : title.toUpperCase());
+  final cleanTitleUpper = title.trim().toUpperCase();
+  final isDeliveryChallan = cleanTitleUpper.contains('CHALLAN');
+  final isPurchaseBill = cleanTitleUpper.contains('PURCHASE BILL') || cleanTitleUpper.contains('PURCHASE INVOICE');
+  final isPurchaseOrder = cleanTitleUpper.contains('PURCHASE ORDER');
+  final isSalesOrder = cleanTitleUpper.contains('SALES ORDER') || cleanTitleUpper.contains('WORK ORDER');
+  final isQuotation = cleanTitleUpper.contains('QUOTATION') || cleanTitleUpper.contains('ESTIMATE') || cleanTitleUpper.contains('PROFORMA');
+  final isCreditNote = cleanTitleUpper.contains('CREDIT NOTE');
+  final isDebitNote = cleanTitleUpper.contains('DEBIT NOTE');
+  final isReturnNote = isCreditNote || isDebitNote;
+  final isSalesInvoice = !isDeliveryChallan && !isPurchaseBill && !isPurchaseOrder && !isSalesOrder && !isQuotation && !isReturnNote;
+
+  final String effectiveTitle;
+  if (isSalesInvoice) {
+    if (customSettings.customTitleOverride != null && customSettings.customTitleOverride!.trim().isNotEmpty) {
+      effectiveTitle = customSettings.customTitleOverride!.trim().toUpperCase();
+    } else if (title.toLowerCase().contains('tax') || business.taxRegistered) {
+      effectiveTitle = 'TAX INVOICE';
+    } else {
+      effectiveTitle = title.trim().toUpperCase();
+    }
+  } else if (isDeliveryChallan) {
+    effectiveTitle = 'DELIVERY CHALLAN';
+  } else if (isPurchaseBill) {
+    effectiveTitle = 'PURCHASE BILL';
+  } else if (isPurchaseOrder) {
+    effectiveTitle = 'PURCHASE ORDER';
+  } else if (isSalesOrder) {
+    effectiveTitle = 'SALES ORDER';
+  } else if (isQuotation) {
+    effectiveTitle = title.toUpperCase().contains('PROFORMA') ? 'PROFORMA INVOICE' : 'QUOTATION';
+  } else if (isCreditNote) {
+    effectiveTitle = 'CREDIT NOTE';
+  } else if (isDebitNote) {
+    effectiveTitle = 'DEBIT NOTE';
+  } else {
+    effectiveTitle = title.trim().toUpperCase();
+  }
+
+  final String subBadgeLabel = docTypeSubBadge ??
+      (isDeliveryChallan
+          ? 'CHALLAN (NOT FOR SALE)'
+          : isPurchaseBill
+              ? 'ORIGINAL FOR BUYER'
+              : isPurchaseOrder
+                  ? 'PURCHASE ORDER'
+                  : isSalesOrder
+                      ? 'ORDER CONFIRMATION'
+                      : isQuotation
+                          ? (title.toUpperCase().contains('PROFORMA') ? 'PROFORMA' : 'ESTIMATE / QUOTE')
+                          : isCreditNote
+                              ? 'CREDIT NOTE'
+                              : isDebitNote
+                                  ? 'DEBIT NOTE'
+                                  : 'ORIGINAL FOR RECIPIENT');
+
+  final String docNoLabel = isDeliveryChallan
+      ? 'Challan No'
+      : isPurchaseBill
+          ? 'Bill No'
+          : isPurchaseOrder
+              ? 'PO No'
+              : isSalesOrder
+                  ? 'Order No'
+                  : isQuotation
+                      ? (title.toUpperCase().contains('PROFORMA') ? 'Proforma No' : 'Quote No')
+                      : isReturnNote
+                          ? 'Note No'
+                          : 'Invoice No';
+
+  final String docDateLabel = isDeliveryChallan
+      ? 'Challan Date'
+      : isPurchaseBill
+          ? 'Bill Date'
+          : isPurchaseOrder
+              ? 'PO Date'
+              : isSalesOrder
+                  ? 'Order Date'
+                  : isQuotation
+                      ? (title.toUpperCase().contains('PROFORMA') ? 'Proforma Date' : 'Quote Date')
+                      : isReturnNote
+                          ? 'Note Date'
+                          : 'Invoice Date';
+
+  final String dueDateLabel = isDeliveryChallan
+      ? 'Dispatch Date'
+      : isPurchaseOrder
+          ? 'Expected Delivery'
+          : isSalesOrder
+              ? 'Delivery Date'
+              : isQuotation
+                  ? 'Valid Till'
+                  : 'Due Date';
+
+  final cust = customer;
+  final effectivePartyName = (partyName != null && partyName.trim().isNotEmpty)
+      ? partyName.trim()
+      : (cust != null && cust.name.trim().isNotEmpty ? cust.name.trim() : null);
+
+  final cPhone = cust?.phone?.trim();
+  final effectivePartyPhone = (partyPhone != null && partyPhone.trim().isNotEmpty)
+      ? partyPhone.trim()
+      : (cPhone != null && cPhone.isNotEmpty ? cPhone : null);
+
+  final cBilling = cust?.billingAddress?.trim();
+  final cAddress = cust?.address?.trim();
+  final effectivePartyAddress = (partyAddress != null && partyAddress.trim().isNotEmpty)
+      ? partyAddress.trim()
+      : (cBilling != null && cBilling.isNotEmpty
+          ? cBilling
+          : (cAddress != null && cAddress.isNotEmpty ? cAddress : null));
+
+  final cGstin = cust?.gstin?.trim().toUpperCase();
+  final effectivePartyGstin = (partyGstin != null && partyGstin.trim().isNotEmpty)
+      ? partyGstin.trim().toUpperCase()
+      : (cGstin != null && cGstin.isNotEmpty ? cGstin : null);
+
+  final cPan = cust?.pan?.trim().toUpperCase();
+  final effectivePartyPan = (cPan != null && cPan.isNotEmpty)
+      ? cPan
+      : (effectivePartyGstin != null && effectivePartyGstin.length >= 12
+          ? effectivePartyGstin.substring(2, 12)
+          : null);
+
+  final cState = cust?.state?.trim();
+  final effectivePartyState = (partyState != null && partyState.trim().isNotEmpty)
+      ? partyState.trim()
+      : (cState != null && cState.isNotEmpty ? cState : null);
+
+  final cEmail = cust?.email?.trim();
+  final effectivePartyEmail = (cEmail != null && cEmail.isNotEmpty) ? cEmail : null;
+
+  final String partyBoxTitle = isPurchaseBill || isPurchaseOrder || isDebitNote
+      ? 'SUPPLIER / VENDOR (BILL FROM)'
+      : isDeliveryChallan
+          ? 'CONSIGNEE / DELIVER TO'
+          : isQuotation
+              ? 'QUOTATION FOR'
+              : isSalesOrder
+                  ? 'CUSTOMER / BILL TO'
+                  : isCreditNote
+                      ? 'CREDIT TO'
+                      : 'BILL TO';
+
+  final bool showSecondaryPartyBox = hasShipTo || isPurchaseBill || isPurchaseOrder || isDebitNote || isDeliveryChallan;
+
+  final String secondaryBoxTitle = hasShipTo
+      ? 'SHIP TO'
+      : (isPurchaseBill || isPurchaseOrder || isDebitNote)
+          ? 'PURCHASER / BUYER (BILL TO)'
+          : isDeliveryChallan
+              ? 'DISPATCH & TRANSPORT DETAILS'
+              : 'SHIP TO';
+
+  pw.Widget buildSecondaryPartyContent({bool isMinimal = false}) {
+    if (hasShipTo) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            (shipToName != null && shipToName.trim().isNotEmpty) ? shipToName.trim() : (effectivePartyName ?? ''),
+            style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark),
+          ),
+          if (shipToAddress != null && shipToAddress.trim().isNotEmpty)
+            pw.Text(shipToAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark)),
+          if (shipToState != null || shipToPincode != null)
+            pw.Text(
+              [
+                if (shipToState != null && shipToState.trim().isNotEmpty) 'State: ${shipToState.trim()}',
+                if (shipToPincode != null && shipToPincode.trim().isNotEmpty) 'PIN: ${shipToPincode.trim()}',
+              ].join(' | '),
+              style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark),
+            ),
+        ],
+      );
+    }
+    if (isPurchaseBill || isPurchaseOrder || isDebitNote) {
+      final bizAddress = [business.address, business.city, business.state, business.pinCode]
+          .whereType<String>()
+          .where((s) => s.isNotEmpty)
+          .join(', ');
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            getEffectiveBusinessName(business, customSettings).toUpperCase(),
+            style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark),
+          ),
+          if (bizAddress.isNotEmpty)
+            pw.Text(bizAddress, style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark)),
+          if (business.gstin != null && business.gstin!.isNotEmpty)
+            pw.RichText(
+              text: pw.TextSpan(children: [
+                pw.TextSpan(text: 'GSTIN : ', style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark)),
+                pw.TextSpan(text: business.gstin!, style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
+              ]),
+            ),
+          if (business.state != null && business.state!.isNotEmpty)
+            pw.Text('State : ${business.state!}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+          if (business.displayInvoicePhone.isNotEmpty)
+            pw.Text('Contact : ${business.displayInvoicePhone}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark)),
+          if (business.displayInvoiceEmail.isNotEmpty)
+            pw.Text('Email : ${business.displayInvoiceEmail}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark)),
+        ],
+      );
+    }
+    if (isDeliveryChallan) {
+      final vNo = (vehicleNumber != null && vehicleNumber.trim().isNotEmpty)
+          ? vehicleNumber.trim().toUpperCase()
+          : 'As per transporter';
+      final lrNo = (lrRrNumber != null && lrRrNumber.trim().isNotEmpty)
+          ? lrRrNumber.trim()
+          : 'Direct Delivery';
+      final refInv = (poNumber != null && poNumber.trim().isNotEmpty)
+          ? poNumber.trim()
+          : 'Separate Sale Invoice';
+      final dest = (placeOfSupply != null && placeOfSupply.isNotEmpty)
+          ? placeOfSupply
+          : (effectivePartyState ?? 'Local');
+
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Row(
+            children: [
+              pw.Text('Vehicle No : ', style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark)),
+              pw.Text(vNo, style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
+            ],
+          ),
+          pw.Row(
+            children: [
+              pw.Text('LR / Transporter : ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+              pw.Text(lrNo, style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark)),
+            ],
+          ),
+          pw.Row(
+            children: [
+              pw.Text('Ref. Invoice : ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+              pw.Text(refInv, style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark)),
+            ],
+          ),
+          pw.Row(
+            children: [
+              pw.Text('Dispatch Date : ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+              pw.Text(displayDate(date), style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark)),
+            ],
+          ),
+          pw.Row(
+            children: [
+              pw.Text('Destination : ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+              pw.Text(dest, style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark)),
+            ],
+          ),
+        ],
+      );
+    }
+    return pw.SizedBox();
+  }
 
   // Separate inventory product lines from charges
   final productLines = lines
@@ -585,7 +839,7 @@ Future<Uint8List> buildDocumentPdf({
                               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
                             ),
                             child: pw.Text(
-                              'ORIGINAL FOR RECIPIENT',
+                              subBadgeLabel,
                               style: pw.TextStyle(font: regular, fontSize: 6, color: slateMuted),
                             ),
                           ),
@@ -595,14 +849,14 @@ Future<Uint8List> buildDocumentPdf({
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.end,
                         children: [
-                          pw.Text('Invoice No. : ', style: pw.TextStyle(font: bold, fontSize: 8, color: slateDark)),
+                          pw.Text('$docNoLabel : ', style: pw.TextStyle(font: bold, fontSize: 8, color: slateDark)),
                           pw.Text(number, style: pw.TextStyle(font: bold, fontSize: 8, color: slateDark)),
                         ],
                       ),
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.end,
                         children: [
-                          pw.Text('Invoice Date : ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+                          pw.Text('$docDateLabel : ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
                           pw.Text(displayDate(date), style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
                         ],
                       ),
@@ -610,7 +864,7 @@ Future<Uint8List> buildDocumentPdf({
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.end,
                           children: [
-                            pw.Text('Due Date : ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+                            pw.Text('$dueDateLabel : ', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
                             pw.Text(displayDate(dueDate), style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
                           ],
                         ),
@@ -687,10 +941,10 @@ Future<Uint8List> buildDocumentPdf({
                         style: pw.TextStyle(font: bold, fontSize: 12, color: slateDark),
                       ),
                       pw.SizedBox(height: 3),
-                      pw.Text('Invoice #: $number', style: pw.TextStyle(font: bold, fontSize: 8.5, color: primaryColor)),
-                      pw.Text('Date: ${displayDate(date)}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                      pw.Text('$docNoLabel: $number', style: pw.TextStyle(font: bold, fontSize: 8.5, color: primaryColor)),
+                      pw.Text('$docDateLabel: ${displayDate(date)}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
                       if (dueDate != null && dueDate.isNotEmpty)
-                        pw.Text('Due: ${displayDate(dueDate)}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                        pw.Text('$dueDateLabel: ${displayDate(dueDate)}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
                       if (placeOfSupply != null && placeOfSupply.isNotEmpty)
                         pw.Text('POS: $placeOfSupply', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
                     ],
@@ -723,7 +977,7 @@ Future<Uint8List> buildDocumentPdf({
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     pw.Text(effectiveTitle, style: pw.TextStyle(font: bold, fontSize: 8.5, color: primaryColor)),
-                    pw.Text('Inv: $number', style: pw.TextStyle(font: bold, fontSize: 7.5)),
+                    pw.Text('$docNoLabel: $number', style: pw.TextStyle(font: bold, fontSize: 7.5)),
                     pw.Text(displayDate(date), style: pw.TextStyle(font: regular, fontSize: 7)),
                   ],
                 ),
@@ -825,14 +1079,14 @@ Future<Uint8List> buildDocumentPdf({
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.end,
                         children: [
-                          pw.Text('Invoice No: ', style: pw.TextStyle(font: bold, fontSize: 8.5)),
+                          pw.Text('$docNoLabel: ', style: pw.TextStyle(font: bold, fontSize: 8.5)),
                           pw.Text(number, style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark)),
                         ],
                       ),
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.end,
                         children: [
-                          pw.Text('Date: ', style: pw.TextStyle(font: bold, fontSize: 8)),
+                          pw.Text('$docDateLabel: ', style: pw.TextStyle(font: bold, fontSize: 8)),
                           pw.Text(displayDate(date), style: pw.TextStyle(font: regular, fontSize: 8)),
                         ],
                       ),
@@ -840,7 +1094,7 @@ Future<Uint8List> buildDocumentPdf({
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.end,
                           children: [
-                            pw.Text('Due Date: ', style: pw.TextStyle(font: bold, fontSize: 8)),
+                            pw.Text('$dueDateLabel: ', style: pw.TextStyle(font: bold, fontSize: 8)),
                             pw.Text(displayDate(dueDate), style: pw.TextStyle(font: regular, fontSize: 8)),
                           ],
                         ),
@@ -908,7 +1162,7 @@ Future<Uint8List> buildDocumentPdf({
                 pw.Expanded(
                   child: pw.Container(
                     decoration: pw.BoxDecoration(
-                      border: hasShipTo
+                      border: showSecondaryPartyBox
                           ? const pw.Border(right: pw.BorderSide(color: borderGrey, width: 0.8))
                           : null,
                     ),
@@ -919,7 +1173,7 @@ Future<Uint8List> buildDocumentPdf({
                           width: double.infinity,
                           padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           color: softTint,
-                          child: pw.Text('BILL TO', style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark)),
+                          child: pw.Text(partyBoxTitle, style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark)),
                         ),
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(6),
@@ -927,26 +1181,28 @@ Future<Uint8List> buildDocumentPdf({
                             crossAxisAlignment: pw.CrossAxisAlignment.start,
                             children: [
                               pw.Text(
-                                (partyName != null && partyName.trim().isNotEmpty) ? partyName.trim() : 'Cash / Walk-in Customer',
+                                effectivePartyName ?? 'Cash / Walk-in Customer',
                                 style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark),
                               ),
-                              if (partyAddress != null && partyAddress.trim().isNotEmpty)
-                                pw.Text(partyAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
-                              if (partyGstin != null && partyGstin.trim().isNotEmpty)
+                              if (effectivePartyAddress != null && effectivePartyAddress.isNotEmpty)
+                                pw.Text(effectivePartyAddress, style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+                              if (effectivePartyGstin != null && effectivePartyGstin.isNotEmpty)
                                 pw.RichText(
                                   text: pw.TextSpan(children: [
                                     pw.TextSpan(text: 'GSTIN : ', style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark)),
-                                    pw.TextSpan(text: partyGstin.trim(), style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
+                                    pw.TextSpan(text: effectivePartyGstin, style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
                                   ]),
                                 ),
-                              if (customSettings.showPan && customer?.pan != null && customer!.pan!.isNotEmpty)
-                                pw.Text('PAN Number : ${customer.pan}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+                              if (customSettings.showPan && effectivePartyPan != null && effectivePartyPan.isNotEmpty)
+                                pw.Text('PAN Number : $effectivePartyPan', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
                               if (placeOfSupply != null && placeOfSupply.isNotEmpty)
                                 pw.Text('Place of Supply : $placeOfSupply', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark))
-                              else if (partyState != null && partyState.trim().isNotEmpty)
-                                pw.Text('Place of Supply : $partyState', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
-                              if (customSettings.showPhone && partyPhone != null && partyPhone.trim().isNotEmpty)
-                                pw.Text('Contact : ${partyPhone.trim()}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+                              else if (effectivePartyState != null && effectivePartyState.isNotEmpty)
+                                pw.Text('Place of Supply : $effectivePartyState', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+                              if (customSettings.showPhone && effectivePartyPhone != null && effectivePartyPhone.isNotEmpty)
+                                pw.Text('Contact : $effectivePartyPhone', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
+                              if (effectivePartyEmail != null && effectivePartyEmail.isNotEmpty)
+                                pw.Text('Email : $effectivePartyEmail', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
                             ],
                           ),
                         ),
@@ -954,7 +1210,7 @@ Future<Uint8List> buildDocumentPdf({
                     ),
                   ),
                 ),
-                if (hasShipTo) ...[
+                if (showSecondaryPartyBox) ...[
                   pw.Expanded(
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -963,29 +1219,11 @@ Future<Uint8List> buildDocumentPdf({
                           width: double.infinity,
                           padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           color: softTint,
-                          child: pw.Text('SHIP TO', style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark)),
+                          child: pw.Text(secondaryBoxTitle, style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark)),
                         ),
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(6),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text(
-                                (shipToName != null && shipToName.trim().isNotEmpty) ? shipToName.trim() : (partyName ?? ''),
-                                style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark),
-                              ),
-                              if (shipToAddress != null && shipToAddress.trim().isNotEmpty)
-                                pw.Text(shipToAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark)),
-                              if (shipToState != null || shipToPincode != null)
-                                pw.Text(
-                                  [
-                                    if (shipToState != null && shipToState.trim().isNotEmpty) 'State: ${shipToState.trim()}',
-                                    if (shipToPincode != null && shipToPincode.trim().isNotEmpty) 'PIN: ${shipToPincode.trim()}',
-                                  ].join(' | '),
-                                  style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark),
-                                ),
-                            ],
-                          ),
+                          child: buildSecondaryPartyContent(),
                         ),
                       ],
                     ),
@@ -1006,34 +1244,33 @@ Future<Uint8List> buildDocumentPdf({
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('BILLED TO', style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
+                      pw.Text(partyBoxTitle, style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
                       pw.SizedBox(height: 2),
                       pw.Text(
-                        (partyName != null && partyName.trim().isNotEmpty) ? partyName.trim() : 'Cash / Walk-in Customer',
+                        effectivePartyName ?? 'Cash / Walk-in Customer',
                         style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark),
                       ),
-                      if (partyAddress != null && partyAddress.trim().isNotEmpty)
-                        pw.Text(partyAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
-                      if (partyGstin != null && partyGstin.trim().isNotEmpty)
-                        pw.Text('GSTIN: ${partyGstin.trim()}', style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark)),
-                      if (customSettings.showPhone && partyPhone != null && partyPhone.trim().isNotEmpty)
-                        pw.Text('Ph: ${partyPhone.trim()}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                      if (effectivePartyAddress != null && effectivePartyAddress.isNotEmpty)
+                        pw.Text(effectivePartyAddress, style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                      if (effectivePartyGstin != null && effectivePartyGstin.isNotEmpty)
+                        pw.Text('GSTIN: $effectivePartyGstin', style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark)),
+                      if (customSettings.showPan && effectivePartyPan != null && effectivePartyPan.isNotEmpty)
+                        pw.Text('PAN: $effectivePartyPan', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                      if (customSettings.showPhone && effectivePartyPhone != null && effectivePartyPhone.isNotEmpty)
+                        pw.Text('Ph: $effectivePartyPhone', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                      if (effectivePartyEmail != null && effectivePartyEmail.isNotEmpty)
+                        pw.Text('Email: $effectivePartyEmail', style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
                     ],
                   ),
                 ),
-                if (hasShipTo) ...[
+                if (showSecondaryPartyBox) ...[
                   pw.Expanded(
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('SHIPPED TO', style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
+                        pw.Text(secondaryBoxTitle, style: pw.TextStyle(font: bold, fontSize: 7.5, color: primaryColor)),
                         pw.SizedBox(height: 2),
-                        pw.Text(
-                          (shipToName != null && shipToName.trim().isNotEmpty) ? shipToName.trim() : (partyName ?? ''),
-                          style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark),
-                        ),
-                        if (shipToAddress != null && shipToAddress.trim().isNotEmpty)
-                          pw.Text(shipToAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateMuted)),
+                        buildSecondaryPartyContent(isMinimal: true),
                       ],
                     ),
                   ),
@@ -1048,8 +1285,12 @@ Future<Uint8List> buildDocumentPdf({
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
-                pw.Text('Customer: ${(partyName?.isNotEmpty == true) ? partyName! : "Cash"}', style: pw.TextStyle(font: bold, fontSize: 7.5)),
-                if (partyGstin?.isNotEmpty == true) pw.Text('GSTIN: $partyGstin', style: pw.TextStyle(font: regular, fontSize: 7)),
+                pw.Text(
+                  '${isPurchaseBill ? "Vendor: " : (isDeliveryChallan ? "Consignee: " : "Customer: ")}${effectivePartyName ?? "Cash"}',
+                  style: pw.TextStyle(font: bold, fontSize: 7.5),
+                ),
+                if (effectivePartyGstin != null && effectivePartyGstin.isNotEmpty)
+                  pw.Text('GSTIN: $effectivePartyGstin', style: pw.TextStyle(font: regular, fontSize: 7)),
               ],
             ),
           ),
@@ -1068,7 +1309,7 @@ Future<Uint8List> buildDocumentPdf({
                   child: pw.Container(
                     padding: const pw.EdgeInsets.all(8),
                     decoration: pw.BoxDecoration(
-                      border: hasShipTo
+                      border: showSecondaryPartyBox
                           ? const pw.Border(right: pw.BorderSide(color: borderGrey, width: 0.8))
                           : null,
                     ),
@@ -1076,34 +1317,36 @@ Future<Uint8List> buildDocumentPdf({
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          'BILL TO:',
+                          '$partyBoxTitle:',
                           style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor),
                         ),
                         pw.SizedBox(height: 2),
                         pw.Text(
-                          (partyName != null && partyName.trim().isNotEmpty) ? partyName.trim() : 'Cash / Walk-in Customer',
+                          effectivePartyName ?? 'Cash / Walk-in Customer',
                           style: pw.TextStyle(font: bold, fontSize: 9, color: slateDark),
                         ),
-                        if (partyAddress != null && partyAddress.trim().isNotEmpty)
-                          pw.Text(partyAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 8)),
-                        if (partyState != null && partyState.trim().isNotEmpty)
-                          pw.Text('State: $partyState', style: pw.TextStyle(font: regular, fontSize: 8)),
-                        if (partyGstin != null && partyGstin.trim().isNotEmpty)
+                        if (effectivePartyAddress != null && effectivePartyAddress.isNotEmpty)
+                          pw.Text(effectivePartyAddress, style: pw.TextStyle(font: regular, fontSize: 8)),
+                        if (effectivePartyState != null && effectivePartyState.isNotEmpty)
+                          pw.Text('State: $effectivePartyState', style: pw.TextStyle(font: regular, fontSize: 8)),
+                        if (effectivePartyGstin != null && effectivePartyGstin.isNotEmpty)
                           pw.RichText(
                             text: pw.TextSpan(children: [
                               pw.TextSpan(text: 'GSTIN: ', style: pw.TextStyle(font: bold, fontSize: 8)),
-                              pw.TextSpan(text: partyGstin.trim(), style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor)),
+                              pw.TextSpan(text: effectivePartyGstin, style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor)),
                             ]),
                           ),
-                        if (customSettings.showPan && customer?.pan != null && customer!.pan!.isNotEmpty)
-                          pw.Text('PAN: ${customer.pan}', style: pw.TextStyle(font: regular, fontSize: 8)),
-                        if (customSettings.showPhone && partyPhone != null && partyPhone.trim().isNotEmpty)
-                          pw.Text('Contact: ${partyPhone.trim()}', style: pw.TextStyle(font: regular, fontSize: 8)),
+                        if (customSettings.showPan && effectivePartyPan != null && effectivePartyPan.isNotEmpty)
+                          pw.Text('PAN: $effectivePartyPan', style: pw.TextStyle(font: regular, fontSize: 8)),
+                        if (customSettings.showPhone && effectivePartyPhone != null && effectivePartyPhone.isNotEmpty)
+                          pw.Text('Contact: $effectivePartyPhone', style: pw.TextStyle(font: regular, fontSize: 8)),
+                        if (effectivePartyEmail != null && effectivePartyEmail.isNotEmpty)
+                          pw.Text('Email: $effectivePartyEmail', style: pw.TextStyle(font: regular, fontSize: 8)),
                       ],
                     ),
                   ),
                 ),
-                if (hasShipTo) ...[
+                if (showSecondaryPartyBox) ...[
                   pw.Expanded(
                     child: pw.Container(
                       padding: const pw.EdgeInsets.all(8),
@@ -1111,24 +1354,11 @@ Future<Uint8List> buildDocumentPdf({
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
-                            'SHIP TO:',
+                            '$secondaryBoxTitle:',
                             style: pw.TextStyle(font: bold, fontSize: 8, color: primaryColor),
                           ),
                           pw.SizedBox(height: 2),
-                          pw.Text(
-                            (shipToName != null && shipToName.trim().isNotEmpty) ? shipToName.trim() : (partyName ?? ''),
-                            style: pw.TextStyle(font: bold, fontSize: 9, color: slateDark),
-                          ),
-                          if (shipToAddress != null && shipToAddress.trim().isNotEmpty)
-                            pw.Text(shipToAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 8)),
-                          if (shipToState != null || shipToPincode != null)
-                            pw.Text(
-                              [
-                                if (shipToState != null && shipToState.trim().isNotEmpty) 'State: ${shipToState.trim()}',
-                                if (shipToPincode != null && shipToPincode.trim().isNotEmpty) 'PIN: ${shipToPincode.trim()}',
-                              ].join(' | '),
-                              style: pw.TextStyle(font: regular, fontSize: 8),
-                            ),
+                          buildSecondaryPartyContent(),
                         ],
                       ),
                     ),
@@ -1142,10 +1372,11 @@ Future<Uint8List> buildDocumentPdf({
         // ==========================================
         // 3. TRANSPORT & STATUTORY STRIP (CONDITIONAL)
         // ==========================================
-        if ((vehicleNumber != null && vehicleNumber.trim().isNotEmpty) ||
+        if (!isDeliveryChallan &&
+            ((vehicleNumber != null && vehicleNumber.trim().isNotEmpty) ||
             (ewayBillNumber != null && ewayBillNumber.trim().isNotEmpty) ||
             (poNumber != null && poNumber.trim().isNotEmpty) ||
-            (lrRrNumber != null && lrRrNumber.trim().isNotEmpty)) ...[
+            (lrRrNumber != null && lrRrNumber.trim().isNotEmpty))) ...[
           pw.Container(
             padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             margin: themeStyle == 'billbook_stylish' ? const pw.EdgeInsets.only(bottom: 6) : pw.EdgeInsets.zero,
@@ -1450,7 +1681,7 @@ Future<Uint8List> buildDocumentPdf({
         // 5. HSN/SAC TAX BREAKDOWN TABLE (STATUTORY)
         // Strictly placed immediately following the Line Items Table
         // ==========================================
-        if (customSettings.showHsnSummaryTable && hsnBreakupList.isNotEmpty) ...[
+        if (customSettings.showHsnSummaryTable && hsnBreakupList.isNotEmpty && !isDeliveryChallan) ...[
           pw.SizedBox(height: 6),
           pw.TableHelper.fromTextArray(
             border: pw.TableBorder.all(color: borderGrey, width: 0.5),
@@ -1511,72 +1742,123 @@ Future<Uint8List> buildDocumentPdf({
 
         // ==========================================
         // 6. FINANCIAL SUBTOTALS, CHARGES & AMOUNT IN WORDS
-        // Shows itemized tax details clearly above Total Amount for both Inc. & Excl. GST
         // ==========================================
         () {
-          final calcColumn = pw.Column(
-            children: [
-              if (subtotal != taxable)
-                _calcRow('Subtotal', money(subtotal), regular, slateDark),
-              if (discount > 0)
-                _calcRow('Total Discount', '- ${money(discount)}', regular, PdfColors.green800),
-              _calcRow('Taxable Amount', money(taxable), regular, slateDark),
-              if (!isInterState) ...[
-                if (cgst > 0) _calcRow('CGST', money(cgst), regular, slateDark),
-                if (sgst > 0) _calcRow('SGST', money(sgst), regular, slateDark),
-              ] else ...[
-                if (igst > 0) _calcRow('IGST', money(igst), regular, slateDark),
+          final pw.Widget calcColumn;
+          if (isDeliveryChallan) {
+            calcColumn = pw.Column(
+              children: [
+                _calcRow('Total Items Dispatched', '${productLines.length}', bold, slateDark),
+                _calcRow('Total Quantity', _qty(productLines.fold(0.0, (sum, l) => sum + l.quantity)), bold, slateDark),
+                if (subtotal > 0) ...[
+                  pw.Divider(color: borderGrey, thickness: 0.5),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 3.5, horizontal: 6),
+                    decoration: pw.BoxDecoration(
+                      color: softTint,
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+                    ),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(
+                          'Total Declared Value',
+                          style: pw.TextStyle(
+                            font: bold,
+                            fontSize: 9,
+                            color: primaryColor,
+                          ),
+                        ),
+                        pw.Text(
+                          money(total),
+                          style: pw.TextStyle(
+                            font: bold,
+                            fontSize: 9,
+                            color: primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
-              for (final c in effectiveCharges)
+            );
+          } else {
+            calcColumn = pw.Column(
+              children: [
+                if (subtotal != taxable)
+                  _calcRow('Subtotal', money(subtotal), regular, slateDark),
+                if (discount > 0)
+                  _calcRow('Total Discount', '- ${money(discount)}', regular, PdfColors.green800),
+                _calcRow('Taxable Amount', money(taxable), regular, slateDark),
+                if (!isInterState) ...[
+                  if (cgst > 0) _calcRow('CGST', money(cgst), regular, slateDark),
+                  if (sgst > 0) _calcRow('SGST', money(sgst), regular, slateDark),
+                ] else ...[
+                  if (igst > 0) _calcRow('IGST', money(igst), regular, slateDark),
+                ],
+                for (final c in effectiveCharges)
+                  _calcRow(
+                    c.name + (c.gstRate > 0 ? ' (incl. ${c.gstRate}% GST)' : ''),
+                    money(c.totalAmount),
+                    regular,
+                    slateDark,
+                  ),
+                if (roundOff != 0)
+                  _calcRow('Round Off', (roundOff > 0 ? '+ ' : '') + money(roundOff), regular, slateMuted),
+                pw.Divider(color: borderGrey, thickness: 0.5),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 3.5, horizontal: 6),
+                  decoration: pw.BoxDecoration(
+                    color: softTint,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+                  ),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        isPurchaseBill ? 'Total Bill Amount' : 'Total Amount',
+                        style: pw.TextStyle(
+                          font: bold,
+                          fontSize: 9.5,
+                          color: primaryColor,
+                        ),
+                      ),
+                      pw.Text(
+                        money(total),
+                        style: pw.TextStyle(
+                          font: bold,
+                          fontSize: 9.5,
+                          color: primaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 3),
                 _calcRow(
-                  c.name + (c.gstRate > 0 ? ' (incl. ${c.gstRate}% GST)' : ''),
-                  money(c.totalAmount),
+                  isPurchaseBill ? 'Amount Paid' : 'Received Amount',
+                  money(total - outstandingPaise),
                   regular,
-                  slateDark,
+                  PdfColors.green800,
                 ),
-              if (roundOff != 0)
-                _calcRow('Round Off', (roundOff > 0 ? '+ ' : '') + money(roundOff), regular, slateMuted),
-              pw.Divider(color: borderGrey, thickness: 0.5),
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(vertical: 3.5, horizontal: 6),
-                decoration: pw.BoxDecoration(
-                  color: softTint,
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
-                ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      'Total Amount',
-                      style: pw.TextStyle(
-                        font: bold,
-                        fontSize: 9.5,
-                        color: primaryColor,
-                      ),
-                    ),
-                    pw.Text(
-                      money(total),
-                      style: pw.TextStyle(
-                        font: bold,
-                        fontSize: 9.5,
-                        color: primaryColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              pw.SizedBox(height: 3),
-              _calcRow('Received Amount', money(total - outstandingPaise), regular, PdfColors.green800),
-              if (outstandingPaise > 0)
-                _calcRow('Balance Due', money(outstandingPaise), bold, PdfColors.red800),
-            ],
-          );
+                if (outstandingPaise > 0)
+                  _calcRow('Balance Due', money(outstandingPaise), bold, PdfColors.red800)
+                else
+                  _calcRow('Payment Status', 'PAID IN FULL', bold, PdfColors.green800),
+                if (paymentMode != null && paymentMode.isNotEmpty)
+                  _calcRow('Payment Mode', paymentMode.toUpperCase(), regular, slateMuted),
+              ],
+            );
+          }
 
           final amountInWordsWidget = pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'Total Amount (in words)',
+                isDeliveryChallan
+                    ? 'Total Declared Value (in words)'
+                    : (isPurchaseBill ? 'Total Bill Amount (in words)' : 'Total Amount (in words)'),
                 style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark),
               ),
               pw.SizedBox(height: 2),
@@ -1584,9 +1866,19 @@ Future<Uint8List> buildDocumentPdf({
                 _amountInWords(total),
                 style: pw.TextStyle(font: bold, fontSize: 8, color: slateDark),
               ),
+              if (isDeliveryChallan) ...[
+                pw.SizedBox(height: 5),
+                pw.Text(
+                  'Item Summary : ${productLines.length} item(s) dispatched  |  Total Qty: ${_qty(productLines.fold(0.0, (sum, l) => sum + l.quantity))}',
+                  style: pw.TextStyle(font: bold, fontSize: 7, color: slateDark),
+                ),
+              ],
               if (notes != null && notes.trim().isNotEmpty) ...[
-                pw.SizedBox(height: 8),
-                pw.Text('Special Notes:', style: pw.TextStyle(font: bold, fontSize: 7, color: slateMuted)),
+                pw.SizedBox(height: 6),
+                pw.Text(
+                  isPurchaseBill ? 'Vendor Notes & Ref:' : (isDeliveryChallan ? 'Dispatch Instructions:' : 'Special Notes:'),
+                  style: pw.TextStyle(font: bold, fontSize: 7, color: slateMuted),
+                ),
                 pw.SizedBox(height: 1),
                 pw.Text(notes.trim(), style: pw.TextStyle(font: regular, fontSize: 6.5, color: slateMuted)),
               ],
@@ -1642,13 +1934,128 @@ Future<Uint8List> buildDocumentPdf({
         // Positioned at the very end of the invoice contents
         // ==========================================
         () {
-          final hasBank = customSettings.showBankDetails && bankAccount != null;
-          final hasQr = customSettings.showUpiQr;
+          final hasBank = customSettings.showBankDetails &&
+              bankAccount != null &&
+              !isDeliveryChallan &&
+              !isPurchaseBill &&
+              !isDebitNote;
+          final hasQr = customSettings.showUpiQr &&
+              !isPurchaseBill &&
+              !isPurchaseOrder &&
+              !isDeliveryChallan &&
+              !isDebitNote;
           final hasBankOrQr = hasBank || hasQr;
-          final showT = customSettings.showTerms && termsText != null && termsText.trim().isNotEmpty;
-          final showD = customSettings.showDeclaration && customSettings.declarationText.trim().isNotEmpty;
+
+          final effectiveChallanTerms = isDeliveryChallan
+              ? (termsText != null && termsText.trim().isNotEmpty
+                  ? termsText.trim()
+                  : 'This Delivery Challan is issued under Rule 55 of CGST Rules, 2017 for goods dispatch (not for sale / commercial invoice issued separately).')
+              : termsText?.trim();
+
+          final showT = effectiveChallanTerms != null && effectiveChallanTerms.isNotEmpty;
+          final showD = !isDeliveryChallan &&
+              customSettings.showDeclaration &&
+              customSettings.declarationText.trim().isNotEmpty;
           final hasTermsOrDec = showT || showD;
           final hasSig = customSettings.showSignatureBox;
+
+          // Delivery Challan Special BillBook Layout: Rule 55 Declaration & Dual Signatures (Receiver & Sender)
+          if (isDeliveryChallan) {
+            return pw.Container(
+              margin: const pw.EdgeInsets.only(top: 6),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: borderGrey, width: 0.8),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  if (showT)
+                    pw.Container(
+                      width: double.infinity,
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: const pw.BoxDecoration(
+                        color: lightGrey,
+                        border: pw.Border(bottom: pw.BorderSide(color: borderGrey, width: 0.6)),
+                      ),
+                      child: pw.Text(
+                        'Statutory Declaration (Rule 55 CGST): $effectiveChallanTerms',
+                        style: pw.TextStyle(font: regular, fontSize: 6.5, color: slateDark),
+                      ),
+                    ),
+                  pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Expanded(
+                        flex: 3,
+                        child: pw.Container(
+                          padding: const pw.EdgeInsets.all(8),
+                          decoration: const pw.BoxDecoration(
+                            border: pw.Border(right: pw.BorderSide(color: borderGrey, width: 0.8)),
+                          ),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Text('Receiver\'s Acknowledgment & Stamp',
+                                  style: pw.TextStyle(font: bold, fontSize: 8, color: slateDark)),
+                              pw.SizedBox(height: 3),
+                              pw.Text(
+                                'Received the specified goods in sound condition and correct quantity.',
+                                style: pw.TextStyle(font: regular, fontSize: 6.5, color: slateMuted),
+                              ),
+                              pw.SizedBox(height: 24),
+                              pw.Row(
+                                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                                children: [
+                                  pw.Text('Receiver\'s Signature: ________________',
+                                      style: pw.TextStyle(font: regular, fontSize: 7, color: slateDark)),
+                                  pw.Text('Date: ____________',
+                                      style: pw.TextStyle(font: regular, fontSize: 7, color: slateMuted)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      pw.Expanded(
+                        flex: 2,
+                        child: pw.Container(
+                          padding: const pw.EdgeInsets.all(8),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.center,
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Text(
+                                'For : ${getEffectiveBusinessName(business, customSettings).toUpperCase()}',
+                                style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                              pw.SizedBox(height: 6),
+                              if (signatureImage != null)
+                                pw.Container(
+                                  height: 38,
+                                  child: pw.Image(signatureImage, fit: pw.BoxFit.contain),
+                                )
+                              else
+                                pw.Container(
+                                  height: 28,
+                                  margin: const pw.EdgeInsets.symmetric(vertical: 4),
+                                ),
+                              pw.Text(
+                                business.signatureText.isNotEmpty ? business.signatureText : 'Authorized Signatory / Dispatcher',
+                                style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }
 
           if (!hasBankOrQr && !hasTermsOrDec && !hasSig) return pw.SizedBox();
 
@@ -1732,14 +2139,18 @@ Future<Uint8List> buildDocumentPdf({
 
           // Terms and Conditions Block
           pw.Widget buildTermsBlock() {
+            final termsText = effectiveChallanTerms;
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                if (showT) ...[
-                  pw.Text('Terms and conditions', style: pw.TextStyle(font: bold, fontSize: 8, color: slateDark)),
+                if (showT && termsText != null && termsText.isNotEmpty) ...[
+                  pw.Text(
+                    isPurchaseBill ? 'Purchase Terms & Conditions' : 'Terms and conditions',
+                    style: pw.TextStyle(font: bold, fontSize: 8, color: slateDark),
+                  ),
                   pw.SizedBox(height: 3),
                   pw.Text(
-                    termsText.trim(),
+                    termsText,
                     style: pw.TextStyle(font: regular, fontSize: 6.5, color: slateDark, lineSpacing: 1.1),
                   ),
                   if (showD) pw.SizedBox(height: 4),
@@ -1763,7 +2174,9 @@ Future<Uint8List> buildDocumentPdf({
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(
-                  'For : ${getEffectiveBusinessName(business, customSettings).toUpperCase()}',
+                  isPurchaseBill
+                      ? 'Verified / Authorized Signatory'
+                      : 'For : ${getEffectiveBusinessName(business, customSettings).toUpperCase()}',
                   style: pw.TextStyle(font: bold, fontSize: 7.5, color: slateDark),
                   textAlign: pw.TextAlign.center,
                 ),
@@ -1779,7 +2192,9 @@ Future<Uint8List> buildDocumentPdf({
                     margin: const pw.EdgeInsets.symmetric(vertical: 4),
                   ),
                 pw.Text(
-                  business.signatureText.isNotEmpty ? business.signatureText : 'Authorized Signatory',
+                  isPurchaseBill
+                      ? (business.signatureText.isNotEmpty ? business.signatureText : 'Goods Inward / Receiver')
+                      : (business.signatureText.isNotEmpty ? business.signatureText : 'Authorized Signatory'),
                   style: pw.TextStyle(font: regular, fontSize: 7.5, color: slateDark),
                   textAlign: pw.TextAlign.center,
                 ),
@@ -1789,7 +2204,7 @@ Future<Uint8List> buildDocumentPdf({
 
           final List<pw.Widget> columns = [];
 
-          if (customSettings.bankQrPlacement == 'right') {
+          if (customSettings.bankQrPlacement == 'right' && hasBankOrQr) {
             if (hasTermsOrDec) {
               columns.add(
                 pw.Expanded(
@@ -1810,45 +2225,39 @@ Future<Uint8List> buildDocumentPdf({
                   flex: 2,
                   child: pw.Container(
                     padding: const pw.EdgeInsets.all(8),
-                    decoration: hasBankOrQr
-                        ? const pw.BoxDecoration(
-                            border: pw.Border(right: pw.BorderSide(color: borderGrey, width: 0.8)),
-                          )
-                        : null,
+                    decoration: const pw.BoxDecoration(
+                      border: pw.Border(right: pw.BorderSide(color: borderGrey, width: 0.8)),
+                    ),
                     child: buildSignatoryBlock(),
                   ),
                 ),
               );
             }
-            if (hasBankOrQr) {
-              columns.add(
-                pw.Expanded(
-                  flex: 3,
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(8),
-                    child: buildBankDetailsBlock(),
-                  ),
+            columns.add(
+              pw.Expanded(
+                flex: 3,
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: buildBankDetailsBlock(),
                 ),
-              );
-            }
-          } else {
+              ),
+            );
+          } else if (hasBankOrQr) {
             // Default: Bank details & QR on left (as in Balaji & Mahadev Page 3)
-            if (hasBankOrQr) {
-              columns.add(
-                pw.Expanded(
-                  flex: 3,
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(8),
-                    decoration: (hasTermsOrDec || hasSig)
-                        ? const pw.BoxDecoration(
-                            border: pw.Border(right: pw.BorderSide(color: borderGrey, width: 0.8)),
-                          )
-                        : null,
-                    child: buildBankDetailsBlock(),
-                  ),
+            columns.add(
+              pw.Expanded(
+                flex: 3,
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: (hasTermsOrDec || hasSig)
+                      ? const pw.BoxDecoration(
+                          border: pw.Border(right: pw.BorderSide(color: borderGrey, width: 0.8)),
+                        )
+                      : null,
+                  child: buildBankDetailsBlock(),
                 ),
-              );
-            }
+              ),
+            );
             if (hasTermsOrDec) {
               columns.add(
                 pw.Expanded(
@@ -1861,6 +2270,61 @@ Future<Uint8List> buildDocumentPdf({
                           )
                         : null,
                     child: buildTermsBlock(),
+                  ),
+                ),
+              );
+            }
+            if (hasSig) {
+              columns.add(
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    child: buildSignatoryBlock(),
+                  ),
+                ),
+              );
+            }
+          } else {
+            // Non-banking vouchers (Purchase Bill, PO, Debit Notes): Clean 2-column Terms/Inward and Signature
+            if (hasTermsOrDec) {
+              columns.add(
+                pw.Expanded(
+                  flex: 3,
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    decoration: const pw.BoxDecoration(
+                      border: pw.Border(right: pw.BorderSide(color: borderGrey, width: 0.8)),
+                    ),
+                    child: buildTermsBlock(),
+                  ),
+                ),
+              );
+            } else {
+              columns.add(
+                pw.Expanded(
+                  flex: 3,
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    decoration: const pw.BoxDecoration(
+                      border: pw.Border(right: pw.BorderSide(color: borderGrey, width: 0.8)),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          isPurchaseBill ? 'Inward Verification' : 'Order Verification',
+                          style: pw.TextStyle(font: bold, fontSize: 8, color: slateDark),
+                        ),
+                        pw.SizedBox(height: 3),
+                        pw.Text(
+                          isPurchaseBill
+                              ? 'All goods listed in this purchase bill have been verified against vendor delivery and entered in stock ledger.'
+                              : 'This purchase order is confirmed for delivery as per agreed commercial specifications.',
+                          style: pw.TextStyle(font: regular, fontSize: 6.5, color: slateMuted),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -2119,6 +2583,10 @@ Future<Uint8List> buildInvoicePdf({
     dueDate: invoice.dueDate,
     customer: customer,
     partyName: invoice.customerName,
+    partyPhone: customer?.phone,
+    partyAddress: customer?.billingAddress ?? customer?.address,
+    partyGstin: customer?.gstin,
+    partyState: customer?.state,
     lines: invoice.lines,
     charges: invoice.charges,
     subtotal: invoice.subtotal,
@@ -2159,13 +2627,17 @@ Future<void> printInvoice({
   required Business business,
   required Invoice invoice,
   Customer? customer,
+  BankAccount? bankAccount,
   InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
   final bytes = await buildInvoicePdf(
     business: business,
     invoice: invoice,
     customer: customer,
+    bankAccount: bankAccount,
     paperSize: paperSize,
+    settings: settings,
   );
   await Printing.layoutPdf(
     onLayout: (_) async => bytes,
@@ -2177,13 +2649,17 @@ Future<void> shareInvoice({
   required Business business,
   required Invoice invoice,
   Customer? customer,
+  BankAccount? bankAccount,
   InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
   final bytes = await buildInvoicePdf(
     business: business,
     invoice: invoice,
     customer: customer,
+    bankAccount: bankAccount,
     paperSize: paperSize,
+    settings: settings,
   );
   await Printing.sharePdf(bytes: bytes, filename: '${invoice.number}.pdf');
 }
@@ -2293,6 +2769,7 @@ Future<void> showInvoicePreviewModal(
   BankAccount? bankAccount,
   Future<Uint8List> Function()? pdfBuilder,
   String title = 'Invoice Preview',
+  String? filename,
 }) {
   final Future<Uint8List> Function() effectiveBuilder = pdfBuilder ??
       () => generateCommercialSamplePdf(
@@ -2316,17 +2793,29 @@ Future<void> showInvoicePreviewModal(
           ),
           actions: [
             IconButton(
+              icon: const Icon(Icons.share_outlined),
+              tooltip: 'Share',
+              onPressed: () async {
+                final bytes = await effectiveBuilder();
+                final safeFilename = filename ?? '${title.replaceAll(RegExp(r'[^\w\.-]'), '_')}.pdf';
+                await Printing.sharePdf(bytes: bytes, filename: safeFilename);
+              },
+            ),
+            IconButton(
               icon: const Icon(Icons.print_outlined),
               tooltip: 'Print',
               onPressed: () async {
                 final bytes = await effectiveBuilder();
-                await Printing.layoutPdf(onLayout: (_) async => bytes, name: '$title.pdf');
+                final safeName = filename ?? '$title.pdf';
+                await Printing.layoutPdf(onLayout: (_) async => bytes, name: safeName);
               },
             ),
           ],
         ),
         body: PdfPreview(
           build: (format) => effectiveBuilder(),
+          allowPrinting: true,
+          allowSharing: true,
           canChangeOrientation: false,
           canChangePageFormat: false,
           canDebug: false,
@@ -2349,6 +2838,16 @@ Future<Uint8List> buildQuotationPdf({
       ? await Repository.instance.customer(business.id!, quotation.customerId!)
       : null;
 
+  bankAccount ??= (business.bankAccountId != null)
+      ? await Repository.instance.getBankAccount(business.bankAccountId!)
+      : (business.id != null
+          ? (await Repository.instance.bankAccounts(business.id!)).where((b) => !b.inactive).firstOrNull
+          : null);
+
+  settings ??= business.id != null
+      ? await Repository.instance.getInvoiceCustomizationSettings(business.id!)
+      : null;
+
   return buildDocumentPdf(
     business: business,
     title: quotation.isProforma ? 'Proforma Invoice' : 'Quotation',
@@ -2357,6 +2856,10 @@ Future<Uint8List> buildQuotationPdf({
     dueDate: quotation.expiryDate,
     customer: customer,
     partyName: quotation.customerName,
+    partyPhone: customer?.phone,
+    partyAddress: customer?.billingAddress ?? customer?.address,
+    partyGstin: customer?.gstin,
+    partyState: customer?.state,
     lines: quotation.lines,
     subtotal: quotation.subtotal,
     discount: quotation.discount,
@@ -2379,8 +2882,18 @@ Future<void> printQuotation({
   required Business business,
   required Quotation quotation,
   Customer? customer,
+  BankAccount? bankAccount,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildQuotationPdf(business: business, quotation: quotation, customer: customer);
+  final bytes = await buildQuotationPdf(
+    business: business,
+    quotation: quotation,
+    customer: customer,
+    bankAccount: bankAccount,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.layoutPdf(
     onLayout: (_) async => bytes,
     name: '${quotation.number}.pdf',
@@ -2391,8 +2904,18 @@ Future<void> shareQuotation({
   required Business business,
   required Quotation quotation,
   Customer? customer,
+  BankAccount? bankAccount,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildQuotationPdf(business: business, quotation: quotation, customer: customer);
+  final bytes = await buildQuotationPdf(
+    business: business,
+    quotation: quotation,
+    customer: customer,
+    bankAccount: bankAccount,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.sharePdf(bytes: bytes, filename: '${quotation.number}.pdf');
 }
 
@@ -2401,38 +2924,86 @@ Future<Uint8List> buildReturnPdf({
   required TransactionReturn returnInvoice,
   Customer? customer,
   InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  customer ??= (returnInvoice.partyId != null && business.id != null && returnInvoice.partyType == 'customer')
-      ? await Repository.instance.customer(business.id!, returnInvoice.partyId!)
+  Customer? partyAsCustomer = customer;
+  if (partyAsCustomer == null && returnInvoice.partyId != null && business.id != null) {
+    if (returnInvoice.partyType == 'customer') {
+      partyAsCustomer = await Repository.instance.customer(business.id!, returnInvoice.partyId!);
+    } else {
+      final supp = await Repository.instance.supplier(business.id!, returnInvoice.partyId!);
+      if (supp != null) {
+        partyAsCustomer = Customer(
+          id: supp.id,
+          name: supp.name,
+          phone: supp.phone,
+          address: supp.address,
+          state: supp.state,
+          gstin: supp.gstin,
+        );
+      }
+    }
+  }
+
+  settings ??= business.id != null
+      ? await Repository.instance.getInvoiceCustomizationSettings(business.id!)
       : null;
+
+  final isCredit = returnInvoice.partyType == 'customer';
+  final title = isCredit ? 'Credit Note' : 'Debit Note';
+
+  final partyState = partyAsCustomer?.state?.trim().toLowerCase();
+  final bizState = business.state?.trim().toLowerCase();
+  final isInterState = partyState != null &&
+      partyState.isNotEmpty &&
+      bizState != null &&
+      bizState.isNotEmpty &&
+      partyState != bizState;
+  final igst = isInterState ? returnInvoice.tax : 0;
+  final cgst = isInterState ? 0 : returnInvoice.tax ~/ 2;
+  final sgst = isInterState ? 0 : returnInvoice.tax - (returnInvoice.tax ~/ 2);
 
   return buildDocumentPdf(
     business: business,
-    title: 'Credit Note / Sales Return',
+    title: title,
     number: returnInvoice.number,
     date: returnInvoice.date,
-    customer: customer,
+    customer: partyAsCustomer,
     partyName: returnInvoice.partyName,
+    partyPhone: partyAsCustomer?.phone,
+    partyAddress: partyAsCustomer?.billingAddress ?? partyAsCustomer?.address,
+    partyGstin: partyAsCustomer?.gstin,
+    partyState: partyAsCustomer?.state,
     lines: returnInvoice.lines,
     subtotal: returnInvoice.subtotal,
     discount: 0,
     taxable: returnInvoice.taxable,
-    igst: 0,
-    cgst: returnInvoice.tax ~/ 2,
-    sgst: returnInvoice.tax - (returnInvoice.tax ~/ 2),
+    igst: igst,
+    cgst: cgst,
+    sgst: sgst,
     roundOff: 0,
     total: returnInvoice.total,
     outstandingPaise: returnInvoice.total,
     notes: returnInvoice.reason,
     pageFormat: paperSize.format,
+    settings: settings,
   );
 }
 
 Future<void> printReturn({
   required Business business,
   required TransactionReturn returnInvoice,
+  Customer? customer,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildReturnPdf(business: business, returnInvoice: returnInvoice);
+  final bytes = await buildReturnPdf(
+    business: business,
+    returnInvoice: returnInvoice,
+    customer: customer,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.layoutPdf(
     onLayout: (_) async => bytes,
     name: '${returnInvoice.number}.pdf',
@@ -2442,8 +3013,17 @@ Future<void> printReturn({
 Future<void> shareReturn({
   required Business business,
   required TransactionReturn returnInvoice,
+  Customer? customer,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildReturnPdf(business: business, returnInvoice: returnInvoice);
+  final bytes = await buildReturnPdf(
+    business: business,
+    returnInvoice: returnInvoice,
+    customer: customer,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.sharePdf(bytes: bytes, filename: '${returnInvoice.number}.pdf');
 }
 
@@ -2451,10 +3031,22 @@ Future<Uint8List> buildSalesOrderPdf({
   required Business business,
   required SalesOrder order,
   Customer? customer,
+  BankAccount? bankAccount,
   InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
   customer ??= (order.customerId != null && business.id != null)
       ? await Repository.instance.customer(business.id!, order.customerId!)
+      : null;
+
+  bankAccount ??= (business.bankAccountId != null)
+      ? await Repository.instance.getBankAccount(business.bankAccountId!)
+      : (business.id != null
+          ? (await Repository.instance.bankAccounts(business.id!)).where((b) => !b.inactive).firstOrNull
+          : null);
+
+  settings ??= business.id != null
+      ? await Repository.instance.getInvoiceCustomizationSettings(business.id!)
       : null;
 
   int subtotal = 0;
@@ -2466,6 +3058,15 @@ Future<Uint8List> buildSalesOrderPdf({
     tax += l.tax;
   }
 
+  final partyState = (customer?.state ?? '').trim().toLowerCase();
+  final bizState = (business.state ?? '').trim().toLowerCase();
+  final isInterState = partyState.isNotEmpty &&
+      bizState.isNotEmpty &&
+      partyState != bizState;
+  final igst = isInterState ? tax : 0;
+  final cgst = isInterState ? 0 : tax ~/ 2;
+  final sgst = isInterState ? 0 : tax - (tax ~/ 2);
+
   return buildDocumentPdf(
     business: business,
     title: 'Sales Order',
@@ -2474,26 +3075,44 @@ Future<Uint8List> buildSalesOrderPdf({
     dueDate: order.dueDate,
     customer: customer,
     partyName: order.customerName,
+    partyPhone: customer?.phone,
+    partyAddress: customer?.billingAddress ?? customer?.address,
+    partyGstin: customer?.gstin,
+    partyState: customer?.state,
     lines: order.lines,
     subtotal: subtotal,
     discount: 0,
     taxable: taxable,
-    igst: 0,
-    cgst: tax ~/ 2,
-    sgst: tax - (tax ~/ 2),
+    igst: igst,
+    cgst: cgst,
+    sgst: sgst,
     roundOff: 0,
     total: order.total,
     outstandingPaise: order.total,
     notes: order.notes,
+    termsText: business.termsSales,
+    bankAccount: bankAccount,
     pageFormat: paperSize.format,
+    settings: settings,
   );
 }
 
 Future<void> printSalesOrder({
   required Business business,
   required SalesOrder order,
+  Customer? customer,
+  BankAccount? bankAccount,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildSalesOrderPdf(business: business, order: order);
+  final bytes = await buildSalesOrderPdf(
+    business: business,
+    order: order,
+    customer: customer,
+    bankAccount: bankAccount,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.layoutPdf(
     onLayout: (_) async => bytes,
     name: '${order.number}.pdf',
@@ -2503,16 +3122,49 @@ Future<void> printSalesOrder({
 Future<void> shareSalesOrder({
   required Business business,
   required SalesOrder order,
+  Customer? customer,
+  BankAccount? bankAccount,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildSalesOrderPdf(business: business, order: order);
+  final bytes = await buildSalesOrderPdf(
+    business: business,
+    order: order,
+    customer: customer,
+    bankAccount: bankAccount,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.sharePdf(bytes: bytes, filename: '${order.number}.pdf');
 }
 
 Future<Uint8List> buildPurchaseOrderPdf({
   required Business business,
   required PurchaseOrder order,
+  Supplier? supplier,
   InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
+  supplier ??= (order.supplierId != null && business.id != null)
+      ? await Repository.instance.supplier(business.id!, order.supplierId!)
+      : null;
+
+  settings ??= business.id != null
+      ? await Repository.instance.getInvoiceCustomizationSettings(business.id!)
+      : null;
+
+  Customer? partyAsCustomer;
+  if (supplier != null) {
+    partyAsCustomer = Customer(
+      id: supplier.id,
+      name: supplier.name,
+      phone: supplier.phone,
+      address: supplier.address,
+      state: supplier.state,
+      gstin: supplier.gstin,
+    );
+  }
+
   int subtotal = 0;
   int taxable = 0;
   int tax = 0;
@@ -2522,34 +3174,58 @@ Future<Uint8List> buildPurchaseOrderPdf({
     tax += l.tax;
   }
 
+  final partyState = (supplier?.state ?? '').trim().toLowerCase();
+  final bizState = (business.state ?? '').trim().toLowerCase();
+  final isInterState = partyState.isNotEmpty &&
+      bizState.isNotEmpty &&
+      partyState != bizState;
+  final igst = isInterState ? tax : 0;
+  final cgst = isInterState ? 0 : tax ~/ 2;
+  final sgst = isInterState ? 0 : tax - (tax ~/ 2);
+
   return buildDocumentPdf(
     business: business,
     title: 'Purchase Order',
     number: order.number,
     date: order.date,
     dueDate: order.expectedDate,
-    partyName: order.supplierName,
+    customer: partyAsCustomer,
+    partyName: order.supplierName ?? supplier?.name,
+    partyPhone: supplier?.phone,
+    partyAddress: supplier?.address,
+    partyGstin: supplier?.gstin,
+    partyState: supplier?.state,
     lines: order.lines,
     subtotal: subtotal,
     discount: 0,
     taxable: taxable,
-    igst: 0,
-    cgst: tax ~/ 2,
-    sgst: tax - (tax ~/ 2),
+    igst: igst,
+    cgst: cgst,
+    sgst: sgst,
     roundOff: 0,
     total: order.total,
     outstandingPaise: order.total,
     notes: order.notes,
     termsText: business.termsPurchase,
     pageFormat: paperSize.format,
+    settings: settings,
   );
 }
 
 Future<void> printPurchaseOrder({
   required Business business,
   required PurchaseOrder order,
+  Supplier? supplier,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildPurchaseOrderPdf(business: business, order: order);
+  final bytes = await buildPurchaseOrderPdf(
+    business: business,
+    order: order,
+    supplier: supplier,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.layoutPdf(
     onLayout: (_) async => bytes,
     name: '${order.number}.pdf',
@@ -2559,17 +3235,53 @@ Future<void> printPurchaseOrder({
 Future<void> sharePurchaseOrder({
   required Business business,
   required PurchaseOrder order,
+  Supplier? supplier,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildPurchaseOrderPdf(business: business, order: order);
+  final bytes = await buildPurchaseOrderPdf(
+    business: business,
+    order: order,
+    supplier: supplier,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.sharePdf(bytes: bytes, filename: '${order.number}.pdf');
 }
 
 Future<Uint8List> buildPurchaseBillPdf({
   required Business business,
   required PurchaseBill purchase,
+  Supplier? supplier,
   InvoicePaperSize paperSize = InvoicePaperSize.a4,
   InvoiceCustomizationSettings? settings,
 }) async {
+  supplier ??= (purchase.supplierId != null && business.id != null)
+      ? await Repository.instance.supplier(business.id!, purchase.supplierId!)
+      : null;
+
+  settings ??= business.id != null
+      ? await Repository.instance.getInvoiceCustomizationSettings(business.id!)
+      : null;
+
+  final sName = purchase.supplierName ?? supplier?.name ?? 'Vendor';
+  final sPhone = purchase.supplierPhone ?? supplier?.phone;
+  final sAddress = purchase.supplierAddress ?? supplier?.address;
+  final sGstin = purchase.supplierGstin ?? supplier?.gstin;
+  final sState = supplier?.state;
+
+  Customer? partyAsCustomer;
+  if (supplier != null || sAddress != null || sPhone != null || sGstin != null) {
+    partyAsCustomer = Customer(
+      id: supplier?.id,
+      name: sName,
+      phone: sPhone,
+      address: sAddress,
+      state: sState,
+      gstin: sGstin,
+    );
+  }
+
   int subtotal = 0;
   int tax = 0;
   for (final l in purchase.lines) {
@@ -2579,33 +3291,58 @@ Future<Uint8List> buildPurchaseBillPdf({
     tax += lineTax;
   }
 
+  final partyState = (sState ?? '').trim().toLowerCase();
+  final bizState = (business.state ?? '').trim().toLowerCase();
+  final isInterState = partyState.isNotEmpty &&
+      bizState.isNotEmpty &&
+      partyState != bizState;
+  final igst = isInterState ? tax : 0;
+  final cgst = isInterState ? 0 : tax ~/ 2;
+  final sgst = isInterState ? 0 : tax - (tax ~/ 2);
+
   return buildDocumentPdf(
     business: business,
     title: 'Purchase Bill',
     number: purchase.number,
     date: purchase.date,
-    partyName: purchase.supplierName ?? 'Vendor',
+    customer: partyAsCustomer,
+    partyName: sName,
+    partyPhone: sPhone,
+    partyAddress: sAddress,
+    partyGstin: sGstin,
+    partyState: sState,
     lines: purchase.lines,
     subtotal: subtotal > 0 ? subtotal : purchase.total,
     discount: 0,
     taxable: subtotal > 0 ? subtotal : purchase.total,
-    igst: 0,
-    cgst: tax ~/ 2,
-    sgst: tax - (tax ~/ 2),
+    igst: igst,
+    cgst: cgst,
+    sgst: sgst,
     roundOff: 0,
     total: purchase.total,
     outstandingPaise: purchase.outstanding,
+    paymentMode: purchase.paymentMode,
     notes: purchase.notes,
     termsText: business.termsPurchase,
     pageFormat: paperSize.format,
+    settings: settings,
   );
 }
 
 Future<void> printPurchaseBill({
   required Business business,
   required PurchaseBill purchase,
+  Supplier? supplier,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildPurchaseBillPdf(business: business, purchase: purchase);
+  final bytes = await buildPurchaseBillPdf(
+    business: business,
+    purchase: purchase,
+    supplier: supplier,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.layoutPdf(
     onLayout: (_) async => bytes,
     name: '${purchase.number}.pdf',
@@ -2615,17 +3352,35 @@ Future<void> printPurchaseBill({
 Future<void> sharePurchaseBill({
   required Business business,
   required PurchaseBill purchase,
+  Supplier? supplier,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildPurchaseBillPdf(business: business, purchase: purchase);
+  final bytes = await buildPurchaseBillPdf(
+    business: business,
+    purchase: purchase,
+    supplier: supplier,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.sharePdf(bytes: bytes, filename: '${purchase.number}.pdf');
 }
 
 Future<Uint8List> buildDeliveryChallanPdf({
   required Business business,
   required DeliveryChallan challan,
+  Customer? customer,
   InvoicePaperSize paperSize = InvoicePaperSize.a4,
   InvoiceCustomizationSettings? settings,
 }) async {
+  customer ??= (challan.customerId != null && business.id != null)
+      ? await Repository.instance.customer(business.id!, challan.customerId!)
+      : null;
+
+  settings ??= business.id != null
+      ? await Repository.instance.getInvoiceCustomizationSettings(business.id!)
+      : null;
+
   int subtotal = 0;
   for (final l in challan.lines) {
     subtotal += l.price * l.quantity.round();
@@ -2636,8 +3391,12 @@ Future<Uint8List> buildDeliveryChallanPdf({
     title: 'DELIVERY CHALLAN',
     number: challan.number,
     date: challan.date,
-    partyName: challan.customerName,
-    partyAddress: challan.address,
+    customer: customer,
+    partyName: challan.customerName ?? customer?.name,
+    partyPhone: customer?.phone,
+    partyAddress: challan.address ?? customer?.billingAddress ?? customer?.address,
+    partyGstin: customer?.gstin,
+    partyState: customer?.state,
     vehicleNumber: challan.vehicleNo,
     lrRrNumber: challan.transportDetails,
     poNumber: challan.invoiceNumber != null && challan.invoiceNumber!.isNotEmpty
@@ -2663,8 +3422,17 @@ Future<Uint8List> buildDeliveryChallanPdf({
 Future<void> printDeliveryChallan({
   required Business business,
   required DeliveryChallan challan,
+  Customer? customer,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildDeliveryChallanPdf(business: business, challan: challan);
+  final bytes = await buildDeliveryChallanPdf(
+    business: business,
+    challan: challan,
+    customer: customer,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.layoutPdf(
     onLayout: (_) async => bytes,
     name: '${challan.number}.pdf',
@@ -2674,8 +3442,17 @@ Future<void> printDeliveryChallan({
 Future<void> shareDeliveryChallan({
   required Business business,
   required DeliveryChallan challan,
+  Customer? customer,
+  InvoicePaperSize paperSize = InvoicePaperSize.a4,
+  InvoiceCustomizationSettings? settings,
 }) async {
-  final bytes = await buildDeliveryChallanPdf(business: business, challan: challan);
+  final bytes = await buildDeliveryChallanPdf(
+    business: business,
+    challan: challan,
+    customer: customer,
+    paperSize: paperSize,
+    settings: settings,
+  );
   await Printing.sharePdf(bytes: bytes, filename: '${challan.number}.pdf');
 }
 

@@ -16,13 +16,14 @@ import '../payments/payment_form.dart';
 import 'delivery_challan_builder_screen.dart';
 import 'delivery_challan_detail_screen.dart';
 import 'invoice_builder_screen.dart';
-import 'sales_return_form.dart';
+import '../returns/note_builder_screen.dart';
 import '../compliance/einvoice_details_sheet.dart';
 import '../compliance/ewaybill_sheet.dart';
 
 class InvoiceDetailScreen extends StatefulWidget {
-  const InvoiceDetailScreen({super.key, required this.invoiceId});
+  const InvoiceDetailScreen({super.key, required this.invoiceId, this.autoPreview = false});
   final int invoiceId;
+  final bool autoPreview;
   @override
   State<InvoiceDetailScreen> createState() => _InvoiceDetailScreenState();
 }
@@ -32,6 +33,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Business? business;
   List<DeliveryChallan> challans = [];
   bool busy = false;
+  bool _hasAutoPreviewed = false;
 
   Future<void> _load() async {
     final session = context.read<Session>();
@@ -46,6 +48,12 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
       business = biz;
       challans = dcs;
     });
+    if (widget.autoPreview && !_hasAutoPreviewed && inv != null && biz != null) {
+      _hasAutoPreviewed = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _previewPdf();
+      });
+    }
   }
 
   @override
@@ -819,10 +827,15 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     onPressed: () {
                       final inv = invoice;
                       if (inv == null) return;
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => SalesReturnForm(invoice: inv))).then((_) => _load());
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => NoteBuilderScreen(partyType: 'customer', fromInvoice: inv),
+                        ),
+                      ).then((_) => _load());
                     },
                     icon: const Icon(Icons.assignment_return_outlined, size: 18),
-                    label: const Text('Record Sales Return'),
+                    label: const Text('Record Sales Return (Credit Note)'),
                   ),
                 ),
               ],

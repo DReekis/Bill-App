@@ -18,10 +18,11 @@ import '../../core/physical_barcode_scanner.dart';
 import 'sales_order_detail_screen.dart';
 
 class SalesOrderBuilderScreen extends StatefulWidget {
-  const SalesOrderBuilderScreen({super.key, this.businessId, this.customerId});
+  const SalesOrderBuilderScreen({super.key, this.businessId, this.customerId, this.existingOrderId});
 
   final int? businessId;
   final int? customerId;
+  final int? existingOrderId;
 
   @override
   State<SalesOrderBuilderScreen> createState() => _SalesOrderBuilderScreenState();
@@ -32,12 +33,17 @@ class _LineEdit {
     required this.product,
     required this.qty,
     required this.price,
-  });
+    int? gstRate,
+  }) : gstRate = gstRate ?? product.gstRate;
+
   final Product product;
   double qty;
   int price;
+  int gstRate;
 
   int get subtotalPaise => (price * qty).round();
+  int get taxPaise => (subtotalPaise * (gstRate / 100)).round();
+  int get totalPaise => subtotalPaise + taxPaise;
 }
 
 class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
@@ -87,7 +93,44 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
           customerName = selectedCustomer?.name;
         }
       });
-      if (orderNumber == null) {
+
+      if (widget.existingOrderId != null) {
+        final existing = await repo.salesOrder(businessId, widget.existingOrderId!);
+        if (existing != null && mounted) {
+          setState(() {
+            orderNumber = existing.number;
+            orderDate = existing.date;
+            dueDate = existing.dueDate;
+            customerId = existing.customerId;
+            customerName = existing.customerName;
+            _notesController.text = existing.notes ?? '';
+            if (customerId != null && custs.any((c) => c.id == customerId)) {
+              selectedCustomer = custs.firstWhere((c) => c.id == customerId);
+            }
+            lines.clear();
+            for (final l in existing.lines) {
+              Product? prod;
+              if (l.productId != null) {
+                prod = prods.where((p) => p.id == l.productId).firstOrNull;
+              }
+              prod ??= Product(
+                id: l.productId,
+                name: l.name,
+                salePrice: l.price,
+                gstRate: l.gstRate,
+                unit: l.unit ?? 'pc',
+                stock: 0,
+              );
+              lines.add(_LineEdit(
+                product: prod,
+                qty: l.quantity,
+                price: l.price,
+                gstRate: l.gstRate,
+              ));
+            }
+          });
+        }
+      } else if (orderNumber == null) {
         final nextNum = await repo.peekNextSalesOrderNumber(businessId);
         if (mounted) {
           setState(() => orderNumber = nextNum);
@@ -232,7 +275,7 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
                         );
                       },
                       icon: const Icon(Icons.person_add_rounded, size: 18),
-                      label: const Text('+ Add New Customer', style: TextStyle(fontWeight: FontWeight.w700)),
+                      label: const Text('Add New Customer', style: TextStyle(fontWeight: FontWeight.w700)),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -395,6 +438,148 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
     );
   }
 
+  void _editLine(int index) {
+    final l = lines[index];
+    final qtyCtrl = TextEditingController(text: l.qty == l.qty.roundToDouble() ? '${l.qty.round()}' : '${l.qty}');
+    final priceCtrl = TextEditingController(text: (l.price / 100).toStringAsFixed(2));
+    int selectedGst = l.gstRate;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final qVal = double.tryParse(qtyCtrl.text.trim()) ?? 0.0;
+          final pVal = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
+          final subtotalP = (pVal * 100 * qVal).round();
+          final taxP = (subtotalP * (selectedGst / 100)).round();
+          final totalP = subtotalP + taxP;
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            l.product.name,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          'Unit: ${l.product.unit}',
+                          style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: qtyCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: inputDecoration('Quantity', hint: '1'),
+                            onChanged: (_) => setSheetState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: priceCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: inputDecoration('Unit Rate (₹)', hint: '0.00'),
+                            onChanged: (_) => setSheetState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('GST Rate (%)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [0, 5, 12, 18, 28].map((rate) {
+                        final isSel = selectedGst == rate;
+                        return ChoiceChip(
+                          label: Text('$rate%'),
+                          selected: isSel,
+                          selectedColor: StitchColors.primary.withValues(alpha: 0.15),
+                          labelStyle: TextStyle(
+                            color: isSel ? StitchColors.primary : StitchColors.textPrimary,
+                            fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                          onSelected: (val) {
+                            if (val) setSheetState(() => selectedGst = rate);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: StitchColors.surface,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Taxable: ${formatPaise(subtotalP)}', style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+                              Text('Tax ($selectedGst%): ${formatPaise(taxP)}', style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+                            ],
+                          ),
+                          Text(
+                            formatPaise(totalP),
+                            style: moneyStyle(fontSize: 16, weight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () {
+                          final q = double.tryParse(qtyCtrl.text.trim());
+                          final p = double.tryParse(priceCtrl.text.trim());
+                          if (q == null || q <= 0 || p == null || p < 0) return;
+                          setState(() {
+                            l.qty = q;
+                            l.price = (p * 100).round();
+                            l.gstRate = selectedGst;
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Apply Changes'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _save() async {
     if (lines.isEmpty) {
       showAppMessage(context, 'Add at least one item to save the order', error: true);
@@ -408,37 +593,78 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
       final finalNumber = orderNumber ?? await repo.nextSalesOrderNumber(bizId);
 
       final total = lines.fold(0, (sum, l) => sum + l.subtotalPaise);
-      final order = SalesOrder(
-        businessId: bizId,
-        number: finalNumber,
-        customerId: customerId,
-        customerName: customerName ?? 'Walk-in Customer',
-        date: orderDate,
-        dueDate: dueDate,
-        status: 'Pending',
-        total: total,
-        notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
-        lines: lines
-            .map((l) => InvoiceLine(
-                  productId: l.product.id,
-                  name: l.product.name,
-                  quantity: l.qty,
-                  price: l.price,
-                  unit: l.product.unit,
-                  taxable: l.subtotalPaise,
-                ))
-            .toList(),
-      );
 
-      final orderId = await repo.finalizeSalesOrder(order);
-
-      if (mounted) {
-        showAppMessage(context, 'Sell Order $finalNumber saved successfully ✓');
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => SalesOrderDetailScreen(orderId: orderId),
-          ),
+      if (widget.existingOrderId != null) {
+        final order = SalesOrder(
+          id: widget.existingOrderId,
+          businessId: bizId,
+          number: finalNumber,
+          customerId: customerId,
+          customerName: customerName ?? 'Walk-in Customer',
+          date: orderDate,
+          dueDate: dueDate,
+          status: 'Pending',
+          total: total,
+          notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
+          lines: lines
+              .map((l) => InvoiceLine(
+                    productId: l.product.id,
+                    name: l.product.name,
+                    quantity: l.qty,
+                    price: l.price,
+                    unit: l.product.unit,
+                    gstRate: l.gstRate,
+                    taxable: l.subtotalPaise,
+                    tax: l.taxPaise,
+                  ))
+              .toList(),
         );
+
+        await repo.updateSalesOrder(order);
+
+        if (mounted) {
+          showAppMessage(context, 'Sell Order $finalNumber updated successfully ✓');
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => SalesOrderDetailScreen(orderId: widget.existingOrderId!, autoPreview: true),
+            ),
+          );
+        }
+      } else {
+        final order = SalesOrder(
+          businessId: bizId,
+          number: finalNumber,
+          customerId: customerId,
+          customerName: customerName ?? 'Walk-in Customer',
+          date: orderDate,
+          dueDate: dueDate,
+          status: 'Pending',
+          total: total,
+          notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
+          lines: lines
+              .map((l) => InvoiceLine(
+                    productId: l.product.id,
+                    name: l.product.name,
+                    quantity: l.qty,
+                    price: l.price,
+                    unit: l.product.unit,
+                    gstRate: l.gstRate,
+                    taxable: l.subtotalPaise,
+                    tax: l.taxPaise,
+                  ))
+              .toList(),
+        );
+
+        final orderId = await repo.finalizeSalesOrder(order);
+
+        if (mounted) {
+          showAppMessage(context, 'Sell Order $finalNumber saved successfully ✓');
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => SalesOrderDetailScreen(orderId: orderId, autoPreview: true),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) showAppMessage(context, 'Error saving Sell Order: $e', error: true);
@@ -456,7 +682,7 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
       child: Scaffold(
         backgroundColor: StitchColors.surface,
         appBar: AppBar(
-          title: const Text('New Sell Order', style: TextStyle(fontWeight: FontWeight.w700)),
+          title: Text(widget.existingOrderId != null ? 'Edit Sell Order' : 'New Sell Order', style: const TextStyle(fontWeight: FontWeight.w700)),
           actions: [
             IconButton(
               tooltip: 'Hardware Barcode Scanner (USB/Bluetooth)',
@@ -719,7 +945,7 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
                           child: OutlinedButton.icon(
                             onPressed: _showProductPicker,
                             icon: const Icon(Icons.add_rounded, size: 18),
-                            label: const Text('+ Add More Items'),
+                            label: const Text('Add More Items'),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -738,28 +964,48 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
                           border: Border.all(color: StitchColors.outline),
                         ),
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    l.product.name,
-                                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${formatPaise(l.price)} / ${l.product.unit}',
-                                    style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary),
-                                  ),
-                                ],
+                              child: InkWell(
+                                onTap: () => _editLine(index),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      l.product.name,
+                                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      '${formatPaise(l.price)} / ${l.product.unit}${l.gstRate > 0 ? ' • GST ${l.gstRate}%' : ''}',
+                                      style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(Icons.edit_outlined, size: 18, color: StitchColors.primary),
+                              tooltip: 'Edit rate & tax',
+                              onPressed: () => _editLine(index),
+                            ),
+                            const SizedBox(width: 6),
                             // Qty controls
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: const EdgeInsets.all(4),
+                                  constraints: const BoxConstraints(),
                                   icon: const Icon(Icons.remove_circle_outline, size: 22, color: StitchColors.error),
                                   onPressed: () {
                                     setState(() {
@@ -771,11 +1017,16 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
                                     });
                                   },
                                 ),
+                                const SizedBox(width: 4),
                                 Text(
                                   l.qty == l.qty.roundToDouble() ? '${l.qty.round()}' : '${l.qty}',
                                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                                 ),
+                                const SizedBox(width: 4),
                                 IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: const EdgeInsets.all(4),
+                                  constraints: const BoxConstraints(),
                                   icon: const Icon(Icons.add_circle_outline, size: 22, color: StitchColors.primary),
                                   onPressed: () {
                                     setState(() => l.qty += 1);
@@ -783,7 +1034,7 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 10),
                             Text(
                               formatPaise(l.subtotalPaise),
                               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),

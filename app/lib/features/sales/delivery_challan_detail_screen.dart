@@ -12,9 +12,10 @@ import 'delivery_challan_builder_screen.dart';
 import 'invoice_detail_screen.dart';
 
 class DeliveryChallanDetailScreen extends StatefulWidget {
-  const DeliveryChallanDetailScreen({super.key, required this.challanId});
+  const DeliveryChallanDetailScreen({super.key, required this.challanId, this.autoPreview = false});
 
   final int challanId;
+  final bool autoPreview;
 
   @override
   State<DeliveryChallanDetailScreen> createState() => _DeliveryChallanDetailScreenState();
@@ -24,6 +25,7 @@ class _DeliveryChallanDetailScreenState extends State<DeliveryChallanDetailScree
   DeliveryChallan? challan;
   Business? business;
   bool _busy = false;
+  bool _hasAutoPreviewed = false;
 
   @override
   void initState() {
@@ -43,6 +45,12 @@ class _DeliveryChallanDetailScreenState extends State<DeliveryChallanDetailScree
       challan = dc;
       business = b;
     });
+    if (widget.autoPreview && !_hasAutoPreviewed && dc != null && b != null) {
+      _hasAutoPreviewed = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _previewPdf();
+      });
+    }
   }
 
   Future<void> _share() async {

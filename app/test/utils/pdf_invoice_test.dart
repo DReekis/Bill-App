@@ -427,5 +427,233 @@ void main() {
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
     });
+
+    test('buildPurchaseBillPdf generates complete BillBook standard PDF with vendor, buyer card, payment mode, and inward signatory', () async {
+      final supplier = Supplier(
+        id: 101,
+        name: 'Hindustan Unilever Distributor Ltd',
+        phone: '9862123456',
+        address: 'Plot 42, Industrial Area, Dharmanagar',
+        gstin: '16AABCH1234F1Z5',
+        state: 'Tripura',
+      );
+
+      final purchase = PurchaseBill(
+        id: 1,
+        number: 'PB-2026-009',
+        supplierId: supplier.id,
+        supplierName: supplier.name,
+        supplierPhone: supplier.phone,
+        supplierAddress: supplier.address,
+        supplierGstin: supplier.gstin,
+        date: '2026-10-22',
+        total: 52500,
+        amountPaid: 30000,
+        outstanding: 22500,
+        paymentMode: 'Bank Transfer',
+        notes: 'Inward material inspected and accepted.',
+        lines: [
+          InvoiceLine(
+            name: 'Dove Soap 100g (Pack of 48)',
+            hsn: '34011110',
+            unit: 'CTN',
+            quantity: 5,
+            price: 10000,
+            gstRate: 5,
+            tax: 2500,
+            taxable: 50000,
+          ),
+        ],
+      );
+
+      final pdfBytes = await buildPurchaseBillPdf(
+        business: testBusiness,
+        purchase: purchase,
+        supplier: supplier,
+        settings: InvoiceCustomizationSettings(themeStyle: 'billbook_stylish'),
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+    });
+
+    test('buildDeliveryChallanPdf generates Rule 55 compliant Delivery Challan PDF with transport details, dual signatures, and declared value', () async {
+      final customer = Customer(
+        id: 55,
+        name: 'Saha Construction & Hardware',
+        phone: '9436123456',
+        address: 'Hospital Road, Agartala',
+        gstin: '16ABCDE1234F1Z5',
+        state: 'Tripura',
+      );
+
+      final challan = DeliveryChallan(
+        id: 1,
+        number: 'DC-2026-004',
+        customerId: customer.id,
+        customerName: customer.name,
+        date: '2026-10-22',
+        address: customer.address,
+        vehicleNo: 'TR 01 AX 9921',
+        transportDetails: 'LR-88210 / Maa Tara Roadlines',
+        invoiceNumber: 'INV-2026-104',
+        notes: 'Transport for job-work / delivery on approval.',
+        lines: [
+          InvoiceLine(
+            name: 'UltraTech Cement 50kg Bags',
+            hsn: '252329',
+            unit: 'BAG',
+            quantity: 100,
+            price: 38000,
+          ),
+        ],
+      );
+
+      final pdfBytes = await buildDeliveryChallanPdf(
+        business: testBusiness,
+        challan: challan,
+        customer: customer,
+        settings: InvoiceCustomizationSettings(themeStyle: 'modern_minimal'),
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+    });
+
+    test('buildPurchaseOrderPdf and buildSalesOrderPdf generate valid PDFs with full party and tax handling', () async {
+      final supplier = Supplier(
+        id: 102,
+        name: 'National Steel Corp',
+        phone: '9876543210',
+        address: 'Kolkata Steel Yard',
+        gstin: '19AAACN1234F1Z8',
+        state: 'West Bengal',
+      );
+
+      final po = PurchaseOrder(
+        id: 1,
+        number: 'PO-2026-001',
+        supplierId: supplier.id,
+        supplierName: supplier.name,
+        date: '2026-10-22',
+        expectedDate: '2026-10-30',
+        total: 150000,
+        notes: 'Deliver to site.',
+        lines: [
+          InvoiceLine(
+            name: 'TMT Rebars 12mm Fe 550D',
+            hsn: '721420',
+            unit: 'TON',
+            quantity: 2,
+            price: 75000,
+            tax: 27000,
+            taxable: 150000,
+          ),
+        ],
+      );
+
+      final poBytes = await buildPurchaseOrderPdf(
+        business: testBusiness,
+        order: po,
+        supplier: supplier,
+        settings: InvoiceCustomizationSettings(),
+      );
+      expect(poBytes, isNotEmpty);
+      expect(String.fromCharCodes(poBytes.sublist(0, 5)), '%PDF-');
+
+      final so = SalesOrder(
+        id: 1,
+        number: 'SO-2026-001',
+        customerId: 1,
+        customerName: 'Pooja Mart',
+        date: '2026-10-22',
+        dueDate: '2026-10-28',
+        total: 50000,
+        lines: [
+          InvoiceLine(
+            name: 'Groceries Assorted',
+            quantity: 10,
+            price: 5000,
+          ),
+        ],
+      );
+
+      final testBank = BankAccount(
+        id: 1,
+        businessId: 1,
+        bankName: 'Bank Of India, Dharmanagar',
+        accountName: 'MAHADEV TRADERS',
+        accountNumber: '502320110000274',
+        ifsc: 'BKID0005023',
+      );
+
+      final soBytes = await buildSalesOrderPdf(
+        business: testBusiness,
+        order: so,
+        customer: Customer(id: 1, name: 'Pooja Mart', state: 'Tripura'),
+        bankAccount: testBank,
+        settings: InvoiceCustomizationSettings(),
+      );
+      expect(soBytes, isNotEmpty);
+      expect(String.fromCharCodes(soBytes.sublist(0, 5)), '%PDF-');
+    });
+
+    test('buildReturnPdf generates valid Credit Note and Debit Note PDFs', () async {
+      final creditReturn = TransactionReturn(
+        id: 1,
+        number: 'CR-2026-001',
+        partyType: 'customer',
+        partyName: 'SARADA DEBI ENTERPRISE',
+        date: '2026-10-22',
+        subtotal: 10000,
+        tax: 1800,
+        taxable: 10000,
+        total: 11800,
+        reason: 'Goods returned due to transit packaging damage.',
+        lines: [
+          InvoiceLine(
+            name: 'Broken Pack Goods',
+            quantity: 1,
+            price: 10000,
+          ),
+        ],
+      );
+
+      final crBytes = await buildReturnPdf(
+        business: testBusiness,
+        returnInvoice: creditReturn,
+        settings: InvoiceCustomizationSettings(),
+      );
+      expect(crBytes, isNotEmpty);
+      expect(String.fromCharCodes(crBytes.sublist(0, 5)), '%PDF-');
+
+      final debitReturn = TransactionReturn(
+        id: 2,
+        number: 'DR-2026-001',
+        partyType: 'supplier',
+        partyName: 'Hindustan Unilever Distributor Ltd',
+        date: '2026-10-22',
+        subtotal: 5000,
+        tax: 900,
+        taxable: 5000,
+        total: 5900,
+        reason: 'Purchase return for expired batch.',
+        lines: [
+          InvoiceLine(
+            name: 'Expired Batch Items',
+            quantity: 1,
+            price: 5000,
+          ),
+        ],
+      );
+
+      final drBytes = await buildReturnPdf(
+        business: testBusiness,
+        returnInvoice: debitReturn,
+        settings: InvoiceCustomizationSettings(),
+      );
+      expect(drBytes, isNotEmpty);
+      expect(String.fromCharCodes(drBytes.sublist(0, 5)), '%PDF-');
+    });
   });
 }

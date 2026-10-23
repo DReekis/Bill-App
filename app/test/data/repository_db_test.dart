@@ -507,7 +507,7 @@ void main() {
       qty: 1,
       amountPaid: 0,
       date: '2026-09-10',
-      dueDate: '2026-10-15',
+      dueDate: '2099-12-31',
     );
 
     final (count, amount) = await repo.overdueInvoicesSummary(businessId);

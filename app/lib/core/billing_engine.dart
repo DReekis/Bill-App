@@ -180,12 +180,12 @@ class BillingEngine {
         lines.any((l) => l.gstRate > 0) ||
         charges.any((c) => c.gstRate > 0);
 
-    final isExplicitInterstate = businessState != null &&
+    final sameState = businessState != null &&
         customerState != null &&
-        !IndianStates.isSameState(businessState, customerState);
+        IndianStates.isSameState(businessState, customerState);
     final intraState = effectiveGstEnabled &&
         effectiveTaxRegistered &&
-        (intraStateOverride ?? !isExplicitInterstate);
+        (intraStateOverride ?? sameState);
 
     Money cgst = Money.zero();
     Money sgst = Money.zero();

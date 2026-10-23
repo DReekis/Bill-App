@@ -2269,6 +2269,7 @@ enum TransactionType {
   purchaseOrder,
   deliveryChallan,
   saleReturn,
+  purchaseReturn,
 }
 
 class TransactionRecord {
@@ -2303,7 +2304,8 @@ class TransactionRecord {
   bool get isInflow =>
       type == TransactionType.sale ||
       type == TransactionType.paymentIn ||
-      type == TransactionType.salesOrder;
+      type == TransactionType.salesOrder ||
+      type == TransactionType.purchaseReturn;
 
   String get typeLabel => switch (type) {
         TransactionType.sale => 'Sale',
@@ -2315,7 +2317,8 @@ class TransactionRecord {
         TransactionType.salesOrder => 'Sales Order',
         TransactionType.purchaseOrder => 'Purchase Order',
         TransactionType.deliveryChallan => 'Challan',
-        TransactionType.saleReturn => 'Sale Return',
+        TransactionType.saleReturn => 'Credit Note',
+        TransactionType.purchaseReturn => 'Debit Note',
       };
 }
 

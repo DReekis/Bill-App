@@ -357,7 +357,7 @@ class _MultiProductPickerSheetState extends State<MultiProductPickerSheet> {
                           onPressed: widget.onAddNew,
                           icon: const Icon(Icons.add_rounded, size: 18),
                           label: const Text(
-                            '+ New Item',
+                            'New Item',
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.2),
                           ),
                           style: FilledButton.styleFrom(
@@ -631,7 +631,7 @@ class _MultiProductPickerSheetState extends State<MultiProductPickerSheet> {
                               FilledButton.icon(
                                 onPressed: widget.onAddNew,
                                 icon: const Icon(Icons.add_rounded, size: 18),
-                                label: const Text('+ Create This Product', style: TextStyle(fontWeight: FontWeight.w700)),
+                                label: const Text('Create This Product', style: TextStyle(fontWeight: FontWeight.w700)),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: StitchColors.primary,
                                   foregroundColor: Colors.white,

@@ -13,9 +13,10 @@ import 'invoice_detail_screen.dart';
 import 'quotation_builder_screen.dart';
 
 class QuotationDetailScreen extends StatefulWidget {
-  const QuotationDetailScreen({super.key, required this.quotationId});
+  const QuotationDetailScreen({super.key, required this.quotationId, this.autoPreview = false});
 
   final int quotationId;
+  final bool autoPreview;
 
   @override
   State<QuotationDetailScreen> createState() => _QuotationDetailScreenState();
@@ -25,6 +26,7 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
   Quotation? quotation;
   Business? business;
   bool _busy = false;
+  bool _hasAutoPreviewed = false;
 
   @override
   void initState() {
@@ -44,6 +46,12 @@ class _QuotationDetailScreenState extends State<QuotationDetailScreen> {
       quotation = q;
       business = b;
     });
+    if (widget.autoPreview && !_hasAutoPreviewed && q != null && b != null) {
+      _hasAutoPreviewed = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _previewPdf();
+      });
+    }
   }
 
   Future<void> _convert() async {

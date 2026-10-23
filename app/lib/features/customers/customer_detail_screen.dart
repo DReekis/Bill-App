@@ -193,7 +193,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                             .push(MaterialPageRoute(builder: (_) => QuotationBuilderScreen(customerId: c.id)))
                             .then((_) => _load()),
                         icon: const Icon(Icons.request_quote_outlined, size: 16),
-                        label: const Text('+ Quotation', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                        label: const Text('Quotation', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
                       ),
                     ),
                     const SizedBox(width: 8),

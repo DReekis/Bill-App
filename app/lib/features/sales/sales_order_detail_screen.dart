@@ -10,11 +10,13 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
 import 'invoice_detail_screen.dart';
+import 'sales_order_builder_screen.dart';
 
 class SalesOrderDetailScreen extends StatefulWidget {
-  const SalesOrderDetailScreen({super.key, required this.orderId});
+  const SalesOrderDetailScreen({super.key, required this.orderId, this.autoPreview = false});
 
   final int orderId;
+  final bool autoPreview;
 
   @override
   State<SalesOrderDetailScreen> createState() => _SalesOrderDetailScreenState();
@@ -24,6 +26,7 @@ class _SalesOrderDetailScreenState extends State<SalesOrderDetailScreen> {
   SalesOrder? order;
   Business? business;
   bool _busy = false;
+  bool _hasAutoPreviewed = false;
 
   @override
   void initState() {
@@ -43,6 +46,61 @@ class _SalesOrderDetailScreenState extends State<SalesOrderDetailScreen> {
       order = o;
       business = b;
     });
+    if (widget.autoPreview && !_hasAutoPreviewed && o != null && b != null) {
+      _hasAutoPreviewed = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _previewPdf();
+      });
+    }
+  }
+
+  Future<void> _previewPdf() async {
+    final o = order;
+    final b = business;
+    if (o == null || b == null) return;
+    setState(() => _busy = true);
+    try {
+      final session = context.read<Session>();
+      final repo = Repository.instance;
+      final settings = await repo.getInvoiceCustomizationSettings(session.businessId ?? b.id ?? 1);
+      Customer? cust;
+      if (o.customerId != null) {
+        cust = await repo.customer(session.businessId ?? b.id ?? 1, o.customerId!);
+      }
+
+      if (!mounted) return;
+      await showInvoicePreviewModal(
+        context,
+        business: b,
+        settings: settings,
+        title: '${o.number} - Preview',
+        pdfBuilder: () => buildSalesOrderPdf(
+          business: b,
+          order: o,
+          customer: cust,
+          settings: settings,
+        ),
+      );
+    } catch (e) {
+      if (mounted) showAppMessage(context, 'Preview failed: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _editOrder() async {
+    final o = order;
+    if (o == null || o.id == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SalesOrderBuilderScreen(
+          existingOrderId: o.id,
+          businessId: o.businessId,
+        ),
+      ),
+    );
+    _load();
   }
 
   Future<void> _convert() async {
@@ -165,6 +223,16 @@ class _SalesOrderDetailScreenState extends State<SalesOrderDetailScreen> {
         ),
         actions: [
           if (o != null) ...[
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: 'Edit Order',
+              onPressed: _busy ? null : _editOrder,
+            ),
+            IconButton(
+              icon: const Icon(Icons.visibility_outlined),
+              tooltip: 'Preview PDF',
+              onPressed: _busy ? null : _previewPdf,
+            ),
             IconButton(
               icon: const Icon(Icons.print_outlined),
               tooltip: 'Print',
@@ -384,9 +452,21 @@ class _SalesOrderDetailScreenState extends State<SalesOrderDetailScreen> {
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
+                          onPressed: _busy ? null : _editOrder,
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          label: const Text('Edit'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
                           onPressed: _busy ? null : _share,
                           icon: const Icon(Icons.share_outlined, size: 16),
-                          label: const Text('Share PDF'),
+                          label: const Text('Share'),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -394,7 +474,7 @@ class _SalesOrderDetailScreenState extends State<SalesOrderDetailScreen> {
                         ),
                       ),
                       if (o.status.toLowerCase() != 'converted') ...[
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
                         Expanded(
                           flex: 2,
                           child: FilledButton.icon(

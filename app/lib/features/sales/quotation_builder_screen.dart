@@ -14,6 +14,7 @@ import '../inventory/product_form.dart';
 import 'barcode_scanner_screen.dart';
 import 'hardware_scanner_dialog.dart';
 import '../../core/physical_barcode_scanner.dart';
+import 'quotation_detail_screen.dart';
 
 class QuotationBuilderScreen extends StatefulWidget {
   const QuotationBuilderScreen({super.key, this.businessId, this.customerId, this.existingQuotation});
@@ -402,6 +403,161 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
     }
   }
 
+  void _editLine(int index) {
+    final l = lines[index];
+    final qtyCtrl = TextEditingController(text: _formatQty(l.qty));
+    final priceCtrl = TextEditingController(text: (l.price / 100).toStringAsFixed(2));
+    final discCtrl = TextEditingController(text: l.discountPercent > 0 ? l.discountPercent.toString() : '');
+    int selectedGst = l.gstRate;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final qVal = double.tryParse(qtyCtrl.text.trim()) ?? 0.0;
+          final pVal = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
+          final dVal = double.tryParse(discCtrl.text.trim()) ?? 0.0;
+          final subtotalP = (pVal * 100 * qVal).round();
+          final discP = (subtotalP * (dVal / 100)).round();
+          final taxableP = subtotalP - discP;
+          final taxP = (taxableP * (selectedGst / 100)).round();
+          final totalP = taxableP + taxP;
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            l.product.name,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          'Unit: ${l.product.unit}',
+                          style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: qtyCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: inputDecoration('Quantity', hint: '1'),
+                            onChanged: (_) => setSheetState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: priceCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: inputDecoration('Unit Rate (₹)', hint: '0.00'),
+                            onChanged: (_) => setSheetState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: discCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: inputDecoration('Discount % (Optional)', hint: '0'),
+                      onChanged: (_) => setSheetState(() {}),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('GST Rate (%)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [0, 5, 12, 18, 28].map((rate) {
+                        final isSel = selectedGst == rate;
+                        return ChoiceChip(
+                          label: Text('$rate%'),
+                          selected: isSel,
+                          selectedColor: StitchColors.primary.withValues(alpha: 0.15),
+                          labelStyle: TextStyle(
+                            color: isSel ? StitchColors.primary : StitchColors.textPrimary,
+                            fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                          onSelected: (val) {
+                            if (val) setSheetState(() => selectedGst = rate);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: StitchColors.surface,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Taxable: ${formatPaise(taxableP)}', style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+                              Text('Tax ($selectedGst%): ${formatPaise(taxP)}', style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+                            ],
+                          ),
+                          Text(
+                            formatPaise(totalP),
+                            style: moneyStyle(fontSize: 16, weight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () {
+                          final q = double.tryParse(qtyCtrl.text.trim());
+                          final p = double.tryParse(priceCtrl.text.trim());
+                          final d = double.tryParse(discCtrl.text.trim()) ?? 0.0;
+                          if (q == null || q <= 0 || p == null || p < 0) return;
+                          setState(() {
+                            l.qty = q;
+                            l.price = (p * 100).round();
+                            l.discountPercent = d;
+                            l.gstRate = selectedGst;
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Apply Changes'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _showCustomQtyDialog(int index) async {
     final l = lines[index];
     final controller = TextEditingController(text: _formatQty(l.qty));
@@ -522,7 +678,11 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
 
         if (mounted) {
           showAppMessage(context, 'Quotation $quoteNumber updated successfully');
-          Navigator.pop(context, true);
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => QuotationDetailScreen(quotationId: widget.existingQuotation!.id!, autoPreview: true),
+            ),
+          );
         }
       } else {
         final quote = Quotation(
@@ -556,11 +716,15 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
               .toList(),
         );
 
-        await Repository.instance.finalizeQuotation(quote);
+        final quoteId = await Repository.instance.finalizeQuotation(quote);
 
         if (mounted) {
           showAppMessage(context, 'Quotation $quoteNumber saved successfully');
-          Navigator.pop(context, true);
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => QuotationDetailScreen(quotationId: quoteId, autoPreview: true),
+            ),
+          );
         }
       }
     } catch (e) {
@@ -854,20 +1018,32 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        l.product.name,
-                                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        '${formatPaise(l.price)} / ${l.product.unit}${l.gstRate > 0 ? ' • GST ${l.gstRate}%' : ''}',
-                                        style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary),
-                                      ),
-                                    ],
+                                  child: InkWell(
+                                    onTap: () => _editLine(index),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          l.product.name,
+                                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${formatPaise(l.price)} / ${l.product.unit}${l.discountPercent > 0 ? " • ${l.discountPercent}% off" : ""}${l.gstRate > 0 ? ' • GST ${l.gstRate}%' : ''}',
+                                          style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary),
+                                        ),
+                                      ],
+                                    ),
                                   ),
+                                ),
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.edit_outlined, size: 18, color: StitchColors.primary),
+                                  tooltip: 'Edit rate & tax',
+                                  onPressed: () => _editLine(index),
                                 ),
                                 IconButton(
                                   visualDensity: VisualDensity.compact,

@@ -22,6 +22,7 @@ import '../sales/sales_order_builder_screen.dart';
 import '../sales/delivery_challan_builder_screen.dart';
 import '../purchases/purchase_order_builder_screen.dart';
 import '../suppliers/supplier_form.dart';
+import '../returns/note_builder_screen.dart';
 import '../auth/login_screen.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/stitch_theme.dart';
@@ -154,6 +155,16 @@ class _AppShellState extends State<AppShell> {
         Navigator.of(context)
             .push(MaterialPageRoute(
                 builder: (_) => const DeliveryChallanBuilderScreen()))
+            .then((_) => _reloadTabs());
+      case 'Credit Note':
+        Navigator.of(context)
+            .push(MaterialPageRoute(
+                builder: (_) => const NoteBuilderScreen(partyType: 'customer')))
+            .then((_) => _reloadTabs());
+      case 'Debit Note':
+        Navigator.of(context)
+            .push(MaterialPageRoute(
+                builder: (_) => const NoteBuilderScreen(partyType: 'supplier')))
             .then((_) => _reloadTabs());
       case 'Party':
       case 'Customer':
@@ -531,6 +542,20 @@ class QuickActionSheet extends StatelessWidget {
         'c': const Color(0xFFE53935),
       },
     ];
+    final row3 = [
+      {
+        'icon': Icons.assignment_return_outlined,
+        'label': 'Credit Note',
+        'action': 'Credit Note',
+        'c': const Color(0xFF00897B),
+      },
+      {
+        'icon': Icons.assignment_returned_outlined,
+        'label': 'Debit Note',
+        'action': 'Debit Note',
+        'c': const Color(0xFF5E35B1),
+      },
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -552,6 +577,18 @@ class QuickActionSheet extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: row2
+              .map((a) => QuickAction(
+                    icon: a['icon'] as IconData,
+                    label: a['label'] as String,
+                    color: a['c'] as Color,
+                    onTap: () => onTap(a['action'] as String),
+                  ))
+              .toList(),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: row3
               .map((a) => QuickAction(
                     icon: a['icon'] as IconData,
                     label: a['label'] as String,

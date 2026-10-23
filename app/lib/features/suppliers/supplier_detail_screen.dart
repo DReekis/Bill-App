@@ -122,7 +122,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                         builder: (_) => PurchaseOrderBuilderScreen(supplierId: s.id))),
                     icon: const Icon(Icons.inventory_2_outlined, size: 16),
-                    label: const Text('+ PO', style: TextStyle(fontSize: 12)),
+                    label: const Text('PO', style: TextStyle(fontSize: 12)),
                   ),
                 ),
                 const SizedBox(width: 8),

@@ -11,6 +11,7 @@ import '../../utils/widgets.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import '../inventory/product_form.dart';
 import '../suppliers/supplier_form.dart';
+import 'purchase_detail_screen.dart';
 
 class _PurchaseLine {
   _PurchaseLine({required this.product, required this.qty, required this.price, required this.tax});
@@ -37,6 +38,16 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
   String? supplierName;
   bool directVendor = false;
   double total = 0;
+  int subtotalPaise = 0;
+  int taxablePaise = 0;
+  int cgstPaise = 0;
+  int sgstPaise = 0;
+  int igstPaise = 0;
+  int totalTaxPaise = 0;
+  int roundOffPaise = 0;
+  int grandTotalPaise = 0;
+  bool isInterState = false;
+  Map<int, int> taxByRate = {};
   bool saving = false;
 
   String? billNumber;
@@ -317,42 +328,141 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
     final line = lines[index];
     final qty = TextEditingController(text: _qty(line.qty));
     final price = TextEditingController(text: (line.price / 100).toStringAsFixed(2));
+    int selectedGst = line.tax;
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(line.label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 14),
-              Row(children: [
-                Expanded(child: TextField(controller: qty, keyboardType: TextInputType.number, decoration: inputDecoration('Quantity'))),
-                const SizedBox(width: 12),
-                Expanded(child: TextField(controller: price, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: inputDecoration('Unit cost'))),
-              ]),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () {
-                    final q = double.tryParse(qty.text.trim());
-                    final p = double.tryParse(price.text.trim());
-                    if (q == null || q <= 0 || p == null || p <= 0) return;
-                    setState(() {
-                      line.qty = q;
-                      line.price = (p * 100).round();
-                    });
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Apply'),
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final qVal = double.tryParse(qty.text.trim()) ?? 0.0;
+          final pVal = double.tryParse(price.text.trim()) ?? 0.0;
+          final subtotalP = (pVal * 100 * qVal).round();
+          final taxP = (subtotalP * (selectedGst / 100)).round();
+          final totalP = subtotalP + taxP;
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            line.label,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (line.product?.unit != null)
+                          Text(
+                            'Unit: ${line.product!.unit}',
+                            style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: qty,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: inputDecoration('Quantity', hint: '1'),
+                            onChanged: (_) => setSheetState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: price,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: inputDecoration('Unit Rate (₹)', hint: '0.00'),
+                            onChanged: (_) => setSheetState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('GST Rate (%)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [0, 5, 12, 18, 28].map((rate) {
+                        final isSel = selectedGst == rate;
+                        return ChoiceChip(
+                          label: Text('$rate%'),
+                          selected: isSel,
+                          selectedColor: StitchColors.primary.withValues(alpha: 0.15),
+                          labelStyle: TextStyle(
+                            color: isSel ? StitchColors.primary : StitchColors.textPrimary,
+                            fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                          onSelected: (val) {
+                            if (val) setSheetState(() => selectedGst = rate);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: StitchColors.surface,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Taxable: ${formatPaise(subtotalP)}', style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+                              Text('Tax ($selectedGst%): ${formatPaise(taxP)}', style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+                            ],
+                          ),
+                          Text(
+                            formatPaise(totalP),
+                            style: moneyStyle(fontSize: 16, weight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () {
+                          final q = double.tryParse(qty.text.trim());
+                          final p = double.tryParse(price.text.trim());
+                          if (q == null || q <= 0 || p == null || p < 0) return;
+                          setState(() {
+                            line.qty = q;
+                            line.price = (p * 100).round();
+                            line.tax = selectedGst;
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Apply Changes'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ]),
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -656,7 +766,7 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
                                             child: const Icon(Icons.add_rounded, size: 18, color: Color(0xFF2E7D32)),
                                           ),
                                           title: Text(
-                                            '+ Add "${vendorSearchController.text.trim()}"',
+                                            'Add "${vendorSearchController.text.trim()}"',
                                             style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF2E7D32), fontSize: 13),
                                           ),
                                           subtitle: const Text('Add and select as new supplier', style: TextStyle(fontSize: 11)),
@@ -903,10 +1013,14 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
         );
         if (mounted) {
           showAppMessage(context, 'Purchase updated · stock updated');
-          Navigator.of(context).pop(true);
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => PurchaseDetailScreen(purchaseId: widget.existingPurchaseId!, autoPreview: true),
+            ),
+          );
         }
       } else {
-        await Repository.instance.createPurchase(
+        final newId = await Repository.instance.createPurchase(
           businessId: businessId,
           supplierId: supplierId,
           supplierName: supplierName ?? 'Direct vendor',
@@ -919,7 +1033,11 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
         );
         if (mounted) {
           showAppMessage(context, 'Purchase saved · stock updated');
-          Navigator.of(context).pop(true);
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => PurchaseDetailScreen(purchaseId: newId, autoPreview: true),
+            ),
+          );
         }
       }
     } catch (e) {
@@ -944,9 +1062,61 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
   }
 
   void _recomputeTotal() {
-    total = lines.fold<double>(0, (sum, l) =>
-        sum + (l.price * l.qty).round() + ((l.price * l.qty * l.tax / 100).round()));
+    int subtotal = 0;
+    int taxSum = 0;
+    taxByRate = {};
+
+    final supp = (suppliers != null && supplierId != null)
+        ? suppliers!.where((s) => s.id == supplierId).firstOrNull
+        : null;
+    final suppState = supp?.state?.trim().toLowerCase();
+    final bizState = business?.state?.trim().toLowerCase();
+    isInterState = suppState != null &&
+        suppState.isNotEmpty &&
+        bizState != null &&
+        bizState.isNotEmpty &&
+        suppState != bizState;
+
+    for (final l in lines) {
+      final lineBase = (l.price * l.qty).round();
+      final lineTax = (lineBase * l.tax / 100).round();
+      subtotal += lineBase;
+      taxSum += lineTax;
+      if (l.tax > 0) {
+        taxByRate[l.tax] = (taxByRate[l.tax] ?? 0) + lineTax;
+      }
+    }
+
+    subtotalPaise = subtotal;
+    taxablePaise = subtotal;
+    totalTaxPaise = taxSum;
+
+    if (isInterState) {
+      igstPaise = totalTaxPaise;
+      cgstPaise = 0;
+      sgstPaise = 0;
+    } else {
+      cgstPaise = totalTaxPaise ~/ 2;
+      sgstPaise = totalTaxPaise - cgstPaise;
+      igstPaise = 0;
+    }
+
+    final rawTotal = taxablePaise + totalTaxPaise;
+    grandTotalPaise = rawTotal;
+    roundOffPaise = grandTotalPaise - rawTotal;
+    total = grandTotalPaise.toDouble();
   }
+
+  Widget _summaryRow(String label, String value, {Color color = StitchColors.textPrimary, bool bold = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: TextStyle(fontSize: bold ? 14 : 12.5, fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
+            Text(value, style: TextStyle(fontSize: bold ? 15 : 12.5, fontWeight: bold ? FontWeight.w800 : FontWeight.w600, color: color)),
+          ],
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -1111,14 +1281,81 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
                   ),
                 ),
               )),
-        if (lines.isNotEmpty)
+        if (lines.isNotEmpty) ...[
+          const SizedBox(height: 8),
           AppCard(
-            padding: const EdgeInsets.all(14),
-            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text('Total cost', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-              Text(formatPaise(total.round()), style: moneyStyle(fontSize: 15)),
-            ]),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'PURCHASE TAX SUMMARY',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: StitchColors.textSecondary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: (isInterState ? const Color(0xFF0284C7) : StitchColors.primary).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isInterState ? 'Inter-state (IGST)' : 'Intra-state (CGST + SGST)',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: isInterState ? const Color(0xFF0284C7) : StitchColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 18),
+                _summaryRow('Subtotal', formatPaise(subtotalPaise)),
+                _summaryRow('Taxable Amount', formatPaise(taxablePaise)),
+                if (cgstPaise > 0 || sgstPaise > 0) ...[
+                  _summaryRow('CGST', formatPaise(cgstPaise)),
+                  _summaryRow('SGST', formatPaise(sgstPaise)),
+                ],
+                if (igstPaise > 0) _summaryRow('IGST', formatPaise(igstPaise)),
+                if (totalTaxPaise > 0)
+                  _summaryRow('Total Tax', formatPaise(totalTaxPaise), color: StitchColors.primary),
+                if (taxByRate.length > 1) ...[
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    children: taxByRate.entries.map((e) {
+                      return Chip(
+                        label: Text('${e.key}% GST: ${formatPaise(e.value)}', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
+                        padding: EdgeInsets.zero,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                        backgroundColor: StitchColors.surface,
+                      );
+                    }).toList(),
+                  ),
+                ],
+                if (roundOffPaise != 0)
+                  _summaryRow('Round off', '${roundOffPaise > 0 ? '+' : '-'}${formatPaise(roundOffPaise.abs())}'),
+                const Divider(height: 18),
+                _summaryRow('Grand total', formatPaise(grandTotalPaise), bold: true),
+                if (supplierId == null && business?.state != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text('Direct vendor / Unregistered — intra-state GST applies (${business!.state}).',
+                        style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                  ),
+              ],
+            ),
           ),
+        ],
       ]),
       bottomNavigationBar: SafeArea(
         child: Padding(

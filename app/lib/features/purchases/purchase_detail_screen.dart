@@ -10,11 +10,13 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
 import 'purchase_builder_screen.dart';
+import '../returns/note_builder_screen.dart';
 
 class PurchaseDetailScreen extends StatefulWidget {
-  const PurchaseDetailScreen({super.key, required this.purchaseId});
+  const PurchaseDetailScreen({super.key, required this.purchaseId, this.autoPreview = false});
 
   final int purchaseId;
+  final bool autoPreview;
 
   @override
   State<PurchaseDetailScreen> createState() => _PurchaseDetailScreenState();
@@ -24,6 +26,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   PurchaseBill? purchase;
   Business? business;
   bool _busy = false;
+  bool _hasAutoPreviewed = false;
 
   @override
   void initState() {
@@ -43,6 +46,12 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
       purchase = p;
       business = b;
     });
+    if (widget.autoPreview && !_hasAutoPreviewed && p != null && b != null) {
+      _hasAutoPreviewed = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _previewPdf();
+      });
+    }
   }
 
   Future<void> _share() async {
@@ -151,6 +160,17 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     }
   }
 
+  void _recordDebitNote() {
+    final p = purchase;
+    if (p == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NoteBuilderScreen(partyType: 'supplier', fromPurchase: p),
+      ),
+    ).then((_) => _load());
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = purchase;
@@ -164,6 +184,11 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
         ),
         actions: [
           if (p != null) ...[
+            IconButton(
+              icon: const Icon(Icons.assignment_returned_outlined),
+              tooltip: 'Debit Note / Return',
+              onPressed: _busy ? null : _recordDebitNote,
+            ),
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               tooltip: 'Edit Purchase',
@@ -408,6 +433,21 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF5E35B1),
+                            side: const BorderSide(color: Color(0xFFD1C4E9)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: _busy ? null : _recordDebitNote,
+                          icon: const Icon(Icons.assignment_returned_outlined, size: 18),
+                          label: const Text('Record Debit Note / Return', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton.tonalIcon(

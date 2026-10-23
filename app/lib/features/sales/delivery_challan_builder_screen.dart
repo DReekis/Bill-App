@@ -290,7 +290,11 @@ class _DeliveryChallanBuilderScreenState extends State<DeliveryChallanBuilderScr
         if (!mounted) return;
 
         showAppMessage(context, 'Delivery Challan $finalNumber updated successfully ✓');
-        Navigator.of(context).pop(true);
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => DeliveryChallanDetailScreen(challanId: widget.existingChallan!.id!, autoPreview: true),
+          ),
+        );
       } else {
         final challan = DeliveryChallan(
           businessId: bizId,
@@ -322,7 +326,7 @@ class _DeliveryChallanBuilderScreenState extends State<DeliveryChallanBuilderScr
         showAppMessage(context, 'Delivery Challan $finalNumber created successfully ✓');
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => DeliveryChallanDetailScreen(challanId: challanId),
+            builder: (_) => DeliveryChallanDetailScreen(challanId: challanId, autoPreview: true),
           ),
         );
       }

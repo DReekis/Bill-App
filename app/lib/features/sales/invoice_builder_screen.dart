@@ -22,6 +22,7 @@ import 'hardware_scanner_dialog.dart';
 import '../../core/physical_barcode_scanner.dart';
 import '../../core/subscription_service.dart';
 import '../subscription/upgrade_paywall_sheet.dart';
+import 'invoice_detail_screen.dart';
 
 class InvoiceBuilderScreen extends StatefulWidget {
   const InvoiceBuilderScreen({super.key, this.customerId, this.existingInvoiceId});
@@ -730,7 +731,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                             );
                           },
                           icon: const Icon(Icons.person_add_rounded, size: 18),
-                          label: const Text('+ Add New Customer', style: TextStyle(fontWeight: FontWeight.w700)),
+                          label: const Text('Add New Customer', style: TextStyle(fontWeight: FontWeight.w700)),
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1541,10 +1542,14 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
 
         if (mounted) {
           showAppMessage(context, 'Invoice $number updated');
-          Navigator.of(context).pop(true);
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => InvoiceDetailScreen(invoiceId: widget.existingInvoiceId!, autoPreview: true),
+            ),
+          );
         }
       } else {
-        await Repository.instance.finalizeSale(
+        final invId = await Repository.instance.finalizeSale(
           businessId: businessId,
           number: number,
           customerId: customerId,
@@ -1576,7 +1581,11 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
 
         if (mounted) {
           showAppMessage(context, '$number saved');
-          Navigator.of(context).pop(true);
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => InvoiceDetailScreen(invoiceId: invId, autoPreview: true),
+            ),
+          );
         }
       }
     } catch (e) {

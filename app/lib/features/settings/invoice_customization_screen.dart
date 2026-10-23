@@ -888,7 +888,7 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
                         border: Border.all(color: Colors.white, width: 1),
                       ),
                     ),
-                    label: const Text('+ Custom Hex', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                    label: const Text('Custom Hex', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
                     backgroundColor: StitchColors.surfaceVariant,
                   ),
                 ],

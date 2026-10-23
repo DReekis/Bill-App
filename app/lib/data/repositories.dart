@@ -475,6 +475,97 @@ class Repository {
     }
   }
 
+  Future<int> _resolveHighestReturnSequence(DatabaseExecutor db, int businessId, String prefix) async {
+    int highest = 0;
+    final pfx = prefix.trim().isEmpty ? 'RET' : prefix.trim().toUpperCase();
+    final rows = await db.rawQuery(
+      "SELECT number FROM returns WHERE business_id = ? AND (number LIKE ? OR number LIKE ?)",
+      [businessId, '$pfx-%', '$pfx%'],
+    );
+    for (final r in rows) {
+      final numStr = r['number'] as String?;
+      if (numStr != null) {
+        final seq = InvoiceNumbering.extractSequence(numStr);
+        if (seq != null && seq > highest) {
+          highest = seq;
+        }
+      }
+    }
+    return highest;
+  }
+
+  Future<String> nextCreditNoteNumber(int businessId, [String prefix = 'CN']) async {
+    final db = await _database;
+    final highest = await _resolveHighestReturnSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('returns',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
+  }
+
+  Future<String> peekNextCreditNoteNumber(int businessId, [String prefix = 'CN']) async {
+    final db = await _database;
+    final highest = await _resolveHighestReturnSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('returns',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
+  }
+
+  Future<String> nextDebitNoteNumber(int businessId, [String prefix = 'DN']) async {
+    final db = await _database;
+    final highest = await _resolveHighestReturnSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('returns',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
+  }
+
+  Future<String> peekNextDebitNoteNumber(int businessId, [String prefix = 'DN']) async {
+    final db = await _database;
+    final highest = await _resolveHighestReturnSequence(db, businessId, prefix);
+    int candidateSeq = highest + 1;
+    while (true) {
+      final candidate = InvoiceNumbering.format(prefix, candidateSeq);
+      final exists = await db.query('returns',
+          columns: ['id'],
+          where: 'business_id = ? AND LOWER(TRIM(number)) = ?',
+          whereArgs: [businessId, candidate.trim().toLowerCase()],
+          limit: 1);
+      if (exists.isEmpty) {
+        return candidate;
+      }
+      candidateSeq++;
+    }
+  }
+
   Future<int> upsertCustomer(Customer customer, {int? businessIdOverride}) async {
     final db = await _database;
     final businessId = businessIdOverride ?? session.businessId;
@@ -2758,6 +2849,54 @@ class Repository {
       }
     });
     await _audit(bizId, action: 'update', entity: 'delivery_challan', entityId: challan.id);
+  }
+
+  Future<void> updateSalesOrder(SalesOrder order) async {
+    final db = await _database;
+    final bizId = order.businessId ?? session.businessId!;
+    await db.transaction((txn) async {
+      await txn.update(
+        'sales_orders',
+        order.toMap()..['business_id'] = bizId,
+        where: 'id = ? AND business_id = ?',
+        whereArgs: [order.id, bizId],
+      );
+      await txn.delete('sales_order_items', where: 'order_id = ?', whereArgs: [order.id]);
+      for (final line in order.lines) {
+        await txn.insert('sales_order_items', {
+          'order_id': order.id,
+          'product_id': line.productId,
+          'name': line.name,
+          'quantity': line.quantity,
+          'price': line.price,
+        });
+      }
+    });
+    await _audit(bizId, action: 'update', entity: 'sales_order', entityId: order.id!);
+  }
+
+  Future<void> updatePurchaseOrder(PurchaseOrder order) async {
+    final db = await _database;
+    final bizId = order.businessId ?? session.businessId!;
+    await db.transaction((txn) async {
+      await txn.update(
+        'purchase_orders',
+        order.toMap()..['business_id'] = bizId,
+        where: 'id = ? AND business_id = ?',
+        whereArgs: [order.id, bizId],
+      );
+      await txn.delete('purchase_order_items', where: 'order_id = ?', whereArgs: [order.id]);
+      for (final line in order.lines) {
+        await txn.insert('purchase_order_items', {
+          'order_id': order.id,
+          'product_id': line.productId,
+          'name': line.name,
+          'quantity': line.quantity,
+          'price': line.price,
+        });
+      }
+    });
+    await _audit(bizId, action: 'update', entity: 'purchase_order', entityId: order.id!);
   }
 
   Future<int> upsertBankAccount(BankAccount account) async {
@@ -5645,6 +5784,40 @@ class Repository {
           refId: r['id'] as int,
         ));
       }
+    }
+
+    final retWhere = <String>['business_id = ?'];
+    final retArgs = <Object?>[businessId];
+    if (fromDate != null && fromDate.isNotEmpty) {
+      retWhere.add('date >= ?');
+      retArgs.add(fromDate);
+    }
+    if (toDate != null && toDate.isNotEmpty) {
+      retWhere.add('date <= ?');
+      retArgs.add(toDate);
+    }
+    final retRows = await db.query('returns',
+        where: retWhere.join(' AND '),
+        whereArgs: retArgs,
+        orderBy: 'date DESC, id DESC',
+        limit: limit);
+    for (final r in retRows) {
+      final amt = (r['total'] as num?)?.toInt() ?? 0;
+      final isCustomer = (r['party_type'] as String?) == 'customer';
+      list.add(TransactionRecord(
+        id: r['id'] as int,
+        type: isCustomer ? TransactionType.saleReturn : TransactionType.purchaseReturn,
+        number: r['number'] as String? ?? (isCustomer ? 'CN-${r['id']}' : 'DN-${r['id']}'),
+        partyName: r['party_name'] as String?,
+        date: (r['date'] as String?) ?? todayIso(),
+        amount: amt,
+        paidAmount: amt,
+        outstandingAmount: 0,
+        status: (r['status'] as String?) ?? 'Finalized',
+        paymentMode: null,
+        notes: r['reason'] as String?,
+        refId: r['id'] as int,
+      ));
     }
 
     list.sort((a, b) {
