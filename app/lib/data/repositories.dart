@@ -1815,6 +1815,8 @@ class Repository {
     String? purchaseNumber,
   }) async {
     final db = await _database;
+    var resolvedTotal = 0;
+    String resolvedNumber = '';
     final purchaseId = await db.transaction<int>((txn) async {
       final bizRows = await txn.query('businesses',
           columns: ['purchase_prefix', 'purchase_sequence'], where: 'id = ?', whereArgs: [businessId]);
@@ -1824,6 +1826,7 @@ class Repository {
       final number = (purchaseNumber != null && purchaseNumber.trim().isNotEmpty)
           ? purchaseNumber.trim()
           : InvoiceNumbering.format(pfx, nextSeq);
+      resolvedNumber = number;
 
       final seq = InvoiceNumbering.extractSequence(number);
       if (seq != null) {
@@ -1896,6 +1899,7 @@ class Repository {
           'note': '$name x${_qty(qty)} from $supplierName',
         });
       }
+      resolvedTotal = total;
       await txn.update('expenses', {'amount': total}, where: 'id = ?', whereArgs: [purchaseId]);
       await txn.insert('ledger', {
         'business_id': businessId,
@@ -1945,7 +1949,32 @@ class Repository {
       return purchaseId;
     });
     await _audit(businessId, action: 'create', entity: 'purchase', entityId: purchaseId);
-    await _enqueueSync(businessId, entity: 'purchase', entityId: purchaseId, op: 'create');
+    final purchasePayload = {
+      'id': purchaseId,
+      'businessId': businessId.toString(),
+      'number': resolvedNumber,
+      'vendor': supplierName,
+      'supplierId': supplierId?.toString(),
+      'supplierName': supplierName,
+      'amount': resolvedTotal,
+      'mode': paymentMode ?? 'Credit',
+      'date': date,
+      'description': notes == null || notes.isEmpty
+          ? 'Purchase $resolvedNumber from $supplierName'
+          : 'Purchase $resolvedNumber from $supplierName — $notes',
+      'notes': notes,
+      'items': items.map((it) => {
+        'productId': it.$1,
+        'name': it.$2,
+        'quantity': it.$3,
+        'price': it.$4,
+        'tax': it.$5,
+        'gstRate': it.$5,
+        'unit': 'pc',
+      }).toList(),
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
+    await _enqueueSync(businessId, entity: 'purchase', entityId: purchaseId, op: 'create', payload: jsonEncode(purchasePayload));
     return purchaseId;
   }
 
@@ -2087,6 +2116,7 @@ class Repository {
     required String purchaseNumber,
   }) async {
     final db = await _database;
+    var resolvedTotal = 0;
     await db.transaction((txn) async {
       final prevMoves = await txn.query(
         'stock_moves',
@@ -2157,6 +2187,7 @@ class Repository {
           'note': '$name x${_qty(qty)} from $supplierName',
         });
       }
+      resolvedTotal = total;
 
       await txn.update('expenses', {
         'amount': total,
@@ -2180,6 +2211,32 @@ class Repository {
       });
     });
     await _audit(businessId, action: 'update', entity: 'purchase', entityId: purchaseId);
+    final purchasePayload = {
+      'id': purchaseId,
+      'businessId': businessId.toString(),
+      'number': purchaseNumber,
+      'vendor': supplierName,
+      'supplierId': supplierId?.toString(),
+      'supplierName': supplierName,
+      'amount': resolvedTotal,
+      'mode': paymentMode ?? 'Credit',
+      'date': date,
+      'description': notes == null || notes.isEmpty
+          ? 'Purchase $purchaseNumber from $supplierName'
+          : 'Purchase $purchaseNumber from $supplierName — $notes',
+      'notes': notes,
+      'items': items.map((it) => {
+        'productId': it.$1,
+        'name': it.$2,
+        'quantity': it.$3,
+        'price': it.$4,
+        'tax': it.$5,
+        'gstRate': it.$5,
+        'unit': 'pc',
+      }).toList(),
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
+    await _enqueueSync(businessId, entity: 'purchase', entityId: purchaseId, op: 'upsert', payload: jsonEncode(purchasePayload));
   }
 
   Future<void> deletePurchase(int businessId, int purchaseId) async {
@@ -2207,6 +2264,7 @@ class Repository {
       await txn.delete('expenses', where: 'id = ? AND business_id = ?', whereArgs: [purchaseId, businessId]);
     });
     await _audit(businessId, action: 'delete', entity: 'purchase', entityId: purchaseId);
+    await _enqueueSync(businessId, entity: 'purchase', entityId: purchaseId, op: 'delete');
   }
 
   Future<int> recordExpense({
@@ -2375,21 +2433,56 @@ class Repository {
       return paymentId;
     });
     await _audit(businessId, action: 'create', entity: 'payment', entityId: id);
-    final payMap = {
+    final payRows = await db.query('payments', where: 'id = ?', whereArgs: [id], limit: 1);
+    final payMap = payRows.isNotEmpty ? Map<String, dynamic>.from(payRows.first) : <String, dynamic>{
       'id': id,
-      'businessId': businessId.toString(),
-      'partyType': partyType,
-      'partyId': partyId?.toString(),
-      'partyName': partyName,
+      'business_id': businessId,
+      'party_type': partyType,
+      'party_id': partyId,
+      'party_name': partyName,
       'amount': amount,
       'mode': mode ?? 'Cash',
       'date': date,
       'type': partyType == 'customer' ? 'in' : 'out',
       'reference': 'receipt',
-      'updatedAt': DateTime.now().toIso8601String(),
     };
+    payMap['businessId'] = businessId.toString();
+    payMap['partyType'] = payMap['party_type'] ?? partyType;
+    payMap['partyId'] = payMap['party_id']?.toString() ?? partyId?.toString();
+    payMap['partyName'] = payMap['party_name'] ?? partyName;
+    payMap['invoiceId'] = payMap['invoice_id']?.toString();
+    payMap['invoiceNumber'] = payMap['invoice_number'];
+    payMap['updatedAt'] = DateTime.now().toIso8601String();
     await _enqueueSync(businessId, entity: 'payment', entityId: id, op: 'create', payload: jsonEncode(payMap));
     return id;
+  }
+
+  Future<void> deletePayment(int businessId, int paymentId) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      final rows = await txn.query('payments', where: 'id = ? AND business_id = ?', whereArgs: [paymentId, businessId], limit: 1);
+      if (rows.isNotEmpty) {
+        final p = rows.first;
+        final invId = p['invoice_id'] as int?;
+        final amt = p['amount'] as int? ?? 0;
+        if (invId != null && amt > 0) {
+          final invRows = await txn.query('invoices', where: 'id = ?', whereArgs: [invId], limit: 1);
+          if (invRows.isNotEmpty) {
+            final curPaid = invRows.first['amount_paid'] as int? ?? 0;
+            final invTotal = invRows.first['total'] as int? ?? 0;
+            final newPaid = (curPaid - amt).clamp(0, invTotal);
+            await txn.update('invoices', {
+              'amount_paid': newPaid,
+              'status': resolveInvoiceStatus(total: invTotal, amountPaid: newPaid),
+            }, where: 'id = ?', whereArgs: [invId]);
+          }
+        }
+      }
+      await txn.delete('ledger', where: "business_id = ? AND ref_type = 'payment' AND ref_id = ?", whereArgs: [businessId, paymentId]);
+      await txn.delete('payments', where: 'id = ? AND business_id = ?', whereArgs: [paymentId, businessId]);
+    });
+    await _audit(businessId, action: 'delete', entity: 'payment', entityId: paymentId);
+    await _enqueueSync(businessId, entity: 'payment', entityId: paymentId, op: 'delete');
   }
 
   Future<List<Invoice>> invoices(int businessId) async {

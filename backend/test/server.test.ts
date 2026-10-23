@@ -452,6 +452,173 @@ test('Batch Sync Push & Delta Pull: Process multiple entities and stock moves', 
   assert.ok(pullBody.changes.some((c: any) => c.entity === 'customer'));
 });
 
+test('Sync Engine: Quotations, Orders, Challans, Returns, Purchases with items and Deletions', async () => {
+  const email = `sync-ext-${Date.now()}@example.com`;
+  const regRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/register',
+    payload: { name: 'Ext Sync User', email, password: 'password123', businessName: 'Ext Sync Enterprise' },
+  });
+  const { token, user } = regRes.json() as any;
+
+  const bizRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/businesses',
+    headers: { authorization: `Bearer ${token}` },
+    payload: { name: 'Ext Sync Enterprise' },
+  });
+  const business = bizRes.json() as any;
+  const authHeaders = {
+    authorization: `Bearer ${token}`,
+    'x-business-id': business.id,
+  };
+
+  const ts = Date.now();
+  const pushBatchRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/sync/push',
+    headers: authHeaders,
+    payload: {
+      items: [
+        {
+          businessId: business.id,
+          entity: 'quotation',
+          entityId: `quote-${ts}`,
+          op: 'upsert',
+          payload: JSON.stringify({
+            number: `QT-${ts}`,
+            customerName: 'Quote Cust',
+            total: 15000,
+            items: [{ name: 'Quote Item A', quantity: 2, price: 7500 }],
+          }),
+        },
+        {
+          businessId: business.id,
+          entity: 'sales_order',
+          entityId: `so-${ts}`,
+          op: 'upsert',
+          payload: JSON.stringify({
+            number: `SO-${ts}`,
+            customerName: 'Order Cust',
+            total: 25000,
+            items: [{ name: 'Order Item A', quantity: 5, price: 5000 }],
+          }),
+        },
+        {
+          businessId: business.id,
+          entity: 'purchase_order',
+          entityId: `po-${ts}`,
+          op: 'upsert',
+          payload: JSON.stringify({
+            number: `PO-${ts}`,
+            supplierName: 'PO Vendor',
+            total: 12000,
+            items: [{ name: 'Raw Material', quantity: 10, price: 1200 }],
+          }),
+        },
+        {
+          businessId: business.id,
+          entity: 'delivery_challan',
+          entityId: `dc-${ts}`,
+          op: 'upsert',
+          payload: JSON.stringify({
+            number: `DC-${ts}`,
+            customerName: 'Challan Cust',
+            items: [{ name: 'Shipped Item', quantity: 3 }],
+          }),
+        },
+        {
+          businessId: business.id,
+          entity: 'return',
+          entityId: `ret-${ts}`,
+          op: 'upsert',
+          payload: JSON.stringify({
+            number: `CN-${ts}`,
+            partyName: 'Return Cust',
+            partyType: 'customer',
+            total: 5000,
+            items: [{ name: 'Returned Good', quantity: 1, price: 5000 }],
+          }),
+        },
+        {
+          businessId: business.id,
+          entity: 'purchase',
+          entityId: `pur-${ts}`,
+          op: 'upsert',
+          payload: JSON.stringify({
+            number: `PUR-${ts}`,
+            vendor: 'Supplier XYZ',
+            amount: 45000,
+            mode: 'Credit',
+            items: [{ name: 'Stock Product A', quantity: 100, price: 450 }],
+          }),
+        },
+      ],
+    },
+  });
+
+  assert.equal(pushBatchRes.statusCode, 202);
+  const pushBatchBody = pushBatchRes.json() as any;
+  assert.equal(pushBatchBody.accepted, true);
+  assert.equal(pushBatchBody.count, 6);
+
+  // Pull and verify all 6 entities are retrieved
+  const pullRes1 = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sync/pull?limit=50',
+    headers: authHeaders,
+  });
+  assert.equal(pullRes1.statusCode, 200);
+  const pullBody1 = pullRes1.json() as any;
+  const entities = pullBody1.changes.map((c: any) => c.entity);
+  assert.ok(entities.includes('quotation'), 'Should include quotation');
+  assert.ok(entities.includes('sales_order'), 'Should include sales_order');
+  assert.ok(entities.includes('purchase_order'), 'Should include purchase_order');
+  assert.ok(entities.includes('delivery_challan'), 'Should include delivery_challan');
+  assert.ok(entities.includes('return'), 'Should include return');
+  assert.ok(entities.includes('purchase'), 'Should include purchase');
+
+  // Verify quotation items were materialized
+  const quoteChange = pullBody1.changes.find((c: any) => c.entity === 'quotation');
+  const quoteData = JSON.parse(quoteChange.payload);
+  assert.ok(quoteData.items && quoteData.items.length > 0);
+  assert.equal(quoteData.items[0].name, 'Quote Item A');
+
+  // Verify purchase items were preserved in payload
+  const purChange = pullBody1.changes.find((c: any) => c.entity === 'purchase');
+  const purData = JSON.parse(purChange.payload);
+  assert.ok(purData.items && purData.items.length > 0);
+  assert.equal(purData.items[0].name, 'Stock Product A');
+
+  // Now push a delete operation for the quotation
+  const deletePushRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/sync/push',
+    headers: authHeaders,
+    payload: {
+      businessId: business.id,
+      entity: 'quotation',
+      entityId: `quote-${ts}`,
+      op: 'delete',
+    },
+  });
+  assert.equal(deletePushRes.statusCode, 202);
+
+  // Pull again and verify the delete op is reflected
+  const pullRes2 = await app.inject({
+    method: 'GET',
+    url: '/api/v1/sync/pull?limit=50',
+    headers: authHeaders,
+  });
+  assert.equal(pullRes2.statusCode, 200);
+  const pullBody2 = pullRes2.json() as any;
+  const deletedQuoteChange = pullBody2.changes.find(
+    (c: any) => c.entity === 'quotation' && c.entityId === `quote-${ts}`
+  );
+  assert.ok(deletedQuoteChange, 'Deleted quotation must appear in pull changes');
+  assert.equal(deletedQuoteChange.op, 'delete');
+});
+
 
 
 
