@@ -1,0 +1,16 @@
+# ── key.properties.template ──────────────────────────────────────────────────
+# Copy this file to key.properties and fill in your actual values.
+# NEVER commit key.properties or the .jks/.keystore file to version control.
+#
+# Generate a keystore with:
+#   keytool -genkey -v \
+#     -keystore ~/your-upload-keystore.jks \
+#     -storetype PKCS12 \
+#     -keyalg RSA -keysize 2048 -validity 10000 \
+#     -alias your-key-alias
+# ─────────────────────────────────────────────────────────────────────────────
+
+storePassword=YOUR_STORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=YOUR_KEY_ALIAS
+storeFile=/absolute/path/to/your-upload-keystore.jks
