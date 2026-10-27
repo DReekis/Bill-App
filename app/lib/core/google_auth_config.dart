@@ -40,7 +40,7 @@ class GoogleAuthConfig {
   );
 
   /// Android application package name
-  static const String appPackageName = 'com.pricepilot.bill';
+  static const String appPackageName = 'com.billket.app';
 
   /// Active debug/build signing certificate SHA-1 fingerprint
   static const String debugSha1 = '7D:C8:69:0D:50:7F:30:38:A4:15:2E:C7:DE:0C:5E:40:B9:EB:68:E7';

@@ -8,7 +8,7 @@ bank activity, and reports.
 - Material 3 dashboard and mobile navigation
 - Sales, invoices, inventory, customers, suppliers, expenses, payments, and reports
 - Local persistence with session/PIN protection
-- Android package: `com.pricepilot.bill`
+- Android package: `com.billket.app`
 
 ## Tech Stack
 

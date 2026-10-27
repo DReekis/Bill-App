@@ -6,7 +6,7 @@ class SecurityService {
   SecurityService._();
   static final SecurityService instance = SecurityService._();
 
-  static const MethodChannel _channel = MethodChannel('com.pricepilot.bill/security');
+  static const MethodChannel _channel = MethodChannel('com.billket.app/security');
   final LocalAuthentication _localAuth = LocalAuthentication();
 
   /// Toggles Android FLAG_SECURE to block screen recording and screenshots.

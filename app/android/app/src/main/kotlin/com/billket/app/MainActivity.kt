@@ -1,4 +1,4 @@
-package com.pricepilot.bill
+package com.billket.app
 
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -6,7 +6,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterFragmentActivity() {
-    private val SECURITY_CHANNEL = "com.pricepilot.bill/security"
+    private val SECURITY_CHANNEL = "com.billket.app/security"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
