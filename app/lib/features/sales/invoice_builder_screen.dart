@@ -1176,6 +1176,20 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     final q = quote;
     final biz = business;
     if (q == null || biz == null) return;
+
+    final ewb = ewayBillNoController.text.trim();
+    if (ewb.isNotEmpty) {
+      if (ewb.length != 12 || !RegExp(r'^\d{12}$').hasMatch(ewb)) {
+        showAppMessage(context, 'E-Way Bill No. must be exactly 12 digits', error: true);
+        return;
+      }
+      final stateCode = ewb.substring(0, 2);
+      if (!GstService.stateCodes.containsKey(stateCode)) {
+        showAppMessage(context, 'E-Way Bill No. starts with invalid state code ($stateCode)', error: true);
+        return;
+      }
+    }
+
     String invoiceDate = this.invoiceDate;
     String? checkoutDueDate = dueDate;
     String gstType = q.intraState ? 'intra' : 'inter';
@@ -1452,6 +1466,15 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     final businessId = session.businessId!;
     setState(() => saving = true);
     try {
+      final ewb = ewayBillNoController.text.trim();
+      if (ewb.isNotEmpty && !GstService.isValidEwayBillNumber(ewb)) {
+        setState(() => saving = false);
+        if (mounted) {
+          showAppMessage(context, 'Please enter a valid 12-digit E-Way Bill Number', error: true);
+        }
+        return;
+      }
+
       var number = (invoiceNumber != null && invoiceNumber!.trim().isNotEmpty)
           ? invoiceNumber!.trim()
           : (widget.existingInvoiceId != null
@@ -1795,7 +1818,25 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                         child: TextField(
                           controller: ewayBillNoController,
                           keyboardType: TextInputType.number,
-                          decoration: inputDecoration('E-Way Bill No.', hint: '12-digit number'),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(12),
+                          ],
+                          decoration: inputDecoration('E-Way Bill No.', hint: '12-digit number').copyWith(
+                            errorText: () {
+                              final text = ewayBillNoController.text.trim();
+                              if (text.isEmpty) return null;
+                              if (text.length < 12) {
+                                return '${12 - text.length} digits left';
+                              }
+                              final stateCode = text.substring(0, 2);
+                              if (!GstService.stateCodes.containsKey(stateCode)) {
+                                return 'Invalid state ($stateCode)';
+                              }
+                              return null;
+                            }(),
+                          ),
+                          onChanged: (_) => setState(() {}),
                         ),
                       ),
                     ],

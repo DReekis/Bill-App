@@ -954,7 +954,7 @@ class Repository {
         'subtotal': quote.subtotal.paise,
         'discount': quote.itemDiscount.paise + quote.invoiceDiscount.paise,
         'discount_type': quote.lines.any((l) => l.discount.paise > 0) ? 'item' : null,
-        'taxable': quote.taxable.paise,
+        'taxable': quote.taxable.paise > 0 ? quote.taxable.paise : total,
         'cgst': quote.cgst.paise,
         'sgst': quote.sgst.paise,
         'igst': quote.igst.paise,
@@ -1065,8 +1065,10 @@ class Repository {
           'date': date,
         });
 
-        final cost = (product.first['cost_average'] as int? ?? 0);
-        final cogs = Money(cost).multiply(line.quantity).paise;
+        final costAvg = (product.first['cost_average'] as int? ?? 0);
+        final purchasePrice = (product.first['purchase_price'] as int? ?? 0);
+        final cost = costAvg > 0 ? costAvg : (purchasePrice > 0 ? purchasePrice : 0);
+        final cogs = Money(cost).multiply(qtyToDeduct).paise;
         await txn.insert('ledger', {
           'business_id': businessId,
           'date': date,
@@ -1079,12 +1081,13 @@ class Repository {
         });
       }
 
+      final effectiveTaxable = quote.taxable.paise > 0 ? quote.taxable.paise : total;
       await txn.insert('ledger', {
         'business_id': businessId,
         'date': date,
         'account': 'income:sales',
         'debit': 0,
-        'credit': quote.taxable.paise,
+        'credit': effectiveTaxable,
         'ref_type': 'invoice',
         'ref_id': invoiceId,
         'note': 'Sales $finalNumber',
@@ -1419,8 +1422,10 @@ class Repository {
           'date': date,
         });
 
-        final cost = (product.first['cost_average'] as int? ?? 0);
-        final cogs = Money(cost).multiply(line.quantity).paise;
+        final costAvg = (product.first['cost_average'] as int? ?? 0);
+        final purchasePrice = (product.first['purchase_price'] as int? ?? 0);
+        final cost = costAvg > 0 ? costAvg : (purchasePrice > 0 ? purchasePrice : 0);
+        final cogs = Money(cost).multiply(qtyToDeduct).paise;
         await txn.insert('ledger', {
           'business_id': businessId,
           'date': date,
@@ -1434,12 +1439,14 @@ class Repository {
       }
 
       // 8. Insert updated ledger entries for invoice
+      final total = quote.total.paise;
+      final effectiveTaxable = quote.taxable.paise > 0 ? quote.taxable.paise : total;
       await txn.insert('ledger', {
         'business_id': businessId,
         'date': date,
         'account': 'income:sales',
         'debit': 0,
-        'credit': quote.taxable.paise,
+        'credit': effectiveTaxable,
         'ref_type': 'invoice',
         'ref_id': invoiceId,
         'note': 'Sales $number',
@@ -1483,7 +1490,6 @@ class Repository {
           'note': 'Additional Charges $number',
         });
       }
-      final total = quote.total.paise;
       await txn.insert('ledger', {
         'business_id': businessId,
         'date': date,
@@ -1544,7 +1550,7 @@ class Repository {
         'subtotal': quote.subtotal.paise,
         'discount': quote.itemDiscount.paise + quote.invoiceDiscount.paise,
         'discount_type': quote.lines.any((l) => l.discount.paise > 0) ? 'item' : null,
-        'taxable': quote.taxable.paise,
+        'taxable': quote.taxable.paise > 0 ? quote.taxable.paise : total,
         'cgst': quote.cgst.paise,
         'sgst': quote.sgst.paise,
         'igst': quote.igst.paise,
@@ -1861,12 +1867,17 @@ class Repository {
         if (product != null) {
           final stock = (product['stock'] as num?)?.toDouble() ?? 0;
           final costAvg = (product['cost_average'] as int? ?? 0);
+          final oldStock = stock > 0 ? stock : 0.0;
+          final purchasePrice = (product['purchase_price'] as num?)?.toInt() ?? price;
+          final effectiveCostAvg = costAvg > 0 ? costAvg : purchasePrice;
+          final totalQty = oldStock + qty;
+          final newAvg = totalQty > 0
+              ? ((effectiveCostAvg * oldStock + price * qty) / totalQty).round()
+              : price;
           final newStock = stock + qty;
-          final newAvg =
-              newStock == 0 ? costAvg : (costAvg * stock + price * qty) / newStock;
           await txn.update('products', {
             'stock': newStock,
-            'cost_average': newAvg.round(),
+            'cost_average': newAvg,
           }, where: 'id = ?', whereArgs: [productId]);
           await txn.insert('stock_moves', {
             'business_id': businessId,
@@ -1886,7 +1897,10 @@ class Repository {
           'quantity': qty,
           'price': price,
           'tax': gstRate,
-          'unit': 'pc',
+          'taxable': lineAmount,
+          'discount': 0,
+          'unit': (product != null ? product['unit'] as String? : null) ?? 'pc',
+          'hsn': product != null ? product['hsn'] as String? : null,
         });
         await txn.insert('ledger', {
           'business_id': businessId,
@@ -2024,7 +2038,7 @@ class Repository {
 
     final payRows = await db.query(
       'payments',
-      where: "business_id = ? AND party_type = 'supplier' AND (invoice_number = ? OR reference = 'initial_purchase')",
+      where: "business_id = ? AND party_type = 'supplier' AND invoice_number = ?",
       whereArgs: [businessId, number],
     );
     var paid = 0;
@@ -2042,14 +2056,45 @@ class Repository {
       whereArgs: [purchaseId],
     );
     if (itemRows.isNotEmpty) {
-      lines = itemRows.map((m) => InvoiceLine(
-        productId: m['product_id'] as int?,
-        name: m['name'] as String? ?? 'Item',
-        quantity: (m['quantity'] as num?)?.toDouble() ?? 1.0,
-        price: (m['price'] as num?)?.toInt() ?? 0,
-        unit: m['unit'] as String?,
-        gstRate: (m['tax'] as num?)?.toInt() ?? 0,
-      )).toList();
+      for (final m in itemRows) {
+        final pid = m['product_id'] as int?;
+        final price = (m['price'] as num?)?.toInt() ?? 0;
+        final qty = (m['quantity'] as num?)?.toDouble() ?? 1.0;
+        final rawTax = (m['tax'] as num?)?.toInt() ?? 0;
+        var gst = (m['gst_rate'] as num?)?.toInt() ?? (rawTax <= 100 ? rawTax : 0);
+        final disc = (m['discount'] as num?)?.toInt() ?? 0;
+        int taxable = (m['taxable'] as num?)?.toInt() ?? 0;
+        if (taxable == 0 && price > 0) {
+          taxable = (price * qty).round() - disc;
+        }
+        String? hsn = m['hsn'] as String?;
+        String? unit = m['unit'] as String?;
+        if (pid != null && (hsn == null || hsn.isEmpty || unit == null || unit.isEmpty || gst == 0)) {
+          final pRows = await db.query('products', columns: ['hsn', 'unit', 'gst_rate'], where: 'id = ?', whereArgs: [pid], limit: 1);
+          if (pRows.isNotEmpty) {
+            hsn ??= pRows.first['hsn'] as String?;
+            unit ??= pRows.first['unit'] as String?;
+            if (gst == 0 && (pRows.first['gst_rate'] as num?) != null) {
+              gst = (pRows.first['gst_rate'] as num).toInt();
+            }
+          }
+        }
+        final taxPaise = gst > 0
+            ? (taxable * (gst / 100)).round()
+            : (rawTax > 100 ? rawTax : 0);
+        lines.add(InvoiceLine(
+          productId: pid,
+          name: m['name'] as String? ?? 'Item',
+          hsn: hsn,
+          quantity: qty,
+          price: price,
+          discount: disc,
+          taxable: taxable,
+          tax: taxPaise,
+          unit: unit,
+          gstRate: gst,
+        ));
+      }
     } else {
       final moves = await db.query(
         'stock_moves',
@@ -2063,6 +2108,7 @@ class Repository {
         int price = 0;
         int gstRate = 0;
         String? unit;
+        String? hsn;
         if (pid != null) {
           final pRows = await db.query('products', where: 'id = ?', whereArgs: [pid], limit: 1);
           if (pRows.isNotEmpty) {
@@ -2071,13 +2117,19 @@ class Repository {
             price = (p['purchase_price'] as num?)?.toInt() ?? (p['cost_average'] as num?)?.toInt() ?? 0;
             gstRate = (p['gst_rate'] as num?)?.toInt() ?? 0;
             unit = p['unit'] as String?;
+            hsn = p['hsn'] as String?;
           }
         }
+        final taxable = (price * qty).round();
+        final taxPaise = gstRate > 0 ? (taxable * (gstRate / 100)).round() : 0;
         lines.add(InvoiceLine(
           productId: pid,
           name: name,
+          hsn: hsn,
           quantity: qty,
           price: price,
+          taxable: taxable,
+          tax: taxPaise,
           unit: unit,
           gstRate: gstRate,
         ));
@@ -2144,16 +2196,24 @@ class Repository {
         final lineAmount = (price * qty).round();
         final taxAmount = (price * qty * gstRate / 100).round();
         total += lineAmount + taxAmount;
+        Map<String, Object?>? prodMap;
         if (productId != null) {
           final pRows = await txn.query('products', where: 'id = ?', whereArgs: [productId], limit: 1);
           if (pRows.isNotEmpty) {
-            final stock = (pRows.first['stock'] as num?)?.toDouble() ?? 0;
-            final costAvg = (pRows.first['cost_average'] as int? ?? 0);
+            prodMap = pRows.first;
+            final stock = (prodMap['stock'] as num?)?.toDouble() ?? 0;
+            final costAvg = (prodMap['cost_average'] as int? ?? 0);
+            final oldStock = stock > 0 ? stock : 0.0;
+            final purchasePrice = (prodMap['purchase_price'] as num?)?.toInt() ?? price;
+            final effectiveCostAvg = costAvg > 0 ? costAvg : purchasePrice;
+            final totalQty = oldStock + qty;
+            final newAvg = totalQty > 0
+                ? ((effectiveCostAvg * oldStock + price * qty) / totalQty).round()
+                : price;
             final newStock = stock + qty;
-            final newAvg = newStock == 0 ? costAvg : (costAvg * stock + price * qty) / newStock;
             await txn.update('products', {
               'stock': newStock,
-              'cost_average': newAvg.round(),
+              'cost_average': newAvg,
             }, where: 'id = ?', whereArgs: [productId]);
             await txn.insert('stock_moves', {
               'business_id': businessId,
@@ -2174,7 +2234,10 @@ class Repository {
           'quantity': qty,
           'price': price,
           'tax': gstRate,
-          'unit': 'pc',
+          'taxable': lineAmount,
+          'discount': 0,
+          'unit': (prodMap != null ? prodMap['unit'] as String? : null) ?? 'pc',
+          'hsn': prodMap != null ? prodMap['hsn'] as String? : null,
         });
         await txn.insert('ledger', {
           'business_id': businessId,
@@ -2866,12 +2929,20 @@ class Repository {
     final id = await db.transaction<int>((txn) async {
       final orderId = await txn.insert('sales_orders', order.toMap()..['business_id'] = order.businessId ?? session.businessId);
       for (final line in order.lines) {
+        final lineTaxable = line.taxable > 0 ? line.taxable : (line.price * line.quantity).round() - line.discount;
+        final lineTax = line.tax > 0 ? line.tax : (line.gstRate > 0 ? (lineTaxable * line.gstRate / 100).round() : 0);
         await txn.insert('sales_order_items', {
           'order_id': orderId,
           'product_id': line.productId,
           'name': line.name,
           'quantity': line.quantity,
           'price': line.price,
+          'unit': line.unit,
+          'gst_rate': line.gstRate,
+          'taxable': lineTaxable,
+          'tax': lineTax,
+          'discount': line.discount,
+          'hsn': line.hsn,
         });
       }
       return orderId;
@@ -2885,12 +2956,20 @@ class Repository {
     final id = await db.transaction<int>((txn) async {
       final orderId = await txn.insert('purchase_orders', order.toMap()..['business_id'] = order.businessId ?? session.businessId);
       for (final line in order.lines) {
+        final lineTaxable = line.taxable > 0 ? line.taxable : (line.price * line.quantity).round() - line.discount;
+        final lineTax = line.tax > 0 ? line.tax : (line.gstRate > 0 ? (lineTaxable * line.gstRate / 100).round() : 0);
         await txn.insert('purchase_order_items', {
           'order_id': orderId,
           'product_id': line.productId,
           'name': line.name,
           'quantity': line.quantity,
           'price': line.price,
+          'unit': line.unit,
+          'gst_rate': line.gstRate,
+          'taxable': lineTaxable,
+          'tax': lineTax,
+          'discount': line.discount,
+          'hsn': line.hsn,
         });
       }
       return orderId;
@@ -2956,12 +3035,20 @@ class Repository {
       );
       await txn.delete('sales_order_items', where: 'order_id = ?', whereArgs: [order.id]);
       for (final line in order.lines) {
+        final lineTaxable = line.taxable > 0 ? line.taxable : (line.price * line.quantity).round() - line.discount;
+        final lineTax = line.tax > 0 ? line.tax : (line.gstRate > 0 ? (lineTaxable * line.gstRate / 100).round() : 0);
         await txn.insert('sales_order_items', {
           'order_id': order.id,
           'product_id': line.productId,
           'name': line.name,
           'quantity': line.quantity,
           'price': line.price,
+          'unit': line.unit,
+          'gst_rate': line.gstRate,
+          'taxable': lineTaxable,
+          'tax': lineTax,
+          'discount': line.discount,
+          'hsn': line.hsn,
         });
       }
     });
@@ -2980,12 +3067,20 @@ class Repository {
       );
       await txn.delete('purchase_order_items', where: 'order_id = ?', whereArgs: [order.id]);
       for (final line in order.lines) {
+        final lineTaxable = line.taxable > 0 ? line.taxable : (line.price * line.quantity).round() - line.discount;
+        final lineTax = line.tax > 0 ? line.tax : (line.gstRate > 0 ? (lineTaxable * line.gstRate / 100).round() : 0);
         await txn.insert('purchase_order_items', {
           'order_id': order.id,
           'product_id': line.productId,
           'name': line.name,
           'quantity': line.quantity,
           'price': line.price,
+          'unit': line.unit,
+          'gst_rate': line.gstRate,
+          'taxable': lineTaxable,
+          'tax': lineTax,
+          'discount': line.discount,
+          'hsn': line.hsn,
         });
       }
     });
@@ -3310,6 +3405,27 @@ class Repository {
     }
   }
 
+  Future<void> _enrichOrderLines(DatabaseExecutor db, List<InvoiceLine> lines) async {
+    for (final l in lines) {
+      if (l.taxable == 0 && l.price > 0) {
+        l.taxable = (l.price * l.quantity).round() - l.discount;
+      }
+      if (l.productId != null && (l.hsn == null || l.unit == null || l.gstRate == 0)) {
+        final pRows = await db.query('products', columns: ['hsn', 'unit', 'gst_rate'], where: 'id = ?', whereArgs: [l.productId], limit: 1);
+        if (pRows.isNotEmpty) {
+          l.hsn ??= pRows.first['hsn'] as String?;
+          l.unit ??= pRows.first['unit'] as String?;
+          if (l.gstRate == 0 && (pRows.first['gst_rate'] as num?) != null) {
+            l.gstRate = (pRows.first['gst_rate'] as num).toInt();
+          }
+        }
+      }
+      if (l.tax == 0 && l.gstRate > 0) {
+        l.tax = (l.taxable * (l.gstRate / 100)).round();
+      }
+    }
+  }
+
   Future<SalesOrder?> salesOrder(int businessId, int id) async {
     final db = await _database;
     final rows = await db.query('sales_orders',
@@ -3319,6 +3435,7 @@ class Repository {
     final items = await db.query('sales_order_items',
         where: 'order_id = ?', whereArgs: [id], orderBy: 'id ASC');
     order.lines = items.map(InvoiceLine.fromMap).toList();
+    await _enrichOrderLines(db, order.lines);
     return order;
   }
 
@@ -3331,6 +3448,7 @@ class Repository {
     final items = await db.query('purchase_order_items',
         where: 'order_id = ?', whereArgs: [id], orderBy: 'id ASC');
     po.lines = items.map(InvoiceLine.fromMap).toList();
+    await _enrichOrderLines(db, po.lines);
     return po;
   }
 
@@ -3345,6 +3463,7 @@ class Repository {
         final items = await db.query('sales_order_items',
             where: 'order_id = ?', whereArgs: [o.id], orderBy: 'id ASC');
         o.lines = items.map(InvoiceLine.fromMap).toList();
+        await _enrichOrderLines(db, o.lines);
       }
     }
     return orders;
@@ -3370,6 +3489,7 @@ class Repository {
         final items = await db.query('purchase_order_items',
             where: 'order_id = ?', whereArgs: [o.id], orderBy: 'id ASC');
         o.lines = items.map(InvoiceLine.fromMap).toList();
+        await _enrichOrderLines(db, o.lines);
       }
     }
     return orders;
@@ -4574,7 +4694,7 @@ class Repository {
     }
 
     final salesToday = await sumOf('invoices', 'total', 'business_id = ? AND $dateFilter', [businessId, ...dateArgs]);
-    final taxableToday = await sumOf('invoices', 'taxable', 'business_id = ? AND $dateFilter', [businessId, ...dateArgs]);
+    final taxableToday = await sumOf('invoices', 'CASE WHEN taxable > 0 THEN taxable ELSE total END', 'business_id = ? AND $dateFilter', [businessId, ...dateArgs]);
     final returnsToday = await sumOf('returns', 'taxable', "business_id = ? AND $dateFilter AND party_type = 'customer'", [businessId, ...dateArgs]);
     final purchasesToday = await sumOf('expenses', 'amount', "business_id = ? AND $dateFilter AND category = 'Purchase'", [businessId, ...dateArgs]);
     final expensesToday = await sumOf('expenses', 'amount', "business_id = ? AND $dateFilter AND category != 'Purchase'", [businessId, ...dateArgs]);
@@ -4677,7 +4797,7 @@ class Repository {
     }
 
     final prevSales = await sumOf('invoices', 'total', 'business_id = ? AND date >= ? AND date <= ?', [businessId, prevFrom, prevTo]);
-    final prevTaxable = await sumOf('invoices', 'taxable', 'business_id = ? AND date >= ? AND date <= ?', [businessId, prevFrom, prevTo]);
+    final prevTaxable = await sumOf('invoices', 'CASE WHEN taxable > 0 THEN taxable ELSE total END', 'business_id = ? AND date >= ? AND date <= ?', [businessId, prevFrom, prevTo]);
     final prevReturns = await sumOf('returns', 'taxable', "business_id = ? AND date >= ? AND date <= ? AND party_type = 'customer'", [businessId, prevFrom, prevTo]);
     final prevPurchases = await sumOf('expenses', 'amount', "business_id = ? AND date >= ? AND date <= ? AND category = 'Purchase'", [businessId, prevFrom, prevTo]);
     final prevExpenses = await sumOf('expenses', 'amount', "business_id = ? AND date >= ? AND date <= ? AND category != 'Purchase'", [businessId, prevFrom, prevTo]);
@@ -4711,7 +4831,7 @@ class Repository {
         [businessId, '$curYearStr-01-01', '$curYearStr-12-31'],
       );
       final taxByMonth = await db.rawQuery(
-        "SELECT substr(date, 6, 2) AS m, COALESCE(SUM(taxable), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY m",
+        "SELECT substr(date, 6, 2) AS m, COALESCE(SUM(CASE WHEN taxable > 0 THEN taxable ELSE total END), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY m",
         [businessId, '$curYearStr-01-01', '$curYearStr-12-31'],
       );
       final retByMonth = await db.rawQuery(
@@ -4747,7 +4867,7 @@ class Repository {
         [businessId, curFrom, curTo],
       );
       final taxByDay = await db.rawQuery(
-        "SELECT date, COALESCE(SUM(taxable), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
+        "SELECT date, COALESCE(SUM(CASE WHEN taxable > 0 THEN taxable ELSE total END), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
         [businessId, curFrom, curTo],
       );
       final retByDay = await db.rawQuery(
@@ -4782,7 +4902,7 @@ class Repository {
         [businessId, curFrom, curTo],
       );
       final taxByDay = await db.rawQuery(
-        "SELECT date, COALESCE(SUM(taxable), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
+        "SELECT date, COALESCE(SUM(CASE WHEN taxable > 0 THEN taxable ELSE total END), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
         [businessId, curFrom, curTo],
       );
       final retByDay = await db.rawQuery(
@@ -4818,7 +4938,7 @@ class Repository {
         [businessId, curFrom, curTo],
       );
       final taxByDay = await db.rawQuery(
-        "SELECT date, COALESCE(SUM(taxable), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
+        "SELECT date, COALESCE(SUM(CASE WHEN taxable > 0 THEN taxable ELSE total END), 0) AS s FROM invoices WHERE business_id = ? AND date >= ? AND date <= ? GROUP BY date",
         [businessId, curFrom, curTo],
       );
       final retByDay = await db.rawQuery(
@@ -4879,7 +4999,7 @@ class Repository {
         data.add((rows.first['s'] as num).toDouble() / 100);
       } else if (metric == 'profit') {
         final rev = await db.rawQuery(
-            'SELECT COALESCE(SUM(taxable), 0) AS s FROM invoices WHERE business_id = ? AND date = ?',
+            'SELECT COALESCE(SUM(CASE WHEN taxable > 0 THEN taxable ELSE total END), 0) AS s FROM invoices WHERE business_id = ? AND date = ?',
             [businessId, d]);
         final ret = await db.rawQuery(
             "SELECT COALESCE(SUM(taxable), 0) AS s FROM returns WHERE business_id = ? AND date = ? AND party_type = 'customer'",

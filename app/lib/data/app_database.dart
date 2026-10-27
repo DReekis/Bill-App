@@ -268,6 +268,24 @@ class AppDatabase {
     await _addColumnIfNotExists(db, 'businesses', 'subscription_status', "TEXT DEFAULT 'active'");
     await _addColumnIfNotExists(db, 'businesses', 'subscription_expires_at', 'TEXT');
 
+    await _addColumnIfNotExists(db, 'sales_order_items', 'unit', 'TEXT');
+    await _addColumnIfNotExists(db, 'sales_order_items', 'gst_rate', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'sales_order_items', 'taxable', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'sales_order_items', 'tax', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'sales_order_items', 'discount', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'sales_order_items', 'hsn', 'TEXT');
+
+    await _addColumnIfNotExists(db, 'purchase_order_items', 'unit', 'TEXT');
+    await _addColumnIfNotExists(db, 'purchase_order_items', 'gst_rate', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'purchase_order_items', 'taxable', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'purchase_order_items', 'tax', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'purchase_order_items', 'discount', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'purchase_order_items', 'hsn', 'TEXT');
+
+    await _addColumnIfNotExists(db, 'purchase_items', 'taxable', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'purchase_items', 'discount', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'purchase_items', 'hsn', 'TEXT');
+
     try {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS subscription_orders (
@@ -653,7 +671,13 @@ class AppDatabase {
         product_id INTEGER,
         name TEXT,
         quantity REAL DEFAULT 0,
-        price INTEGER DEFAULT 0
+        price INTEGER DEFAULT 0,
+        unit TEXT,
+        gst_rate INTEGER DEFAULT 0,
+        taxable INTEGER DEFAULT 0,
+        tax INTEGER DEFAULT 0,
+        discount INTEGER DEFAULT 0,
+        hsn TEXT
       )
     ''');
 
@@ -679,7 +703,13 @@ class AppDatabase {
         product_id INTEGER,
         name TEXT,
         quantity REAL DEFAULT 0,
-        price INTEGER DEFAULT 0
+        price INTEGER DEFAULT 0,
+        unit TEXT,
+        gst_rate INTEGER DEFAULT 0,
+        taxable INTEGER DEFAULT 0,
+        tax INTEGER DEFAULT 0,
+        discount INTEGER DEFAULT 0,
+        hsn TEXT
       )
     ''');
 
@@ -692,7 +722,10 @@ class AppDatabase {
         quantity REAL DEFAULT 1,
         price INTEGER DEFAULT 0,
         tax INTEGER DEFAULT 0,
-        unit TEXT DEFAULT 'pc'
+        taxable INTEGER DEFAULT 0,
+        discount INTEGER DEFAULT 0,
+        unit TEXT DEFAULT 'pc',
+        hsn TEXT
       )
     ''');
 

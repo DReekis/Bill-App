@@ -334,6 +334,19 @@ class GstService {
     return RegExp(r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$').hasMatch(clean);
   }
 
+  /// Validates standard 12-digit Indian E-Way Bill Number format.
+  /// An E-Way Bill Number must be exactly 12 digits, where the first two digits
+  /// represent a valid Indian GST State Code (01-38, 97).
+  static bool isValidEwayBillNumber(String? ewayBillNo) {
+    if (ewayBillNo == null) return false;
+    final clean = ewayBillNo.trim();
+    if (clean.length != 12) return false;
+    if (!RegExp(r'^\d{12}$').hasMatch(clean)) return false;
+    final stateCode = clean.substring(0, 2);
+    return stateCodes.containsKey(stateCode);
+  }
+
+
   /// Derives complete business information deterministically from the GSTIN string.
   /// Guarantees that business name, state, city, PIN code, and address are NEVER blank.
   static GstBusinessInfo parseDeterministic(String gstin) {

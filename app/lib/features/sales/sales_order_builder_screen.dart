@@ -592,7 +592,7 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
       final repo = Repository.instance;
       final finalNumber = orderNumber ?? await repo.nextSalesOrderNumber(bizId);
 
-      final total = lines.fold(0, (sum, l) => sum + l.subtotalPaise);
+      final total = lines.fold(0, (sum, l) => sum + l.totalPaise);
 
       if (widget.existingOrderId != null) {
         final order = SalesOrder(
@@ -616,6 +616,7 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
                     gstRate: l.gstRate,
                     taxable: l.subtotalPaise,
                     tax: l.taxPaise,
+                    hsn: l.product.hsn,
                   ))
               .toList(),
         );
@@ -651,6 +652,7 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
                     gstRate: l.gstRate,
                     taxable: l.subtotalPaise,
                     tax: l.taxPaise,
+                    hsn: l.product.hsn,
                   ))
               .toList(),
         );
@@ -675,7 +677,7 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final totalPaise = lines.fold<int>(0, (sum, l) => sum + l.subtotalPaise);
+    final totalPaise = lines.fold<int>(0, (sum, l) => sum + l.totalPaise);
 
     return PhysicalBarcodeScannerListener(
       onBarcodeScanned: _handleDirectBarcodeScan,
@@ -1036,7 +1038,7 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
                             ),
                             const SizedBox(width: 10),
                             Text(
-                              formatPaise(l.subtotalPaise),
+                              formatPaise(l.totalPaise),
                               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
                             ),
                           ],

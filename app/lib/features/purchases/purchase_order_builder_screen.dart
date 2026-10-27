@@ -388,6 +388,7 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
       backgroundColor: Colors.transparent,
       builder: (context) => MultiProductPickerSheet(
         products: all,
+        isPurchase: true,
         title: 'Select Purchase Order Items',
         actionLabel: 'Add to Order',
         initialQuantities: initialMap,
@@ -593,7 +594,7 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
       final repo = Repository.instance;
       final finalNumber = orderNumber ?? await repo.nextPurchaseOrderNumber(bizId);
 
-      final total = lines.fold(0, (sum, l) => sum + l.subtotalPaise);
+      final total = lines.fold(0, (sum, l) => sum + l.totalPaise);
 
       if (widget.existingOrderId != null) {
         final order = PurchaseOrder(
@@ -617,6 +618,7 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
                     gstRate: l.gstRate,
                     taxable: l.subtotalPaise,
                     tax: l.taxPaise,
+                    hsn: l.product.hsn,
                   ))
               .toList(),
         );
@@ -652,6 +654,7 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
                     gstRate: l.gstRate,
                     taxable: l.subtotalPaise,
                     tax: l.taxPaise,
+                    hsn: l.product.hsn,
                   ))
               .toList(),
         );
@@ -676,7 +679,7 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
 
   @override
   Widget build(BuildContext context) {
-    final totalPaise = lines.fold<int>(0, (sum, l) => sum + l.subtotalPaise);
+    final totalPaise = lines.fold<int>(0, (sum, l) => sum + l.totalPaise);
 
     return PhysicalBarcodeScannerListener(
       onBarcodeScanned: _handleDirectBarcodeScan,
@@ -1037,7 +1040,7 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
                             ),
                             const SizedBox(width: 10),
                             Text(
-                              formatPaise(l.subtotalPaise),
+                              formatPaise(l.totalPaise),
                               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
                             ),
                           ],

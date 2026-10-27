@@ -447,6 +447,16 @@ Future<Uint8List> buildDocumentPdf({
     return pw.SizedBox();
   }
 
+  // Ensure lines have valid taxable & tax values computed if price > 0
+  for (final l in lines) {
+    if (l.taxable == 0 && l.tax == 0 && l.price > 0) {
+      final lineSub = (l.price * l.quantity).round();
+      final lineDisc = l.discount > 0 ? l.discount : (l.discountPercent > 0 ? (lineSub * l.discountPercent / 100).round() : 0);
+      l.taxable = lineSub - lineDisc;
+      l.tax = l.gstRate > 0 ? (l.taxable * (l.gstRate / 100)).round() : 0;
+    }
+  }
+
   // Separate inventory product lines from charges
   final productLines = lines
       .where((l) =>
@@ -3053,7 +3063,13 @@ Future<Uint8List> buildSalesOrderPdf({
   int taxable = 0;
   int tax = 0;
   for (final l in order.lines) {
-    subtotal += l.price * l.quantity.round();
+    if (l.taxable == 0 && l.tax == 0 && l.price > 0) {
+      final lineSub = (l.price * l.quantity).round();
+      final lineDisc = l.discount > 0 ? l.discount : (l.discountPercent > 0 ? (lineSub * l.discountPercent / 100).round() : 0);
+      l.taxable = lineSub - lineDisc;
+      l.tax = l.gstRate > 0 ? (l.taxable * (l.gstRate / 100)).round() : 0;
+    }
+    subtotal += (l.price * l.quantity).round();
     taxable += l.taxable;
     tax += l.tax;
   }
@@ -3169,7 +3185,13 @@ Future<Uint8List> buildPurchaseOrderPdf({
   int taxable = 0;
   int tax = 0;
   for (final l in order.lines) {
-    subtotal += l.price * l.quantity.round();
+    if (l.taxable == 0 && l.tax == 0 && l.price > 0) {
+      final lineSub = (l.price * l.quantity).round();
+      final lineDisc = l.discount > 0 ? l.discount : (l.discountPercent > 0 ? (lineSub * l.discountPercent / 100).round() : 0);
+      l.taxable = lineSub - lineDisc;
+      l.tax = l.gstRate > 0 ? (l.taxable * (l.gstRate / 100)).round() : 0;
+    }
+    subtotal += (l.price * l.quantity).round();
     taxable += l.taxable;
     tax += l.tax;
   }
@@ -3285,10 +3307,14 @@ Future<Uint8List> buildPurchaseBillPdf({
   int subtotal = 0;
   int tax = 0;
   for (final l in purchase.lines) {
-    final lineSub = (l.price * l.quantity).round();
-    final lineTax = (lineSub * (l.gstRate / 100)).round();
-    subtotal += lineSub;
-    tax += lineTax;
+    if (l.taxable == 0 && l.tax == 0 && l.price > 0) {
+      final lineSub = (l.price * l.quantity).round();
+      final lineDisc = l.discount > 0 ? l.discount : (l.discountPercent > 0 ? (lineSub * l.discountPercent / 100).round() : 0);
+      l.taxable = lineSub - lineDisc;
+      l.tax = l.gstRate > 0 ? (l.taxable * (l.gstRate / 100)).round() : 0;
+    }
+    subtotal += l.taxable;
+    tax += l.tax;
   }
 
   final partyState = (sState ?? '').trim().toLowerCase();

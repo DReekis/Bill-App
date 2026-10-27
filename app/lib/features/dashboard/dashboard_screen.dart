@@ -21,6 +21,7 @@ import '../orders/orders_screen.dart';
 import '../sales/quotation_builder_screen.dart';
 import '../sales/quotation_detail_screen.dart';
 import '../sales/sales_order_builder_screen.dart';
+import '../returns/note_builder_screen.dart';
 import '../sales/delivery_challan_detail_screen.dart';
 import '../sales/invoice_detail_screen.dart';
 import '../sales/invoice_list_tab.dart';
@@ -792,6 +793,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .push(MaterialPageRoute(
                 builder: (_) => const DeliveryChallanBuilderScreen()))
             .then((_) => onDone());
+      case 'Credit Note':
+        nav
+            .push(MaterialPageRoute(
+                builder: (_) => const NoteBuilderScreen(partyType: 'customer')))
+            .then((_) => onDone());
+      case 'Debit Note':
+        nav
+            .push(MaterialPageRoute(
+                builder: (_) => const NoteBuilderScreen(partyType: 'supplier')))
+            .then((_) => onDone());
       case 'Reports':
         nav.push(MaterialPageRoute(builder: (_) => const ReportsMenuScreen()));
       case 'GST Center':
@@ -959,6 +970,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _actionItem(ctx, Icons.inventory_2_outlined, l10n.text('purchase_order'), 'Purchase Order', const Color(0xFF00838F)),
                   _actionItem(ctx, Icons.local_shipping_outlined, l10n.text('challan'), 'Challan', const Color(0xFF0284C7)),
                   _actionItem(ctx, Icons.receipt_long_outlined, l10n.text('expense'), 'Expense', const Color(0xFFE53935)),
+                ]),
+                const SizedBox(height: 14),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                  _actionItem(ctx, Icons.assignment_return_outlined, 'Credit Note', 'Credit Note', const Color(0xFF00897B)),
+                  _actionItem(ctx, Icons.assignment_returned_outlined, 'Debit Note', 'Debit Note', const Color(0xFF5E35B1)),
+                  const SizedBox(width: 84),
+                  const SizedBox(width: 84),
                 ]),
                 const SizedBox(height: 18),
                 const Divider(height: 1),
@@ -1388,8 +1406,8 @@ class _ReferenceDashboard extends StatelessWidget {
                     value: context.watch<Session>().canViewPL ? formatPaise(profitToday) : '••••',
                     change: context.watch<Session>().canViewPL ? '${profitTrend.formatted} $comparisonLabel' : 'Restricted',
                     data: context.watch<Session>().canViewPL ? profitHistory : const [],
-                    isNegative: profitTrend.isNegative || profitToday < 0,
-                    color: profitToday < 0 || profitTrend.isNegative ? const Color(0xFFE53935) : const Color(0xFF00C853))),
+                    isNegative: profitToday < 0,
+                    color: profitToday < 0 ? const Color(0xFFE53935) : const Color(0xFF00C853))),
           ]),
           const SizedBox(height: 32),
 
