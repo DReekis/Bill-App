@@ -19,6 +19,8 @@ import 'invoice_builder_screen.dart';
 import '../returns/note_builder_screen.dart';
 import '../compliance/einvoice_details_sheet.dart';
 import '../compliance/ewaybill_sheet.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 
 class InvoiceDetailScreen extends StatefulWidget {
   const InvoiceDetailScreen({super.key, required this.invoiceId, this.autoPreview = false});
@@ -932,6 +934,15 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: StitchColors.textPrimary),
                 ),
               ),
+              Container(
+                margin: const EdgeInsets.only(right: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF4F46E5)]),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('PRO', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: Colors.white)),
+              ),
               if (hasIrn || hasEwb)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1001,6 +1012,21 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                   onPressed: isCancelled
                       ? null
                       : () {
+                          if (!hasIrn && !SubscriptionService.instance.canAccessEInvoice) {
+                            UpgradePaywallSheet.show(
+                              context,
+                              featureName: 'Government E-Invoice (IRN)',
+                              description: 'Generate official B2B E-Invoices with NIC IRN, digital signatures, and verifiable QR codes via Sandbox.co.in.',
+                              requiredTier: SubscriptionTier.businessPro,
+                              bulletPoints: const [
+                                'Direct Sandbox.co.in GSP Integration',
+                                'Official 64-char Hash IRN & Ack Receipt',
+                                'Statutory Signed B2B QR Code on PDF',
+                                '24-Hour Government Portal Cancellation',
+                              ],
+                            );
+                            return;
+                          }
                           EInvoiceDetailsSheet.show(
                             context,
                             business: biz,
@@ -1067,6 +1093,21 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                   onPressed: isCancelled
                       ? null
                       : () {
+                          if (!hasEwb && !SubscriptionService.instance.canAccessEWayBill) {
+                            UpgradePaywallSheet.show(
+                              context,
+                              featureName: 'E-Way Bill Automation',
+                              description: 'Generate statutory Government E-Way bills with real-time tracking and printable Form EWB-01 slips via Sandbox.co.in.',
+                              requiredTier: SubscriptionTier.businessPro,
+                              bulletPoints: const [
+                                'Direct Sandbox.co.in E-Way Bill Gateway',
+                                'Automatic Part A & Part B vehicle updates',
+                                'Printable NIC Form EWB-01 slip export',
+                                '24-Hour statutory cancellation management',
+                              ],
+                            );
+                            return;
+                          }
                           EWayBillSheet.show(
                             context,
                             business: biz,

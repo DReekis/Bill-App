@@ -879,6 +879,44 @@ class Repository {
     }
   }
 
+  Future<void> updateProductPricesAndExpiry(
+    int businessId,
+    int productId, {
+    int? salePrice,
+    int? purchasePrice,
+    String? expiryDate,
+    String? batchNumber,
+  }) async {
+    final db = await _database;
+    final updates = <String, Object?>{};
+    if (salePrice != null && salePrice > 0) updates['sale_price'] = salePrice;
+    if (purchasePrice != null && purchasePrice > 0) updates['purchase_price'] = purchasePrice;
+    if (expiryDate != null && expiryDate.trim().isNotEmpty) {
+      final exp = expiryDate.trim();
+      updates['expiry_date'] = exp;
+      try {
+        await db.insert('batches', {
+          'business_id': businessId,
+          'product_id': productId,
+          'batch_number': (batchNumber != null && batchNumber.trim().isNotEmpty)
+              ? batchNumber.trim()
+              : 'RESTOCK-${DateTime.now().millisecondsSinceEpoch % 1000000}',
+          'expiry_date': exp,
+          'purchase_price': purchasePrice ?? 0,
+          'sale_price': salePrice ?? 0,
+        });
+      } catch (_) {}
+    }
+    if (updates.isNotEmpty) {
+      await db.update('products', updates,
+          where: 'id = ? AND business_id = ?', whereArgs: [productId, businessId]);
+      await _audit(businessId,
+          action: 'update_price_expiry', entity: 'product', entityId: productId, after: updates);
+      await _enqueueSync(businessId,
+          entity: 'product', entityId: productId, op: 'upsert', payload: jsonEncode(updates));
+    }
+  }
+
   Future<int> finalizeSale({
     required int businessId,
     required String number,
@@ -1819,6 +1857,7 @@ class Repository {
     String? paymentMode,
     String? notes,
     String? purchaseNumber,
+    bool isConvertedFromPO = false,
   }) async {
     final db = await _database;
     var resolvedTotal = 0;
@@ -1865,30 +1904,37 @@ class Repository {
             : (await txn.query('products',
                 where: 'id = ?', whereArgs: [productId], limit: 1)).firstOrNull;
         if (product != null) {
-          final stock = (product['stock'] as num?)?.toDouble() ?? 0;
-          final costAvg = (product['cost_average'] as int? ?? 0);
-          final oldStock = stock > 0 ? stock : 0.0;
-          final purchasePrice = (product['purchase_price'] as num?)?.toInt() ?? price;
-          final effectiveCostAvg = costAvg > 0 ? costAvg : purchasePrice;
-          final totalQty = oldStock + qty;
-          final newAvg = totalQty > 0
-              ? ((effectiveCostAvg * oldStock + price * qty) / totalQty).round()
-              : price;
-          final newStock = stock + qty;
-          await txn.update('products', {
-            'stock': newStock,
-            'cost_average': newAvg,
-          }, where: 'id = ?', whereArgs: [productId]);
-          await txn.insert('stock_moves', {
-            'business_id': businessId,
-            'product_id': productId,
-            'change_qty': qty,
-            'qty_after': stock + qty,
-            'move_type': 'purchase',
-            'ref_type': 'purchase',
-            'ref_id': purchaseId,
-            'date': date,
-          });
+          if (!isConvertedFromPO) {
+            final stock = (product['stock'] as num?)?.toDouble() ?? 0;
+            final costAvg = (product['cost_average'] as int? ?? 0);
+            final oldStock = stock > 0 ? stock : 0.0;
+            final purchasePrice = (product['purchase_price'] as num?)?.toInt() ?? price;
+            final effectiveCostAvg = costAvg > 0 ? costAvg : purchasePrice;
+            final totalQty = oldStock + qty;
+            final newAvg = totalQty > 0
+                ? ((effectiveCostAvg * oldStock + price * qty) / totalQty).round()
+                : price;
+            final newStock = stock + qty;
+            await txn.update('products', {
+              'stock': newStock,
+              'purchase_price': price,
+              'cost_average': newAvg,
+            }, where: 'id = ?', whereArgs: [productId]);
+            await txn.insert('stock_moves', {
+              'business_id': businessId,
+              'product_id': productId,
+              'change_qty': qty,
+              'qty_after': stock + qty,
+              'move_type': 'purchase',
+              'ref_type': 'purchase',
+              'ref_id': purchaseId,
+              'date': date,
+            });
+          } else {
+            await txn.update('products', {
+              'purchase_price': price,
+            }, where: 'id = ?', whereArgs: [productId]);
+          }
         }
         await txn.insert('purchase_items', {
           'purchase_id': purchaseId,
@@ -2213,6 +2259,7 @@ class Repository {
             final newStock = stock + qty;
             await txn.update('products', {
               'stock': newStock,
+              'purchase_price': price,
               'cost_average': newAvg,
             }, where: 'id = ?', whereArgs: [productId]);
             await txn.insert('stock_moves', {
@@ -2953,8 +3000,9 @@ class Repository {
 
   Future<int> finalizePurchaseOrder(PurchaseOrder order) async {
     final db = await _database;
+    final bizId = order.businessId ?? session.businessId!;
     final id = await db.transaction<int>((txn) async {
-      final orderId = await txn.insert('purchase_orders', order.toMap()..['business_id'] = order.businessId ?? session.businessId);
+      final orderId = await txn.insert('purchase_orders', order.toMap()..['business_id'] = bizId);
       for (final line in order.lines) {
         final lineTaxable = line.taxable > 0 ? line.taxable : (line.price * line.quantity).round() - line.discount;
         final lineTax = line.tax > 0 ? line.tax : (line.gstRate > 0 ? (lineTaxable * line.gstRate / 100).round() : 0);
@@ -2971,10 +3019,45 @@ class Repository {
           'discount': line.discount,
           'hsn': line.hsn,
         });
+
+        // Restock inventory & update product purchase price
+        if (line.productId != null) {
+          final prodRows = await txn.query('products', where: 'id = ?', whereArgs: [line.productId], limit: 1);
+          if (prodRows.isNotEmpty) {
+            final product = prodRows.first;
+            final stock = (product['stock'] as num?)?.toDouble() ?? 0;
+            final costAvg = (product['cost_average'] as int? ?? 0);
+            final oldStock = stock > 0 ? stock : 0.0;
+            final purchasePrice = (product['purchase_price'] as num?)?.toInt() ?? line.price;
+            final effectiveCostAvg = costAvg > 0 ? costAvg : purchasePrice;
+            final totalQty = oldStock + line.quantity;
+            final newAvg = totalQty > 0
+                ? ((effectiveCostAvg * oldStock + line.price * line.quantity) / totalQty).round()
+                : line.price;
+            final newStock = stock + line.quantity;
+
+            await txn.update('products', {
+              'stock': newStock,
+              'purchase_price': line.price,
+              'cost_average': newAvg,
+            }, where: 'id = ?', whereArgs: [line.productId]);
+
+            await txn.insert('stock_moves', {
+              'business_id': bizId,
+              'product_id': line.productId,
+              'change_qty': line.quantity,
+              'qty_after': newStock,
+              'move_type': 'purchase_order',
+              'ref_type': 'purchase_order',
+              'ref_id': orderId,
+              'date': order.date,
+            });
+          }
+        }
       }
       return orderId;
     });
-    await _audit(order.businessId ?? session.businessId!, action: 'create', entity: 'purchase_order', entityId: id);
+    await _audit(bizId, action: 'create', entity: 'purchase_order', entityId: id);
     return id;
   }
 
@@ -3065,6 +3148,26 @@ class Repository {
         where: 'id = ? AND business_id = ?',
         whereArgs: [order.id, bizId],
       );
+
+      // Revert previous stock moves for this PO
+      final prevMoves = await txn.query('stock_moves',
+          where: "business_id = ? AND ref_type = 'purchase_order' AND ref_id = ?",
+          whereArgs: [bizId, order.id]);
+      for (final m in prevMoves) {
+        final pid = m['product_id'] as int?;
+        final change = (m['change_qty'] as num?)?.toDouble() ?? 0.0;
+        if (pid != null && change > 0) {
+          final pRows = await txn.query('products', where: 'id = ?', whereArgs: [pid], limit: 1);
+          if (pRows.isNotEmpty) {
+            final curStock = (pRows.first['stock'] as num?)?.toDouble() ?? 0.0;
+            await txn.update('products', {'stock': curStock - change}, where: 'id = ?', whereArgs: [pid]);
+          }
+        }
+      }
+      await txn.delete('stock_moves',
+          where: "business_id = ? AND ref_type = 'purchase_order' AND ref_id = ?",
+          whereArgs: [bizId, order.id]);
+
       await txn.delete('purchase_order_items', where: 'order_id = ?', whereArgs: [order.id]);
       for (final line in order.lines) {
         final lineTaxable = line.taxable > 0 ? line.taxable : (line.price * line.quantity).round() - line.discount;
@@ -3082,6 +3185,41 @@ class Repository {
           'discount': line.discount,
           'hsn': line.hsn,
         });
+
+        // Apply updated stock and purchase price
+        if (line.productId != null) {
+          final prodRows = await txn.query('products', where: 'id = ?', whereArgs: [line.productId], limit: 1);
+          if (prodRows.isNotEmpty) {
+            final product = prodRows.first;
+            final stock = (product['stock'] as num?)?.toDouble() ?? 0;
+            final costAvg = (product['cost_average'] as int? ?? 0);
+            final oldStock = stock > 0 ? stock : 0.0;
+            final purchasePrice = (product['purchase_price'] as num?)?.toInt() ?? line.price;
+            final effectiveCostAvg = costAvg > 0 ? costAvg : purchasePrice;
+            final totalQty = oldStock + line.quantity;
+            final newAvg = totalQty > 0
+                ? ((effectiveCostAvg * oldStock + line.price * line.quantity) / totalQty).round()
+                : line.price;
+            final newStock = stock + line.quantity;
+
+            await txn.update('products', {
+              'stock': newStock,
+              'purchase_price': line.price,
+              'cost_average': newAvg,
+            }, where: 'id = ?', whereArgs: [line.productId]);
+
+            await txn.insert('stock_moves', {
+              'business_id': bizId,
+              'product_id': line.productId,
+              'change_qty': line.quantity,
+              'qty_after': newStock,
+              'move_type': 'purchase_order',
+              'ref_type': 'purchase_order',
+              'ref_id': order.id,
+              'date': order.date,
+            });
+          }
+        }
       }
     });
     await _audit(bizId, action: 'update', entity: 'purchase_order', entityId: order.id!);
@@ -3498,6 +3636,25 @@ class Repository {
   Future<void> deletePurchaseOrder(int businessId, int orderId) async {
     final db = await _database;
     await db.transaction((txn) async {
+      // Revert stock moves for this PO
+      final prevMoves = await txn.query('stock_moves',
+          where: "business_id = ? AND ref_type = 'purchase_order' AND ref_id = ?",
+          whereArgs: [businessId, orderId]);
+      for (final m in prevMoves) {
+        final pid = m['product_id'] as int?;
+        final change = (m['change_qty'] as num?)?.toDouble() ?? 0.0;
+        if (pid != null && change > 0) {
+          final pRows = await txn.query('products', where: 'id = ?', whereArgs: [pid], limit: 1);
+          if (pRows.isNotEmpty) {
+            final curStock = (pRows.first['stock'] as num?)?.toDouble() ?? 0.0;
+            await txn.update('products', {'stock': curStock - change}, where: 'id = ?', whereArgs: [pid]);
+          }
+        }
+      }
+      await txn.delete('stock_moves',
+          where: "business_id = ? AND ref_type = 'purchase_order' AND ref_id = ?",
+          whereArgs: [businessId, orderId]);
+
       await txn.delete('purchase_order_items', where: 'order_id = ?', whereArgs: [orderId]);
       await txn.delete('purchase_orders', where: 'business_id = ? AND id = ?', whereArgs: [businessId, orderId]);
     });
@@ -3815,6 +3972,7 @@ class Repository {
       items: items,
       amountPaid: 0,
       notes: 'Converted from Purchase Order ${po.number}',
+      isConvertedFromPO: true,
     );
 
     await db.update('purchase_orders', {

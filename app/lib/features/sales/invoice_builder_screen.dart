@@ -23,6 +23,7 @@ import '../../core/physical_barcode_scanner.dart';
 import '../../core/subscription_service.dart';
 import '../subscription/upgrade_paywall_sheet.dart';
 import 'invoice_detail_screen.dart';
+import '../../core/compliance_service.dart';
 
 class InvoiceBuilderScreen extends StatefulWidget {
   const InvoiceBuilderScreen({super.key, this.customerId, this.existingInvoiceId});
@@ -87,6 +88,8 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   bool manualPosOverride = false;
   final vehicleNoController = TextEditingController();
   final ewayBillNoController = TextEditingController();
+  bool verifyingEway = false;
+  EWayBillVerificationResult? ewayVerification;
   final lrRrNoController = TextEditingController();
   final poNumberController = TextEditingController();
   String? poDate;
@@ -1172,6 +1175,83 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     );
   }
 
+  Future<void> _verifyEwayBill() async {
+    final clean = ewayBillNoController.text.trim().replaceAll(' ', '');
+    if (clean.isEmpty) {
+      return;
+    }
+    if (clean.length != 12 || !RegExp(r'^\d{12}$').hasMatch(clean)) {
+      showAppMessage(context, 'E-Way Bill Number must be exactly 12 numeric digits', error: true);
+      return;
+    }
+    final stateCode = clean.substring(0, 2);
+    if (!GstService.stateCodes.containsKey(stateCode)) {
+      showAppMessage(context, 'E-Way Bill starts with invalid state code ($stateCode)', error: true);
+      return;
+    }
+
+    setState(() => verifyingEway = true);
+    try {
+      final res = await ComplianceService.instance.verifyEWayBill(ewbNo: clean);
+      if (!mounted) return;
+      setState(() {
+        verifyingEway = false;
+        ewayVerification = res;
+      });
+      if (res.valid && res.isGenuine) {
+        // Auto-populate vehicle number if returned from E-Way Bill details
+        if (res.vehicleNo != null && res.vehicleNo!.isNotEmpty) {
+          vehicleNoController.text = res.vehicleNo!;
+        }
+        // Auto-populate LR / Transport Document Number if available and field is empty
+        if (lrRrNoController.text.trim().isEmpty && res.docNo != null && res.docNo!.isNotEmpty) {
+          lrRrNoController.text = res.docNo!;
+        }
+        // Auto-populate Place of Supply if not already manually chosen
+        if (placeOfSupply == null && res.toGstin != null && res.toGstin!.length >= 2) {
+          final toStateCode = res.toGstin!.substring(0, 2);
+          if (GstService.stateCodes.containsKey(toStateCode)) {
+            setState(() {
+              placeOfSupply = GstService.stateCodes[toStateCode];
+            });
+          }
+        }
+        showAppMessage(context, 'E-Way Bill verified genuine via Sandbox.co.in (${res.status})');
+      } else {
+        showAppMessage(context, res.error ?? 'Unverified E-Way Bill: Not found on Government Gateway', error: true);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => verifyingEway = false);
+      showAppMessage(context, 'Verification error: $e', error: true);
+    }
+  }
+
+  Widget _buildComplianceQuickActions() {
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF16A34A)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Govt E-Invoice (IRN) and E-Way Bill generation with printable Form EWB-01 will be available on the invoice screen immediately after saving this sale.',
+              style: TextStyle(fontSize: 11.5, color: Colors.green.shade900, height: 1.3, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _checkout() async {
     final q = quote;
     final biz = business;
@@ -1823,6 +1903,33 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                             LengthLimitingTextInputFormatter(12),
                           ],
                           decoration: inputDecoration('E-Way Bill No.', hint: '12-digit number').copyWith(
+                            suffixIcon: () {
+                              if (verifyingEway) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                );
+                              }
+                              if (ewayVerification != null && ewayVerification!.valid && ewayVerification!.isGenuine) {
+                                return const Tooltip(
+                                  message: 'Verified Genuine via Sandbox.co.in',
+                                  child: Icon(Icons.verified_rounded, color: Color(0xFF16A34A), size: 22),
+                                );
+                              }
+                              final text = ewayBillNoController.text.trim();
+                              if (text.length == 12) {
+                                return IconButton(
+                                  icon: const Icon(Icons.shield_outlined, color: StitchColors.primary, size: 20),
+                                  tooltip: 'Verify on Sandbox.co.in',
+                                  onPressed: _verifyEwayBill,
+                                );
+                              }
+                              return null;
+                            }(),
                             errorText: () {
                               final text = ewayBillNoController.text.trim();
                               if (text.isEmpty) return null;
@@ -1836,11 +1943,119 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                               return null;
                             }(),
                           ),
-                          onChanged: (_) => setState(() {}),
+                          onChanged: (val) {
+                            final clean = val.trim().replaceAll(' ', '');
+                            if (clean.length == 12) {
+                              if (!verifyingEway && (ewayVerification == null || ewayVerification!.ewbNo != clean)) {
+                                _verifyEwayBill();
+                              }
+                            } else {
+                              if (ewayVerification != null) {
+                                setState(() => ewayVerification = null);
+                              } else {
+                                setState(() {});
+                              }
+                            }
+                          },
+                          onSubmitted: (_) {
+                            final clean = ewayBillNoController.text.trim().replaceAll(' ', '');
+                            if (clean.length == 12 && !verifyingEway) {
+                              _verifyEwayBill();
+                            }
+                          },
                         ),
                       ),
                     ],
                   ),
+                  if (ewayVerification != null) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: ewayVerification!.valid
+                            ? const Color(0xFFF0FDF4)
+                            : const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: ewayVerification!.valid
+                              ? const Color(0xFF86EFAC)
+                              : const Color(0xFFFCA5A5),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                ewayVerification!.valid
+                                    ? Icons.verified_user_rounded
+                                    : Icons.cancel_outlined,
+                                color: ewayVerification!.valid
+                                    ? const Color(0xFF16A34A)
+                                    : const Color(0xFFDC2626),
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  ewayVerification!.valid
+                                      ? 'Genuine E-Way Bill (${ewayVerification!.status}) • ${ewayVerification!.verifiedVia}'
+                                      : (ewayVerification!.error ?? 'Unverified E-Way Bill Number'),
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: ewayVerification!.valid
+                                        ? const Color(0xFF166534)
+                                        : const Color(0xFF991B1B),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (ewayVerification!.valid) ...[
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 4,
+                              children: [
+                                if (ewayVerification!.vehicleNo != null && ewayVerification!.vehicleNo!.isNotEmpty)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.directions_car_filled_outlined, size: 13, color: Color(0xFF15803D)),
+                                      const SizedBox(width: 4),
+                                      Text('Vehicle: ${ewayVerification!.vehicleNo}',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF166534))),
+                                    ],
+                                  ),
+                                if (ewayVerification!.docNo != null && ewayVerification!.docNo!.isNotEmpty)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.receipt_outlined, size: 13, color: Color(0xFF15803D)),
+                                      const SizedBox(width: 4),
+                                      Text('Doc #: ${ewayVerification!.docNo}',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF166534))),
+                                    ],
+                                  ),
+                                if (ewayVerification!.fromTrdName != null && ewayVerification!.fromTrdName!.isNotEmpty)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.storefront_outlined, size: 13, color: Color(0xFF15803D)),
+                                      const SizedBox(width: 4),
+                                      Text('Consignor: ${ewayVerification!.fromTrdName}',
+                                          style: const TextStyle(fontSize: 11, color: Color(0xFF166534))),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -1909,6 +2124,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                       ),
                     ),
                   ),
+                  _buildComplianceQuickActions(),
                 ],
               ),
             ),

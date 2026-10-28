@@ -58,8 +58,8 @@ class _EInvoiceDetailsSheetState extends State<EInvoiceDetailsSheet> {
       UpgradePaywallSheet.show(
         context,
         featureName: 'E-Invoice (IRN) Generation',
-        description: 'Generate Government-compliant E-Invoices with real-time IRN and signed QR codes directly from your device.',
-        requiredTier: SubscriptionTier.gold,
+        description: 'Generate Government-compliant E-Invoices with real-time IRN and signed QR codes via Sandbox.co.in.',
+        requiredTier: SubscriptionTier.businessPro,
         bulletPoints: const [
           'Direct Sandbox.co.in GSP Integration',
           'Instant IRN generation adhering to NIC Schema v1.03',

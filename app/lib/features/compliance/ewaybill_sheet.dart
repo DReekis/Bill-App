@@ -76,12 +76,12 @@ class _EWayBillSheetState extends State<EWayBillSheet> {
   }
 
   Future<void> _generate() async {
-    if (!SubscriptionService.instance.canAccessEInvoice) {
+    if (!SubscriptionService.instance.canAccessEWayBill) {
       UpgradePaywallSheet.show(
         context,
         featureName: 'E-Way Bill Automation',
-        description: 'Generate statutory Government E-Way bills with real-time tracking and printable Form EWB-01 slips.',
-        requiredTier: SubscriptionTier.gold,
+        description: 'Generate statutory Government E-Way bills with real-time tracking and printable Form EWB-01 slips via Sandbox.co.in.',
+        requiredTier: SubscriptionTier.businessPro,
         bulletPoints: const [
           'Direct Sandbox.co.in E-Way Bill Gateway',
           'Automatic Part A & Part B vehicle updates',

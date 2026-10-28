@@ -169,6 +169,12 @@ async function handleDelete(entity, entityId, businessId) {
                 where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
             });
             break;
+        case 'return':
+        case 'returns':
+            await prisma.return.deleteMany({
+                where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
+            });
+            break;
     }
 }
 async function handleUpsert(entity, entityId, businessId, data) {
@@ -400,6 +406,11 @@ async function handleUpsert(entity, entityId, businessId, data) {
         case 'expenses':
         case 'purchase':
         case 'purchases': {
+            let desc = data.description ?? null;
+            if (Array.isArray(data.items) && data.items.length > 0) {
+                const itemJson = JSON.stringify(data.items);
+                desc = desc ? `${desc}<!--ITEMS:${itemJson}-->` : `<!--ITEMS:${itemJson}-->`;
+            }
             await prisma.expense.upsert({
                 where: { id: scopedId },
                 create: {
@@ -409,7 +420,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
                     amount: Number(data.amount ?? 0),
                     mode: data.mode ?? (entity.toLowerCase().startsWith('purchase') ? 'Credit' : 'Cash'),
                     date: data.date ? new Date(data.date) : new Date(),
-                    description: data.description ?? null,
+                    description: desc,
                     vendor: data.vendor ?? null,
                 },
                 update: {
@@ -417,7 +428,7 @@ async function handleUpsert(entity, entityId, businessId, data) {
                     category: data.category ?? undefined,
                     amount: Number(data.amount ?? 0),
                     mode: data.mode ?? undefined,
-                    description: data.description ?? undefined,
+                    description: desc ?? undefined,
                 },
             });
             break;
@@ -516,6 +527,297 @@ async function handleUpsert(entity, entityId, businessId, data) {
             }
             break;
         }
+        case 'quotation':
+        case 'quotations': {
+            const number = String(data.number ?? entityId);
+            const existing = await prisma.quotation.findFirst({
+                where: { businessId, number },
+            });
+            let verifiedCustomerId = null;
+            const rawCustId = data.customer_id ? String(data.customer_id) : (data.customerId ? String(data.customerId) : null);
+            if (rawCustId) {
+                const scopedCustId = toScopedId(businessId, rawCustId);
+                const cust = await prisma.customer.findFirst({
+                    where: { OR: [{ id: scopedCustId }, { id: rawCustId, businessId }] },
+                });
+                if (cust)
+                    verifiedCustomerId = cust.id;
+            }
+            const quotationData = {
+                businessId,
+                number,
+                customerId: verifiedCustomerId,
+                customerName: data.customer_name ?? data.customerName ?? null,
+                date: data.date ? new Date(data.date) : new Date(),
+                expiryDate: data.expiry_date ? new Date(data.expiry_date) : (data.expiryDate ? new Date(data.expiryDate) : null),
+                gstType: data.gst_type ?? data.gstType ?? 'gst',
+                subtotal: Number(data.subtotal ?? 0),
+                discount: Number(data.discount ?? 0),
+                taxable: Number(data.taxable ?? 0),
+                cgst: Number(data.cgst ?? 0),
+                sgst: Number(data.sgst ?? 0),
+                igst: Number(data.igst ?? 0),
+                total: Number(data.total ?? 0),
+                status: data.status ?? 'Open',
+                notes: data.notes ?? null,
+                isProforma: Boolean(data.is_proforma ?? data.isProforma ?? false),
+            };
+            const qId = existing ? existing.id : scopedId;
+            if (existing) {
+                await prisma.quotation.update({ where: { id: existing.id }, data: quotationData });
+            }
+            else {
+                await prisma.quotation.create({ data: { id: scopedId, ...quotationData } });
+            }
+            if (Array.isArray(data.items) && data.items.length > 0) {
+                try {
+                    await prisma.quotationItem.deleteMany({ where: { quotationId: qId } });
+                    for (let idx = 0; idx < data.items.length; idx++) {
+                        const it = data.items[idx];
+                        const rawItemId = it.id ? String(it.id) : `qitem_${idx}_${Date.now()}`;
+                        const scopedItemId = toScopedId(businessId, `${qId}_${rawItemId}`);
+                        await prisma.quotationItem.create({
+                            data: {
+                                id: scopedItemId,
+                                quotationId: qId,
+                                name: it.name ?? 'Item',
+                                hsn: it.hsn ?? null,
+                                gstRate: Number(it.gst_rate ?? it.gstRate ?? 0),
+                                quantity: Number(it.quantity ?? 1),
+                                price: Number(it.price ?? 0),
+                                discount: Number(it.discount ?? 0),
+                                taxable: Number(it.taxable ?? 0),
+                                tax: Number(it.tax ?? 0),
+                            },
+                        });
+                    }
+                }
+                catch (_) { }
+            }
+            break;
+        }
+        case 'order':
+        case 'orders':
+        case 'sales_order':
+        case 'sales_orders': {
+            const number = String(data.number ?? entityId);
+            const existing = await prisma.salesOrder.findFirst({
+                where: { businessId, number },
+            });
+            let verifiedCustomerId = null;
+            const rawCustId = data.customer_id ? String(data.customer_id) : (data.customerId ? String(data.customerId) : null);
+            if (rawCustId) {
+                const scopedCustId = toScopedId(businessId, rawCustId);
+                const cust = await prisma.customer.findFirst({
+                    where: { OR: [{ id: scopedCustId }, { id: rawCustId, businessId }] },
+                });
+                if (cust)
+                    verifiedCustomerId = cust.id;
+            }
+            const orderData = {
+                businessId,
+                number,
+                customerId: verifiedCustomerId,
+                customerName: data.customer_name ?? data.customerName ?? null,
+                date: data.date ? new Date(data.date) : new Date(),
+                dueDate: data.due_date ? new Date(data.due_date) : (data.dueDate ? new Date(data.dueDate) : null),
+                status: data.status ?? 'Pending',
+                total: Number(data.total ?? 0),
+                notes: data.notes ?? null,
+            };
+            const oId = existing ? existing.id : scopedId;
+            if (existing) {
+                await prisma.salesOrder.update({ where: { id: existing.id }, data: orderData });
+            }
+            else {
+                await prisma.salesOrder.create({ data: { id: scopedId, ...orderData } });
+            }
+            if (Array.isArray(data.items) && data.items.length > 0) {
+                try {
+                    await prisma.salesOrderItem.deleteMany({ where: { orderId: oId } });
+                    for (let idx = 0; idx < data.items.length; idx++) {
+                        const it = data.items[idx];
+                        const rawItemId = it.id ? String(it.id) : `soitem_${idx}_${Date.now()}`;
+                        const scopedItemId = toScopedId(businessId, `${oId}_${rawItemId}`);
+                        await prisma.salesOrderItem.create({
+                            data: {
+                                id: scopedItemId,
+                                orderId: oId,
+                                name: it.name ?? 'Item',
+                                quantity: Number(it.quantity ?? 1),
+                                price: Number(it.price ?? 0),
+                            },
+                        });
+                    }
+                }
+                catch (_) { }
+            }
+            break;
+        }
+        case 'purchase_order':
+        case 'purchase_orders': {
+            const number = String(data.number ?? entityId);
+            const existing = await prisma.purchaseOrder.findFirst({
+                where: { businessId, number },
+            });
+            let verifiedSupplierId = null;
+            const rawSuppId = data.supplier_id ? String(data.supplier_id) : (data.supplierId ? String(data.supplierId) : null);
+            if (rawSuppId) {
+                const scopedSuppId = toScopedId(businessId, rawSuppId);
+                const supp = await prisma.supplier.findFirst({
+                    where: { OR: [{ id: scopedSuppId }, { id: rawSuppId, businessId }] },
+                });
+                if (supp)
+                    verifiedSupplierId = supp.id;
+            }
+            const poData = {
+                businessId,
+                number,
+                supplierId: verifiedSupplierId,
+                supplierName: data.supplier_name ?? data.supplierName ?? null,
+                date: data.date ? new Date(data.date) : new Date(),
+                expectedDate: data.expected_date ? new Date(data.expected_date) : (data.expectedDate ? new Date(data.expectedDate) : null),
+                status: data.status ?? 'Draft',
+                total: Number(data.total ?? 0),
+                notes: data.notes ?? null,
+            };
+            const poId = existing ? existing.id : scopedId;
+            if (existing) {
+                await prisma.purchaseOrder.update({ where: { id: existing.id }, data: poData });
+            }
+            else {
+                await prisma.purchaseOrder.create({ data: { id: scopedId, ...poData } });
+            }
+            if (Array.isArray(data.items) && data.items.length > 0) {
+                try {
+                    await prisma.purchaseOrderItem.deleteMany({ where: { orderId: poId } });
+                    for (let idx = 0; idx < data.items.length; idx++) {
+                        const it = data.items[idx];
+                        const rawItemId = it.id ? String(it.id) : `poitem_${idx}_${Date.now()}`;
+                        const scopedItemId = toScopedId(businessId, `${poId}_${rawItemId}`);
+                        await prisma.purchaseOrderItem.create({
+                            data: {
+                                id: scopedItemId,
+                                orderId: poId,
+                                name: it.name ?? 'Item',
+                                quantity: Number(it.quantity ?? 1),
+                                price: Number(it.price ?? 0),
+                            },
+                        });
+                    }
+                }
+                catch (_) { }
+            }
+            break;
+        }
+        case 'delivery_challan':
+        case 'delivery_challans': {
+            const number = String(data.number ?? entityId);
+            const existing = await prisma.deliveryChallan.findFirst({
+                where: { businessId, number },
+            });
+            let verifiedCustomerId = null;
+            const rawCustId = data.customer_id ? String(data.customer_id) : (data.customerId ? String(data.customerId) : null);
+            if (rawCustId) {
+                const scopedCustId = toScopedId(businessId, rawCustId);
+                const cust = await prisma.customer.findFirst({
+                    where: { OR: [{ id: scopedCustId }, { id: rawCustId, businessId }] },
+                });
+                if (cust)
+                    verifiedCustomerId = cust.id;
+            }
+            const dcData = {
+                businessId,
+                number,
+                customerId: verifiedCustomerId,
+                customerName: data.customer_name ?? data.customerName ?? null,
+                date: data.date ? new Date(data.date) : new Date(),
+                address: data.address ?? null,
+                transportDetails: data.transport_details ?? data.transportDetails ?? null,
+                status: data.status ?? 'Pending',
+            };
+            const dcId = existing ? existing.id : scopedId;
+            if (existing) {
+                await prisma.deliveryChallan.update({ where: { id: existing.id }, data: dcData });
+            }
+            else {
+                await prisma.deliveryChallan.create({ data: { id: scopedId, ...dcData } });
+            }
+            if (Array.isArray(data.items) && data.items.length > 0) {
+                try {
+                    await prisma.deliveryChallanItem.deleteMany({ where: { challanId: dcId } });
+                    for (let idx = 0; idx < data.items.length; idx++) {
+                        const it = data.items[idx];
+                        const rawItemId = it.id ? String(it.id) : `dcitem_${idx}_${Date.now()}`;
+                        const scopedItemId = toScopedId(businessId, `${dcId}_${rawItemId}`);
+                        await prisma.deliveryChallanItem.create({
+                            data: {
+                                id: scopedItemId,
+                                challanId: dcId,
+                                name: it.name ?? 'Item',
+                                quantity: Number(it.quantity ?? 1),
+                            },
+                        });
+                    }
+                }
+                catch (_) { }
+            }
+            break;
+        }
+        case 'return':
+        case 'returns': {
+            const number = String(data.number ?? entityId);
+            const existing = await prisma.return.findFirst({
+                where: { businessId, number },
+            });
+            const retData = {
+                businessId,
+                number,
+                invoiceId: data.invoice_id ? String(data.invoice_id) : (data.invoiceId ? String(data.invoiceId) : null),
+                partyId: data.party_id ? String(data.party_id) : (data.partyId ? String(data.partyId) : null),
+                partyName: data.party_name ?? data.partyName ?? null,
+                partyType: data.party_type ?? data.partyType ?? 'customer',
+                date: data.date ? new Date(data.date) : new Date(),
+                subtotal: Number(data.subtotal ?? 0),
+                taxable: Number(data.taxable ?? 0),
+                tax: Number(data.tax ?? 0),
+                total: Number(data.total ?? 0),
+                reason: data.reason ?? null,
+                status: data.status ?? 'Finalized',
+            };
+            const retId = existing ? existing.id : scopedId;
+            if (existing) {
+                await prisma.return.update({ where: { id: existing.id }, data: retData });
+            }
+            else {
+                await prisma.return.create({ data: { id: scopedId, ...retData } });
+            }
+            if (Array.isArray(data.items) && data.items.length > 0) {
+                try {
+                    await prisma.returnItem.deleteMany({ where: { returnId: retId } });
+                    for (let idx = 0; idx < data.items.length; idx++) {
+                        const it = data.items[idx];
+                        const rawItemId = it.id ? String(it.id) : `retitem_${idx}_${Date.now()}`;
+                        const scopedItemId = toScopedId(businessId, `${retId}_${rawItemId}`);
+                        await prisma.returnItem.create({
+                            data: {
+                                id: scopedItemId,
+                                returnId: retId,
+                                name: it.name ?? 'Item',
+                                hsn: it.hsn ?? null,
+                                gstRate: Number(it.gst_rate ?? it.gstRate ?? 0),
+                                quantity: Number(it.quantity ?? 1),
+                                price: Number(it.price ?? 0),
+                                taxable: Number(it.taxable ?? 0),
+                                tax: Number(it.tax ?? 0),
+                            },
+                        });
+                    }
+                }
+                catch (_) { }
+            }
+            break;
+        }
         default:
             console.log(`Sync handler for entity '${entity}' not specifically mapped; stored in sync queue.`);
     }
@@ -523,8 +825,13 @@ async function handleUpsert(entity, entityId, businessId, data) {
 export async function pullSyncChanges(businessId, since, limit = 100) {
     const sinceDate = since ? new Date(since) : new Date(0);
     const changes = [];
-    const [customers, products, invoices, payments, expenses, bankAccounts, cheques, stockMoves] = await Promise.all([
+    const [customers, suppliers, products, invoices, quotations, salesOrders, purchaseOrders, deliveryChallans, returns, payments, expenses, bankAccounts, cheques, stockMoves, syncQueueItems,] = await Promise.all([
         prisma.customer.findMany({
+            where: { businessId, createdAt: { gt: sinceDate } },
+            take: limit,
+            orderBy: { createdAt: 'asc' },
+        }),
+        prisma.supplier.findMany({
             where: { businessId, createdAt: { gt: sinceDate } },
             take: limit,
             orderBy: { createdAt: 'asc' },
@@ -535,6 +842,36 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
             orderBy: { createdAt: 'asc' },
         }),
         prisma.invoice.findMany({
+            where: { businessId, createdAt: { gt: sinceDate } },
+            include: { items: true },
+            take: limit,
+            orderBy: { createdAt: 'asc' },
+        }),
+        prisma.quotation.findMany({
+            where: { businessId, createdAt: { gt: sinceDate } },
+            include: { items: true },
+            take: limit,
+            orderBy: { createdAt: 'asc' },
+        }),
+        prisma.salesOrder.findMany({
+            where: { businessId, createdAt: { gt: sinceDate } },
+            include: { items: true },
+            take: limit,
+            orderBy: { createdAt: 'asc' },
+        }),
+        prisma.purchaseOrder.findMany({
+            where: { businessId, createdAt: { gt: sinceDate } },
+            include: { items: true },
+            take: limit,
+            orderBy: { createdAt: 'asc' },
+        }),
+        prisma.deliveryChallan.findMany({
+            where: { businessId, createdAt: { gt: sinceDate } },
+            include: { items: true },
+            take: limit,
+            orderBy: { createdAt: 'asc' },
+        }),
+        prisma.return.findMany({
             where: { businessId, createdAt: { gt: sinceDate } },
             include: { items: true },
             take: limit,
@@ -565,6 +902,11 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
             take: limit,
             orderBy: { createdAt: 'asc' },
         }),
+        prisma.syncQueueItem.findMany({
+            where: { businessId, createdAt: { gt: sinceDate } },
+            take: limit,
+            orderBy: { createdAt: 'asc' },
+        }),
     ]);
     for (const c of customers) {
         changes.push({
@@ -573,6 +915,15 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
             op: 'upsert',
             payload: JSON.stringify(c),
             timestamp: c.createdAt.toISOString(),
+        });
+    }
+    for (const s of suppliers) {
+        changes.push({
+            entity: 'supplier',
+            entityId: fromScopedId(businessId, s.id),
+            op: 'upsert',
+            payload: JSON.stringify(s),
+            timestamp: s.createdAt.toISOString(),
         });
     }
     for (const p of products) {
@@ -593,6 +944,51 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
             timestamp: inv.createdAt.toISOString(),
         });
     }
+    for (const q of quotations) {
+        changes.push({
+            entity: 'quotation',
+            entityId: fromScopedId(businessId, q.id),
+            op: 'upsert',
+            payload: JSON.stringify(q),
+            timestamp: q.createdAt.toISOString(),
+        });
+    }
+    for (const so of salesOrders) {
+        changes.push({
+            entity: 'sales_order',
+            entityId: fromScopedId(businessId, so.id),
+            op: 'upsert',
+            payload: JSON.stringify(so),
+            timestamp: so.createdAt.toISOString(),
+        });
+    }
+    for (const po of purchaseOrders) {
+        changes.push({
+            entity: 'purchase_order',
+            entityId: fromScopedId(businessId, po.id),
+            op: 'upsert',
+            payload: JSON.stringify(po),
+            timestamp: po.createdAt.toISOString(),
+        });
+    }
+    for (const dc of deliveryChallans) {
+        changes.push({
+            entity: 'delivery_challan',
+            entityId: fromScopedId(businessId, dc.id),
+            op: 'upsert',
+            payload: JSON.stringify(dc),
+            timestamp: dc.createdAt.toISOString(),
+        });
+    }
+    for (const ret of returns) {
+        changes.push({
+            entity: 'return',
+            entityId: fromScopedId(businessId, ret.id),
+            op: 'upsert',
+            payload: JSON.stringify(ret),
+            timestamp: ret.createdAt.toISOString(),
+        });
+    }
     for (const pay of payments) {
         changes.push({
             entity: 'payment',
@@ -603,11 +999,20 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
         });
     }
     for (const exp of expenses) {
+        let payloadObj = { ...exp };
+        if (exp.category === 'Purchase' && exp.description && exp.description.includes('<!--ITEMS:')) {
+            try {
+                const parts = exp.description.split('<!--ITEMS:');
+                payloadObj.description = parts[0].trim() || null;
+                payloadObj.items = JSON.parse(parts[1].replace('-->', '').trim());
+            }
+            catch (_) { }
+        }
         changes.push({
-            entity: 'expense',
+            entity: exp.category === 'Purchase' ? 'purchase' : 'expense',
             entityId: fromScopedId(businessId, exp.id),
             op: 'upsert',
-            payload: JSON.stringify(exp),
+            payload: JSON.stringify(payloadObj),
             timestamp: exp.createdAt.toISOString(),
         });
     }
@@ -638,10 +1043,38 @@ export async function pullSyncChanges(businessId, since, limit = 100) {
             timestamp: sm.createdAt.toISOString(),
         });
     }
-    // Sort chronologically
+    for (const sq of syncQueueItems) {
+        changes.push({
+            entity: sq.entity,
+            entityId: fromScopedId(businessId, sq.entityId),
+            op: sq.op,
+            payload: sq.payload ?? JSON.stringify({ id: sq.entityId }),
+            timestamp: sq.createdAt.toISOString(),
+        });
+    }
+    // Deduplicate by entity:entityId, keeping latest event; if older has items and newer lacks items, preserve items
     changes.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    const deduped = new Map();
+    for (const c of changes) {
+        const key = `${c.entity}:${c.entityId}`;
+        const prev = deduped.get(key);
+        if (prev && prev.payload && c.payload) {
+            try {
+                const prevObj = JSON.parse(prev.payload);
+                const currObj = JSON.parse(c.payload);
+                if (prevObj.items && (!currObj.items || currObj.items.length === 0)) {
+                    currObj.items = prevObj.items;
+                    c.payload = JSON.stringify(currObj);
+                }
+            }
+            catch (_) { }
+        }
+        deduped.set(key, c);
+    }
+    const finalChanges = Array.from(deduped.values());
+    finalChanges.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     return {
-        changes: changes.slice(0, limit),
+        changes: finalChanges.slice(0, limit),
         serverTime: new Date().toISOString(),
     };
 }

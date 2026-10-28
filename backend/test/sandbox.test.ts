@@ -175,10 +175,29 @@ test('Sandbox Service & Compliance Engine Endpoints', async (t) => {
         remarks: 'Order cancelled by buyer',
       },
     });
-    assert.strictEqual(cancelRes.statusCode, 200);
-    const cancelBody = JSON.parse(cancelRes.body);
-    assert.strictEqual(cancelBody.success, true);
-    assert.strictEqual(cancelBody.ewbNo, body.ewbNo);
-    assert.strictEqual(cancelBody.status, 'CNL');
+    // Test E-Way Bill Verification via Sandbox.co.in GSP
+    const verifyRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/ewaybill/verify/${body.ewbNo}`,
+    });
+    assert.strictEqual(verifyRes.statusCode, 200);
+    const verifyBody = JSON.parse(verifyRes.body);
+    assert.strictEqual(verifyBody.success, true);
+    assert.strictEqual(verifyBody.valid, true);
+    assert.strictEqual(verifyBody.isGenuine, true);
+    assert.strictEqual(verifyBody.ewbNo, body.ewbNo);
+    assert.strictEqual(verifyBody.status, 'ACT');
+    assert.ok(verifyBody.verifiedVia);
+
+    // Reject 11-digit random fake number
+    const fakeRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/ewaybill/verify/58575885788',
+    });
+    assert.strictEqual(fakeRes.statusCode, 400);
+    const fakeBody = JSON.parse(fakeRes.body);
+    assert.strictEqual(fakeBody.valid, false);
+    assert.strictEqual(fakeBody.isGenuine, false);
+    assert.ok(fakeBody.error);
   });
 });

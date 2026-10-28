@@ -1,6 +1,3 @@
-import 'dart:typed_data';
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -9,7 +6,6 @@ import 'package:billket/core/billing_engine.dart';
 import 'package:billket/core/dates.dart';
 import 'package:billket/core/gst_service.dart';
 import 'package:billket/core/models.dart';
-import 'package:billket/core/session.dart';
 import 'package:billket/data/app_database.dart';
 import 'package:billket/data/repositories.dart';
 import 'package:billket/utils/pdf_invoice.dart';
@@ -334,7 +330,7 @@ void main() {
         gstRate: 18,
       );
 
-      final qty = 4.0;
+      const qty = 4.0;
       final price = helmet.purchasePrice;
       final subtotalPaise = (price * qty).round();
       final taxPaise = (subtotalPaise * (helmet.gstRate / 100)).round();

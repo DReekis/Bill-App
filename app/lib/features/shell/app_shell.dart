@@ -26,6 +26,8 @@ import '../returns/note_builder_screen.dart';
 import '../auth/login_screen.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/stitch_theme.dart';
+import '../../core/restock_notification_service.dart';
+import '../inventory/restock_price_update_sheet.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -226,10 +228,71 @@ class _AppShellState extends State<AppShell> {
                     icon: const Icon(Icons.lock_outline_rounded),
                     onPressed: () => session.lock(),
                   ),
-                IconButton(
-                  tooltip: 'Notifications',
-                  onPressed: () => showAppMessage(context, 'No new alerts'),
-                  icon: const Icon(Icons.notifications_none_rounded),
+                ListenableBuilder(
+                  listenable: RestockNotificationService.instance,
+                  builder: (context, _) {
+                    final bizId = session.businessId;
+                    return FutureBuilder<int>(
+                      future: bizId != null
+                          ? RestockNotificationService.instance.getPendingCount(bizId)
+                          : Future.value(0),
+                      builder: (context, snapshot) {
+                        final pending = snapshot.data ?? 0;
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            IconButton(
+                              tooltip: pending > 0
+                                  ? '$pending restocked items need price/expiry review'
+                                  : 'Notifications',
+                              onPressed: () async {
+                                if (bizId != null && pending > 0) {
+                                  await RestockPriceUpdateSheet.showPending(
+                                      context,
+                                      businessId: bizId);
+                                } else {
+                                  showAppMessage(context, 'No new alerts');
+                                }
+                              },
+                              icon: Icon(
+                                pending > 0
+                                    ? Icons.notifications_active_rounded
+                                    : Icons.notifications_none_rounded,
+                                color: pending > 0 ? StitchColors.primary : null,
+                              ),
+                            ),
+                            if (pending > 0)
+                              Positioned(
+                                top: 6,
+                                right: 6,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: StitchColors.primary,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 16,
+                                    minHeight: 16,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '$pending',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        height: 1,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    );
+                  },
                 ),
                 const SizedBox(width: 4),
                 Padding(

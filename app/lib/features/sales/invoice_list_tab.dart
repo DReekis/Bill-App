@@ -18,6 +18,10 @@ import '../purchases/purchase_builder_screen.dart';
 import '../purchases/purchase_detail_screen.dart';
 import '../purchases/purchase_order_detail_screen.dart';
 import '../returns/note_detail_screen.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
+import '../compliance/ewaybill_sheet.dart';
+import '../compliance/einvoice_details_sheet.dart';
 
 /// Unified Transactions Hub displaying Sales, Purchases, Payments In/Out, and Expenses.
 class TransactionListTab extends StatefulWidget {
@@ -259,6 +263,102 @@ class _TransactionListTabState extends State<TransactionListTab> {
               ),
               const SizedBox(height: 20),
               if (tx.type == TransactionType.sale && tx.refId != null) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF2563EB),
+                          side: const BorderSide(color: Color(0xFF93C5FD)),
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                        ),
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          if (!SubscriptionService.instance.canAccessEWayBill) {
+                            if (!mounted) return;
+                            UpgradePaywallSheet.show(
+                              context,
+                              featureName: 'E-Way Bill Automation',
+                              description: 'Generate statutory Government E-Way bills with real-time tracking and printable Form EWB-01 slips via Sandbox.co.in.',
+                              requiredTier: SubscriptionTier.businessPro,
+                              bulletPoints: const [
+                                'Direct Sandbox.co.in E-Way Bill Gateway',
+                                'Automatic Part A & Part B vehicle updates',
+                                'Printable NIC Form EWB-01 slip export',
+                                '24-Hour statutory cancellation management',
+                              ],
+                            );
+                            return;
+                          }
+                          if (!mounted) return;
+                          final bizId = context.read<Session>().businessId!;
+                          final biz = await Repository.instance.getBusiness(bizId);
+                          final inv = await Repository.instance.invoice(bizId, tx.refId!);
+                          if (biz != null && inv != null && mounted) {
+                            final cust = inv.customerId != null ? await Repository.instance.customer(bizId, inv.customerId!) : null;
+                            if (!mounted) return;
+                            EWayBillSheet.show(
+                              context,
+                              business: biz,
+                              invoice: inv,
+                              customer: cust,
+                              onUpdated: _load,
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.local_shipping_outlined, size: 16),
+                        label: const Text('E-Way Bill (PRO)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF059669),
+                          side: const BorderSide(color: Color(0xFF6EE7B7)),
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                        ),
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          if (!SubscriptionService.instance.canAccessEInvoice) {
+                            if (!mounted) return;
+                            UpgradePaywallSheet.show(
+                              context,
+                              featureName: 'Government E-Invoice (IRN)',
+                              description: 'Generate official B2B E-Invoices with NIC IRN, digital signatures, and verifiable QR codes via Sandbox.co.in.',
+                              requiredTier: SubscriptionTier.businessPro,
+                              bulletPoints: const [
+                                'Direct Sandbox.co.in GSP Integration',
+                                'Official 64-char Hash IRN & Ack Receipt',
+                                'Statutory Signed B2B QR Code on PDF',
+                                '24-Hour Government Portal Cancellation',
+                              ],
+                            );
+                            return;
+                          }
+                          if (!mounted) return;
+                          final bizId = context.read<Session>().businessId!;
+                          final biz = await Repository.instance.getBusiness(bizId);
+                          final inv = await Repository.instance.invoice(bizId, tx.refId!);
+                          if (biz != null && inv != null && mounted) {
+                            final cust = inv.customerId != null ? await Repository.instance.customer(bizId, inv.customerId!) : null;
+                            if (!mounted) return;
+                            EInvoiceDetailsSheet.show(
+                              context,
+                              business: biz,
+                              invoice: inv,
+                              customer: cust,
+                              onUpdated: _load,
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                        label: const Text('E-Invoice (PRO)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(

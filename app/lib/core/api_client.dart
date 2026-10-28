@@ -12,11 +12,14 @@ class ApiClient {
 
   static final ApiClient instance = ApiClient();
 
-  ApiClient({String? baseUrl})
+  ApiClient({String? baseUrl, http.Client? client})
       : _explicitBaseUrl = baseUrl != null,
+        _client = client ?? http.Client(),
         _baseUrl = _sanitizeUrl(baseUrl ?? _cachedBaseUrl ?? defaultBaseUrl) {
     _ready = _loadBaseUrl();
   }
+
+  final http.Client _client;
 
   static const String _kBaseUrlKey = 'api.base_url';
   static String? _cachedBaseUrl;
@@ -86,7 +89,7 @@ class ApiClient {
     try {
       await ensureReady();
       final uri = Uri.parse('$_baseUrl/health');
-      final res = await http.get(uri).timeout(const Duration(seconds: 5));
+      final res = await _client.get(uri).timeout(const Duration(seconds: 5));
       return res.statusCode == 200;
     } catch (_) {
       return false;
@@ -141,7 +144,7 @@ class ApiClient {
       effectiveHeaders['Authorization'] = 'Bearer $token';
     }
     final uri = Uri.parse('$_baseUrl$path');
-    return await http
+    return await _client
         .post(uri, headers: effectiveHeaders, body: jsonEncode(body))
         .timeout(timeout);
   }
@@ -158,7 +161,7 @@ class ApiClient {
       effectiveHeaders['Authorization'] = 'Bearer $token';
     }
     final uri = Uri.parse('$_baseUrl$path');
-    return await http
+    return await _client
         .get(uri, headers: effectiveHeaders)
         .timeout(timeout);
   }

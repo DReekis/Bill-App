@@ -10,6 +10,8 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import '../inventory/product_form.dart';
+import '../inventory/restock_price_update_sheet.dart';
+import '../../core/restock_notification_service.dart';
 import '../suppliers/supplier_form.dart';
 import 'purchase_detail_screen.dart';
 
@@ -1011,13 +1013,51 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
           notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
           purchaseNumber: billNumber ?? 'PUR-0001',
         );
-        if (mounted) {
-          showAppMessage(context, 'Purchase updated · stock updated');
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => PurchaseDetailScreen(purchaseId: widget.existingPurchaseId!, autoPreview: true),
-            ),
+
+        final reviewItems = <RestockReviewItem>[];
+        for (final l in lines) {
+          if (l.product?.id != null) {
+            reviewItems.add(RestockReviewItem(
+              productId: l.product!.id!,
+              productName: l.label,
+              restockedQty: l.qty,
+              unit: l.product?.unit ?? 'pc',
+              oldPurchasePrice: l.product!.purchasePrice,
+              newPurchasePrice: l.price,
+              currentSalePrice: l.product!.salePrice,
+              hasBatch: l.product!.hasBatch,
+              currentExpiryDate: l.product!.expiryDate,
+              sourceRef: billNumber ?? 'PUR-0001',
+              date: date,
+            ));
+          }
+        }
+
+        if (reviewItems.isNotEmpty) {
+          await RestockNotificationService.instance.recordRestock(
+            businessId: businessId,
+            sourceRef: billNumber ?? 'PUR-0001',
+            items: reviewItems,
           );
+        }
+
+        if (mounted) {
+          showAppMessage(context, 'Purchase updated · stock updated ✓');
+          if (reviewItems.isNotEmpty) {
+            await RestockPriceUpdateSheet.show(
+              context,
+              businessId: businessId,
+              items: reviewItems,
+              sourceRef: billNumber ?? 'PUR-0001',
+            );
+          }
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => PurchaseDetailScreen(purchaseId: widget.existingPurchaseId!, autoPreview: true),
+              ),
+            );
+          }
         }
       } else {
         final newId = await Repository.instance.createPurchase(
@@ -1031,13 +1071,51 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
           notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
           purchaseNumber: billNumber,
         );
-        if (mounted) {
-          showAppMessage(context, 'Purchase saved · stock updated');
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => PurchaseDetailScreen(purchaseId: newId, autoPreview: true),
-            ),
+
+        final reviewItems = <RestockReviewItem>[];
+        for (final l in lines) {
+          if (l.product?.id != null) {
+            reviewItems.add(RestockReviewItem(
+              productId: l.product!.id!,
+              productName: l.label,
+              restockedQty: l.qty,
+              unit: l.product?.unit ?? 'pc',
+              oldPurchasePrice: l.product!.purchasePrice,
+              newPurchasePrice: l.price,
+              currentSalePrice: l.product!.salePrice,
+              hasBatch: l.product!.hasBatch,
+              currentExpiryDate: l.product!.expiryDate,
+              sourceRef: billNumber ?? 'PUR',
+              date: date,
+            ));
+          }
+        }
+
+        if (reviewItems.isNotEmpty) {
+          await RestockNotificationService.instance.recordRestock(
+            businessId: businessId,
+            sourceRef: billNumber ?? 'PUR',
+            items: reviewItems,
           );
+        }
+
+        if (mounted) {
+          showAppMessage(context, 'Purchase saved · stock updated ✓');
+          if (reviewItems.isNotEmpty) {
+            await RestockPriceUpdateSheet.show(
+              context,
+              businessId: businessId,
+              items: reviewItems,
+              sourceRef: billNumber,
+            );
+          }
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => PurchaseDetailScreen(purchaseId: newId, autoPreview: true),
+              ),
+            );
+          }
         }
       }
     } catch (e) {

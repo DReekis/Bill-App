@@ -10,6 +10,8 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import '../inventory/product_form.dart';
+import '../inventory/restock_price_update_sheet.dart';
+import '../../core/restock_notification_service.dart';
 import '../sales/barcode_scanner_screen.dart';
 import '../sales/hardware_scanner_dialog.dart';
 import '../../core/physical_barcode_scanner.dart';
@@ -623,15 +625,52 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
               .toList(),
         );
 
+        final reviewItems = <RestockReviewItem>[];
+        for (final l in lines) {
+          if (l.product.id != null) {
+            reviewItems.add(RestockReviewItem(
+              productId: l.product.id!,
+              productName: l.product.name,
+              restockedQty: l.qty,
+              unit: l.product.unit,
+              oldPurchasePrice: l.product.purchasePrice,
+              newPurchasePrice: l.price,
+              currentSalePrice: l.product.salePrice,
+              hasBatch: l.product.hasBatch,
+              currentExpiryDate: l.product.expiryDate,
+              sourceRef: finalNumber,
+              date: orderDate,
+            ));
+          }
+        }
+
+        if (reviewItems.isNotEmpty) {
+          await RestockNotificationService.instance.recordRestock(
+            businessId: bizId,
+            sourceRef: finalNumber,
+            items: reviewItems,
+          );
+        }
+
         await repo.updatePurchaseOrder(order);
 
         if (mounted) {
-          showAppMessage(context, 'Purchase Order $finalNumber updated successfully ✓');
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => PurchaseOrderDetailScreen(orderId: widget.existingOrderId!, autoPreview: true),
-            ),
-          );
+          showAppMessage(context, 'Purchase Order $finalNumber updated successfully ✓ (Stock restocked)');
+          if (reviewItems.isNotEmpty) {
+            await RestockPriceUpdateSheet.show(
+              context,
+              businessId: bizId,
+              items: reviewItems,
+              sourceRef: finalNumber,
+            );
+          }
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => PurchaseOrderDetailScreen(orderId: widget.existingOrderId!, autoPreview: true),
+              ),
+            );
+          }
         }
       } else {
         final order = PurchaseOrder(
@@ -659,15 +698,52 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
               .toList(),
         );
 
+        final reviewItems = <RestockReviewItem>[];
+        for (final l in lines) {
+          if (l.product.id != null) {
+            reviewItems.add(RestockReviewItem(
+              productId: l.product.id!,
+              productName: l.product.name,
+              restockedQty: l.qty,
+              unit: l.product.unit,
+              oldPurchasePrice: l.product.purchasePrice,
+              newPurchasePrice: l.price,
+              currentSalePrice: l.product.salePrice,
+              hasBatch: l.product.hasBatch,
+              currentExpiryDate: l.product.expiryDate,
+              sourceRef: finalNumber,
+              date: orderDate,
+            ));
+          }
+        }
+
+        if (reviewItems.isNotEmpty) {
+          await RestockNotificationService.instance.recordRestock(
+            businessId: bizId,
+            sourceRef: finalNumber,
+            items: reviewItems,
+          );
+        }
+
         final orderId = await repo.finalizePurchaseOrder(order);
 
         if (mounted) {
-          showAppMessage(context, 'Purchase Order $finalNumber saved successfully ✓');
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => PurchaseOrderDetailScreen(orderId: orderId, autoPreview: true),
-            ),
-          );
+          showAppMessage(context, 'Purchase Order $finalNumber saved successfully ✓ (Stock restocked)');
+          if (reviewItems.isNotEmpty) {
+            await RestockPriceUpdateSheet.show(
+              context,
+              businessId: bizId,
+              items: reviewItems,
+              sourceRef: finalNumber,
+            );
+          }
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => PurchaseOrderDetailScreen(orderId: orderId, autoPreview: true),
+              ),
+            );
+          }
         }
       }
     } catch (e) {

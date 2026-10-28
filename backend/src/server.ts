@@ -606,6 +606,26 @@ app.post('/api/v1/ewaybill/cancel', async (request, reply) => {
   }
 });
 
+// E-Way Bill Verification (Sandbox.co.in GSP Gateway & statutory validity check)
+app.get('/api/v1/ewaybill/verify/:ewbNo', async (request, reply) => {
+  const ewbNo = ((request.params as any)?.ewbNo ?? '').trim();
+  if (!ewbNo) {
+    return reply.code(400).send({ error: 'E-Way Bill Number is required for verification' });
+  }
+  const result = await sandboxService.verifyEWayBill(ewbNo);
+  return reply.code(result.valid ? 200 : 400).send(result);
+});
+
+app.post('/api/v1/ewaybill/verify', async (request, reply) => {
+  const payload = request.body as any;
+  const ewbNo = (payload?.ewbNo ?? '').trim();
+  if (!ewbNo) {
+    return reply.code(400).send({ error: 'E-Way Bill Number is required for verification' });
+  }
+  const result = await sandboxService.verifyEWayBill(ewbNo);
+  return reply.code(result.valid ? 200 : 400).send(result);
+});
+
 app.addHook('preHandler', async (request, reply) => {
   const authHeader = request.headers.authorization;
   const url = request.url.split('?')[0];
@@ -614,6 +634,7 @@ app.addHook('preHandler', async (request, reply) => {
     url === '/api/v1/health' ||
     url.startsWith('/api/v1/auth/') ||
     url.startsWith('/api/v1/gst/') ||
+    url.startsWith('/api/v1/ewaybill/verify') ||
     url === '/api/v1/admin/login' ||
     url.startsWith('/admin') ||
     url === '/' ||

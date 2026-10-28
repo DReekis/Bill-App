@@ -37,6 +37,8 @@ import '../../l10n/app_localizations.dart';
 import '../../finance/stock_moves_screen.dart';
 import 'payables_screen.dart';
 import 'receivables_screen.dart';
+import '../../core/restock_notification_service.dart';
+import '../inventory/restock_price_update_sheet.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.onSwitchTab, this.onDataChanged});
@@ -58,6 +60,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int overdueCount = 0;
   int overdueAmount = 0;
   int nearExpiryCount = 0;
+  int pendingRestockCount = 0;
   ReceivablesSummary? receivables;
   PayablesSummary? payables;
   String snapshotTimeframe = 'Today';
@@ -89,6 +92,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       repo.receivablesSummary(businessId),
       repo.payablesSummary(businessId),
       repo.nearExpiryProductsCount(businessId),
+      RestockNotificationService.instance.getPendingCount(businessId),
     ]);
 
     final perf = results[0] as DashboardPerformance;
@@ -100,6 +104,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final recSummary = results[6] as ReceivablesSummary;
     final paySummary = results[7] as PayablesSummary;
     final nearExpCount = results[8] as int;
+    final pendingRestocks = results[9] as int;
 
     await SyncEngine.instance.refreshPending();
     if (!mounted) return;
@@ -120,6 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       overdueCount = overdueSummary.$1;
       overdueAmount = overdueSummary.$2;
       nearExpiryCount = nearExpCount;
+      pendingRestockCount = pendingRestocks;
       receivables = recSummary;
       payables = paySummary;
     });
@@ -669,7 +675,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   if (mounted) showAppMessage(context, 'Sync triggered');
                 },
               ),
-            if (low == 0 && out == 0 && nearExpiryCount == 0 && overdueCount == 0 && pendingSync == 0)
+            if (pendingRestockCount > 0)
+              _NotificationItemTile(
+                icon: Icons.price_change_outlined,
+                color: const Color(0xFF0D9488),
+                title: 'New Stock Price & Expiry Review',
+                subtitle: '$pendingRestockCount restocked items require selling price or expiry review',
+                actionLabel: 'Review & Set',
+                onAction: () async {
+                  final session = context.read<Session>();
+                  final bizId = session.businessId;
+                  Navigator.pop(ctx);
+                  if (bizId != null) {
+                    await RestockPriceUpdateSheet.showPending(context, businessId: bizId);
+                    await _load();
+                  }
+                },
+              ),
+            if (low == 0 && out == 0 && nearExpiryCount == 0 && overdueCount == 0 && pendingSync == 0 && pendingRestockCount == 0)
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(14)),
@@ -699,7 +722,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    RestockNotificationService.instance.addListener(_onRestockChanged);
     _load();
+  }
+
+  void _onRestockChanged() {
+    if (mounted) {
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    RestockNotificationService.instance.removeListener(_onRestockChanged);
+    super.dispose();
   }
 
   void _quick(String action) {
@@ -879,6 +915,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onShowOutOfStock: _showOutOfStockSheet,
         nearExpiryCount: nearExpiryCount,
         onShowNearExpiry: _showNearExpirySheet,
+        pendingRestockCount: pendingRestockCount,
+        onShowRestockReview: () async {
+          final session = context.read<Session>();
+          final bizId = session.businessId;
+          if (bizId != null) {
+            await RestockPriceUpdateSheet.showPending(context, businessId: bizId);
+            await _load();
+          }
+        },
         onSwitchBusiness: () => showBusinessSwitcher(context).then((changed) {
           if (changed == true) _load();
         }),
@@ -1075,6 +1120,8 @@ class _ReferenceDashboard extends StatelessWidget {
     this.onShowOutOfStock,
     this.nearExpiryCount = 0,
     this.onShowNearExpiry,
+    this.pendingRestockCount = 0,
+    this.onShowRestockReview,
     this.onSwitchBusiness,
   });
 
@@ -1086,6 +1133,7 @@ class _ReferenceDashboard extends StatelessWidget {
   final int overdueCount;
   final int overdueAmount;
   final int nearExpiryCount;
+  final int pendingRestockCount;
   final ReceivablesSummary? receivables;
   final PayablesSummary? payables;
   final String snapshotTimeframe;
@@ -1108,6 +1156,7 @@ class _ReferenceDashboard extends StatelessWidget {
   final VoidCallback? onShowOverdue;
   final VoidCallback? onShowOutOfStock;
   final VoidCallback? onShowNearExpiry;
+  final VoidCallback? onShowRestockReview;
   final VoidCallback? onSwitchBusiness;
 
   String amount(int? value) => value == null ? '₹0' : formatPaise(value);
@@ -1142,7 +1191,8 @@ class _ReferenceDashboard extends StatelessWidget {
     final alertCount = (low > 0 ? 1 : 0) +
         (out > 0 ? 1 : 0) +
         (overdueCount > 0 ? 1 : 0) +
-        (nearExpiryCount > 0 ? 1 : 0);
+        (nearExpiryCount > 0 ? 1 : 0) +
+        (pendingRestockCount > 0 ? 1 : 0);
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -1558,6 +1608,18 @@ class _ReferenceDashboard extends StatelessWidget {
                         ? 'মেয়াদোত্তীর্ণের কাছাকাছি: $nearExpiryCount পণ্য'
                         : (l10n.isHindi ? 'एक्सपायरी के करीब: $nearExpiryCount सामान' : 'Near Expiry: $nearExpiryCount products expiring soon'),
                     onTap: onShowNearExpiry)),
+          if (pendingRestockCount > 0)
+            Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: _AlertRow(
+                    icon: Icons.price_change_outlined,
+                    color: const Color(0xFF0D9488),
+                    title: l10n.isBengali
+                        ? 'নতুন স্টকের মূল্য নির্ধারণ: $pendingRestockCount পণ্য'
+                        : (l10n.isHindi
+                            ? 'नए स्टॉक की कीमत तय करें: $pendingRestockCount सामान'
+                            : 'Set New Stock Price & Expiry: $pendingRestockCount items'),
+                    onTap: onShowRestockReview)),
 
           const SizedBox(height: 32),
           Row(children: [
