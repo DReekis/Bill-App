@@ -1,5 +1,17 @@
 import { config } from '../config.js';
 
+export const PLAYSTORE_TEST_PHONES = new Set([
+  '9999999999',
+  '9876543210',
+]);
+
+export const PLAYSTORE_VALID_OTPS = new Set([
+  '123456',
+  '1234',
+  '000000',
+  '0000',
+]);
+
 interface OtpSession {
   sessionId: string;
   expiresAt: number;
@@ -52,6 +64,25 @@ export class TwoFactorService {
     }
 
     const now = Date.now();
+
+    // Dedicated Google Play Console Reviewer & Demo Fast-Path (bypasses 2FA in all environments)
+    if (PLAYSTORE_TEST_PHONES.has(phone)) {
+      const mockSessionId = `playstore_session_${phone}_${now}`;
+      this.sessions.set(phone, {
+        sessionId: mockSessionId,
+        expiresAt: now + 24 * 60 * 60 * 1000,
+        lastSentAt: now,
+        attempts: 0,
+        sendTimestamps: [now],
+      });
+      return {
+        success: true,
+        sessionId: mockSessionId,
+        isTestMode: true,
+        message: 'Google Play Reviewer OTP: 123456 (or 1234)',
+      };
+    }
+
     const existing = this.sessions.get(phone);
 
     // Rate Limiting 1: Cooldown check (30 seconds between requests for same number)
@@ -161,9 +192,15 @@ export class TwoFactorService {
       return { success: false, message: 'Please enter the OTP' };
     }
 
+    // Dedicated Google Play Console Reviewer & Demo Fast-Path (bypasses 2FA in all environments)
+    if (PLAYSTORE_TEST_PHONES.has(phone) && PLAYSTORE_VALID_OTPS.has(otp)) {
+      this.sessions.delete(phone);
+      return { success: true };
+    }
+
     // Fast-path strictly for automated unit tests
     if (config.nodeEnv === 'test') {
-      if (otp === '1234' || otp === '0000') {
+      if (otp === '1234' || otp === '0000' || otp === '123456') {
         this.sessions.delete(phone);
         return { success: true };
       }

@@ -6,7 +6,9 @@ import 'package:provider/provider.dart';
 import '../../core/auth_service.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
+import '../../data/seed_data.dart';
 import '../../sync/sync_engine.dart';
 import '../../utils/widgets.dart';
 import '../shell/app_shell.dart';
@@ -252,6 +254,72 @@ class _LoginScreenState extends State<LoginScreen> {
     showAppMessage(context, successMessage);
     widget.onSuccess?.call();
 
+    final cleanPhone = (result.user.phone ?? _phoneController.text).trim();
+    final isPlayStoreTest = cleanPhone.endsWith('9999999999') ||
+        cleanPhone.endsWith('9876543210') ||
+        result.user.email == 'playstore.test@billapp.in';
+
+    if (isPlayStoreTest) {
+      final bizList = await Repository.instance.allBusinesses();
+      int? activeBusinessId;
+      for (final b in bizList) {
+        if (b.name == 'Billket Superstore' || b.phone == '9999999999') {
+          activeBusinessId = b.id;
+          break;
+        }
+      }
+
+      if (activeBusinessId == null) {
+        final demoBiz = Business(
+          name: 'Billket Superstore',
+          ownerName: 'Google Play Reviewer',
+          phone: '9999999999',
+          email: 'playstore.test@billapp.in',
+          gstin: '29AABCU9603R1ZM',
+          pan: 'AABCU9603R',
+          address: 'Shop #12, MG Road Commercial Complex',
+          city: 'Bengaluru',
+          state: 'Karnataka',
+          pinCode: '560001',
+          country: 'India',
+          taxRegistered: true,
+          invoicePrefix: 'INV',
+          invoiceSequence: 10,
+          currency: 'INR',
+        );
+        activeBusinessId = await Repository.instance.createBusiness(demoBiz);
+        await seedDemoData(Repository.instance, activeBusinessId);
+
+        // Preload demo staff for testing staff permissions if needed
+        await Repository.instance.upsertStaffMember(StaffMember(
+          businessId: activeBusinessId,
+          name: 'Demo Cashier',
+          phone: '9999900001',
+          role: UserRole.cashier,
+          pin: '1234',
+        ));
+      }
+
+      await session.completeOnboarding(activeBusinessId);
+      await SubscriptionService.instance.setSubscription(
+        tier: SubscriptionTier.businessPro,
+        expiresAt: DateTime.now().add(const Duration(days: 3650)),
+        status: 'active',
+        businessId: activeBusinessId,
+      );
+
+      if (!mounted) return;
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context, true);
+      } else {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AppShell()),
+          (route) => false,
+        );
+      }
+      return;
+    }
+
     // Check if the business needs first-time setup or is a newly registered account
     final bizList = await Repository.instance.allBusinesses();
     final bool isUnconfigured = bizList.isEmpty ||
@@ -435,6 +503,33 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
 
+      // Fast-path auto-seeding for Play Store Reviewer staff account
+      if (staff == null && (phone == '9999900001' || phone == '9876500001')) {
+        final bizList = await Repository.instance.allBusinesses();
+        int? bId = bizList.isNotEmpty ? bizList.first.id : null;
+        if (bId == null) {
+          bId = await Repository.instance.createBusiness(Business(
+            name: 'Billket Superstore',
+            ownerName: 'Google Play Reviewer',
+            phone: '9999999999',
+            taxRegistered: true,
+            gstin: '29AABCU9603R1ZM',
+            city: 'Bengaluru',
+            state: 'Karnataka',
+          ));
+          await seedDemoData(Repository.instance, bId);
+        }
+        staff = StaffMember(
+          businessId: bId,
+          name: 'Demo Cashier',
+          phone: phone,
+          role: UserRole.cashier,
+          pin: '1234',
+        );
+        final staffId = await Repository.instance.upsertStaffMember(staff);
+        staff = staff.copyWith(id: staffId);
+      }
+
       if (!mounted) return;
       if (staff != null) {
         setState(() {
@@ -511,13 +606,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!mounted) return;
 
-    // If staff has default name or missing personal PIN, prompt for basic details
-    if (staff.name.isEmpty ||
+    // If staff has default name or missing personal PIN, prompt for basic details (skip for test demo cashier)
+    if (staff.phone != '9999900001' && (staff.name.isEmpty ||
         staff.name.toLowerCase().contains('cashier') ||
         staff.name.toLowerCase().contains('salesman') ||
         staff.name.startsWith('Demo') ||
         staff.pin == null ||
-        staff.pin == '1234') {
+        staff.pin == '1234')) {
       await _showStaffDetailsConfirmation(staff);
       if (!mounted) return;
     }
@@ -1117,6 +1212,52 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                               ),
                             ),
+                            const SizedBox(height: 14),
+                            // Google Play Reviewer / Demo Credential Quick-Fill Card
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.verified_user_outlined, size: 18, color: Color(0xFF4F46E5)),
+                                  const SizedBox(width: 10),
+                                  const Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Reviewer / Demo Access',
+                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                                        ),
+                                        SizedBox(height: 1),
+                                        Text(
+                                          '9999999999 • OTP: 123456 (Full Pro)',
+                                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: _phoneBusy
+                                        ? null
+                                        : () {
+                                            setState(() {
+                                              _phoneController.text = '9999999999';
+                                            });
+                                          },
+                                    style: TextButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    ),
+                                    child: const Text('Auto-Fill', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ] else ...[
                             const SizedBox(height: 16),
                             Text(
@@ -1352,6 +1493,52 @@ class _LoginScreenState extends State<LoginScreen> {
                                         isBn ? 'স্টাফ নম্বর চেক করুন' : isHi ? 'स्टाफ नंबर जांचें' : 'Continue to Verification',
                                         style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
                                       ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            // Google Play Reviewer Staff Demo Quick-Fill Card
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.badge_outlined, size: 18, color: Color(0xFF2563EB)),
+                                  const SizedBox(width: 10),
+                                  const Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Staff Demo Access',
+                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                                        ),
+                                        SizedBox(height: 1),
+                                        Text(
+                                          '9999900001 • PIN: 1234 (Cashier)',
+                                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: _staffLookingUp
+                                        ? null
+                                        : () {
+                                            setState(() {
+                                              _staffPhoneController.text = '9999900001';
+                                            });
+                                          },
+                                    style: TextButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    ),
+                                    child: const Text('Auto-Fill', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                                  ),
+                                ],
                               ),
                             ),
                           ] else ...[

@@ -67,6 +67,7 @@ app/android/app/release/
 *.aab
 *.symbols
 *.map.json
+Google_PLAY_APP_ACCESS_CREDENTIALS.md
 
 # Local Properties & Secret Keys
 app/android/local.properties

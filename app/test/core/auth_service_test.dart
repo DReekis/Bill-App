@@ -152,6 +152,20 @@ void main() {
       expect(result.user.provider, AuthProviderType.phone);
     });
 
+    test('Google Play Reviewer test phone accepts 6-digit OTP 123456 and unlocks Pro identity', () async {
+      final auth = CloudAuthService();
+      final result = await auth.signInWithPhone(
+        phone: '9999999999',
+        otp: '123456',
+      );
+
+      expect(result.user.phone, '9999999999');
+      expect(result.user.displayName, 'Google Play Reviewer');
+      expect(result.user.email, 'playstore.test@billapp.in');
+      expect(result.businessName, 'Billket Superstore');
+      expect(result.user.provider, AuthProviderType.phone);
+    });
+
     test('Upgradable phone auth rejects invalid OTP', () async {
       final auth = CloudAuthService();
       expect(

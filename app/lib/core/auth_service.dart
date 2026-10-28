@@ -252,22 +252,24 @@ class CloudAuthService implements AuthService {
       return await apiClient.loginWithPhone(phone: phone, otp: otp, sessionId: sessionId);
     }
 
-    // Default mock verification: '1234' or '0000'
-    if (otp != '1234' && otp != '0000') {
+    // Default mock verification: '123456', '1234', '000000', or '0000'
+    const validMockOtps = {'123456', '1234', '000000', '0000'};
+    if (!validMockOtps.contains(otp.trim())) {
       throw Exception('INVALID_OTP: Please enter the valid code.');
     }
 
     final cleanPhone = phone.trim();
+    final isPlayStore = cleanPhone.endsWith('9999999999') || cleanPhone.endsWith('9876543210');
     return AuthSessionResult(
       token: 'local_phone_token_${DateTime.now().millisecondsSinceEpoch}',
       user: AuthUser(
-        id: 'phone_${cleanPhone.replaceAll(RegExp(r'[^0-9]'), '')}',
-        email: '$cleanPhone@phone.billapp.in',
-        displayName: 'User ${cleanPhone.length >= 4 ? cleanPhone.substring(cleanPhone.length - 4) : cleanPhone}',
+        id: isPlayStore ? 'playstore_reviewer' : 'phone_${cleanPhone.replaceAll(RegExp(r'[^0-9]'), '')}',
+        email: isPlayStore ? 'playstore.test@billapp.in' : '$cleanPhone@phone.billapp.in',
+        displayName: isPlayStore ? 'Google Play Reviewer' : 'User ${cleanPhone.length >= 4 ? cleanPhone.substring(cleanPhone.length - 4) : cleanPhone}',
         phone: cleanPhone,
         provider: AuthProviderType.phone,
       ),
-      businessName: 'My Business',
+      businessName: isPlayStore ? 'Billket Superstore' : 'My Business',
     );
   }
 

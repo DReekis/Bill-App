@@ -42,6 +42,7 @@ import {
 } from './services/subscriptionService.js';
 import { sandboxService } from './services/sandboxService.js';
 import { TwoFactorService } from './services/twoFactorService.js';
+import { seedPlayStoreTestAccount } from './services/playstore_seed.js';
 
 export const app = Fastify({
   logger: config.nodeEnv !== 'production',
@@ -1712,6 +1713,7 @@ app.post('/api/v1/subscription/webhook', async (request, reply) => {
 const start = async () => {
   try {
     await bootstrapAdminUser();
+    await seedPlayStoreTestAccount();
     await app.listen({ port: config.port, host: '0.0.0.0' });
     app.log.info(`Server listening at http://localhost:${config.port}`);
   } catch (error) {

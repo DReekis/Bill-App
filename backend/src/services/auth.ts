@@ -2,7 +2,7 @@ import { hashPassword, verifyPassword } from '../lib/crypto.js';
 import { signAccessToken } from '../lib/jwt.js';
 import { prisma } from './db.js';
 import { config, ALLOWED_GOOGLE_CLIENT_IDS } from '../config.js';
-import { TwoFactorService } from './twoFactorService.js';
+import { TwoFactorService, PLAYSTORE_TEST_PHONES } from './twoFactorService.js';
 
 export async function registerUser(input: {
   name: string;
@@ -287,17 +287,25 @@ export async function phoneAuth(input: {
     throw new Error(verifyResult.message || 'INVALID_OTP');
   }
 
-  const dummyEmail = `${cleanPhone}@phone.billapp.in`;
+  const isPlayStoreTest = PLAYSTORE_TEST_PHONES.has(cleanPhone);
+  const dummyEmail = isPlayStoreTest
+    ? 'playstore.test@billapp.in'
+    : `${cleanPhone}@phone.billapp.in`;
 
-  let user = await prisma.user.findUnique({
-    where: { email: dummyEmail },
+  let user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: dummyEmail },
+        { email: `${cleanPhone}@phone.billapp.in` },
+      ],
+    },
     include: { businesses: true },
   });
 
   if (!user) {
     user = await prisma.user.create({
       data: {
-        name: input.name || `User ${cleanPhone.slice(-4)}`,
+        name: isPlayStoreTest ? 'Google Play Reviewer' : (input.name || `User ${cleanPhone.slice(-4)}`),
         email: dummyEmail,
         passwordHash: 'PHONE_OTP_AUTH',
         role: 'owner',
@@ -310,10 +318,32 @@ export async function phoneAuth(input: {
   if (!business) {
     business = await prisma.business.create({
       data: {
-        name: `${user.name}'s Business`,
+        name: isPlayStoreTest ? 'Billket Superstore' : `${user.name}'s Business`,
         ownerName: user.name,
         phone: cleanPhone,
+        email: dummyEmail,
+        gstin: isPlayStoreTest ? '29AABCU9603R1ZM' : null,
+        address: isPlayStoreTest ? 'Shop #12, MG Road Commercial Complex' : null,
+        city: isPlayStoreTest ? 'Bengaluru' : null,
+        state: isPlayStoreTest ? 'Karnataka' : null,
+        pinCode: isPlayStoreTest ? '560001' : null,
+        country: 'India',
+        taxRegistered: true,
+        invoicePrefix: 'INV',
+        subscriptionTier: 'pro',
+        subscriptionStatus: 'active',
+        subscriptionExpiresAt: null,
+        maxDevices: 10,
         ownerId: user.id,
+      },
+    });
+  } else if (isPlayStoreTest && business.subscriptionTier !== 'pro') {
+    business = await prisma.business.update({
+      where: { id: business.id },
+      data: {
+        subscriptionTier: 'pro',
+        subscriptionStatus: 'active',
+        subscriptionExpiresAt: null,
       },
     });
   }
