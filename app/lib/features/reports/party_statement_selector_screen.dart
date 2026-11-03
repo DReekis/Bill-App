@@ -6,6 +6,7 @@ import '../../core/money.dart';
 import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
+import '../../utils/widgets.dart';
 import '../customers/customer_detail_screen.dart';
 
 class PartyStatementSelectorScreen extends StatefulWidget {
@@ -113,12 +114,18 @@ class _PartyStatementSelectorScreenState extends State<PartyStatementSelectorScr
                             borderRadius: BorderRadius.circular(10),
                           ),
                           alignment: Alignment.center,
-                          child: Text(
-                            'Customers (${customers.length})',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: tabIndex == 0 ? Colors.white : StitchColors.textPrimary,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Customers (${customers.length})',
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: tabIndex == 0 ? Colors.white : StitchColors.textPrimary,
+                              ),
                             ),
                           ),
                         ),
@@ -136,12 +143,18 @@ class _PartyStatementSelectorScreenState extends State<PartyStatementSelectorScr
                             borderRadius: BorderRadius.circular(10),
                           ),
                           alignment: Alignment.center,
-                          child: Text(
-                            'Suppliers (${suppliers.length})',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: tabIndex == 1 ? Colors.white : StitchColors.textPrimary,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Suppliers (${suppliers.length})',
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: tabIndex == 1 ? Colors.white : StitchColors.textPrimary,
+                              ),
                             ),
                           ),
                         ),
@@ -301,9 +314,7 @@ class _PartyStatementSelectorScreenState extends State<PartyStatementSelectorScr
 
         return InkWell(
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Supplier: ${s.name} - Ledger balance: ${formatPaise(bal)}')),
-            );
+            showAppMessage(context, 'Supplier: ${s.name} - Ledger balance: ${formatPaise(bal)}');
           },
           borderRadius: BorderRadius.circular(12),
           child: Container(

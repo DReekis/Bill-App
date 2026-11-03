@@ -12,6 +12,7 @@ import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
+import 'signature_crop_screen.dart';
 
 class InvoiceCustomizationScreen extends StatefulWidget {
   const InvoiceCustomizationScreen({super.key});
@@ -253,14 +254,12 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
   }
 
   Future<void> _pickSignatureImage() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['png', 'jpg', 'jpeg'],
-    );
-    if (result != null && result.files.single.path != null) {
+    final croppedPath = await pickAndCropSignature(context);
+    if (croppedPath != null && mounted) {
       setState(() {
-        _settings = _settings?.copyWith(signatureImagePath: result.files.single.path);
+        _settings = _settings?.copyWith(signatureImagePath: croppedPath);
       });
+      showAppMessage(context, 'Signature image updated ✓');
     }
   }
 

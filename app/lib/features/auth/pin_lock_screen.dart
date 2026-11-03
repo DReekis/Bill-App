@@ -5,6 +5,7 @@ import '../../core/security_service.dart';
 import '../../core/session.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/stitch_theme.dart';
+import '../../utils/widgets.dart';
 
 class PinLockScreen extends StatefulWidget {
   const PinLockScreen({super.key});
@@ -53,8 +54,7 @@ class _PinLockScreenState extends State<PinLockScreen> {
         } else {
           if (mounted) {
             setState(() => pin = '');
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Wrong PIN'), backgroundColor: StitchColors.error));
+            showAppMessage(context, 'Wrong PIN', error: true);
           }
         }
       });

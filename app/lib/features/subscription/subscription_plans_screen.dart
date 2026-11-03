@@ -4,6 +4,7 @@ import '../../core/session.dart';
 import '../../core/subscription_service.dart';
 import '../../core/razorpay_service.dart';
 import '../../data/repositories.dart';
+import '../../utils/widgets.dart';
 
 class SubscriptionPlansScreen extends StatefulWidget {
   const SubscriptionPlansScreen({super.key});
@@ -40,12 +41,7 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     final subService = SubscriptionService.instance;
 
     if (tier == subService.currentTier && !subService.isExpired) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('You are already subscribed to ${tier.displayName}.'),
-          backgroundColor: const Color(0xFF0F172A),
-        ),
-      );
+      showAppMessage(context, 'You are already subscribed to ${tier.displayName}.');
       return;
     }
 
@@ -118,24 +114,13 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
             ),
           );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result.message ?? 'Payment cancelled or verification failed.'),
-              backgroundColor: const Color(0xFFDC2626),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+          showAppMessage(context, result.message ?? 'Payment cancelled or verification failed.', error: true);
         }
       }
     } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Payment initiation failed: $e'),
-            backgroundColor: const Color(0xFFDC2626),
-          ),
-        );
+        showAppMessage(context, 'Payment initiation failed: $e', error: true);
       }
     }
   }

@@ -424,28 +424,60 @@ class InitialsAvatar extends StatelessWidget {
 }
 
 OverlayEntry? _activeMessage;
+Timer? _activeTimer;
 
 /// Shown in the root overlay, not via ScaffoldMessenger: a SnackBar raised from
 /// inside a bottom sheet or dialog is painted behind it and never seen.
-void showAppMessage(BuildContext context, String message, {bool error = false}) {
+void showAppMessage(
+  BuildContext context,
+  String message, {
+  bool error = false,
+  Duration duration = const Duration(milliseconds: 1000),
+}) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
+  _activeTimer?.cancel();
+  _activeTimer = null;
   _activeMessage?.remove();
   _activeMessage = null;
-  final entry = OverlayEntry(
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
     builder: (context) => Positioned(
       left: 16,
       right: 16,
       bottom: MediaQuery.of(context).padding.bottom + 20,
-      child: IgnorePointer(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (_activeMessage == entry) {
+            _activeTimer?.cancel();
+            _activeTimer = null;
+            entry.remove();
+            _activeMessage = null;
+          }
+        },
         child: Material(
           color: error ? StitchColors.error : StitchColors.textPrimary,
           borderRadius: BorderRadius.circular(10),
           elevation: 6,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Text(message,
-                style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  error ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -453,10 +485,11 @@ void showAppMessage(BuildContext context, String message, {bool error = false}) 
   );
   _activeMessage = entry;
   overlay.insert(entry);
-  Timer(const Duration(seconds: 3), () {
+  _activeTimer = Timer(duration, () {
     if (_activeMessage == entry) {
       entry.remove();
       _activeMessage = null;
+      _activeTimer = null;
     }
   });
 }

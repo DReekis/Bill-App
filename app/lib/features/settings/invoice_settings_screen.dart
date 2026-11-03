@@ -11,6 +11,7 @@ import '../../theme/stitch_theme.dart';
 import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
 import 'invoice_customization_screen.dart';
+import 'signature_crop_screen.dart';
 
 class InvoiceSettingsScreen extends StatefulWidget {
   const InvoiceSettingsScreen({super.key, this.businessId});
@@ -230,22 +231,23 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
   }
 
   Future<void> _pickSignatureImage() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['png', 'jpg', 'jpeg'],
-      );
-      if (result != null && result.files.single.path != null) {
-        if (!mounted) return;
-        setState(() {
-          _signaturePath = result.files.single.path;
-        });
-        showAppMessage(context, 'Signature image updated');
-      }
-    } catch (e) {
-      if (mounted) {
-        showAppMessage(context, 'Failed to pick signature: $e', error: true);
-      }
+    final croppedPath = await pickAndCropSignature(context);
+    if (croppedPath != null && mounted) {
+      setState(() {
+        _signaturePath = croppedPath;
+      });
+      showAppMessage(context, 'Signature image updated ✓');
+    }
+  }
+
+  Future<void> _cropCurrentSignature() async {
+    if (_signaturePath == null) return;
+    final croppedPath = await cropExistingSignature(context, _signaturePath!);
+    if (croppedPath != null && mounted) {
+      setState(() {
+        _signaturePath = croppedPath;
+      });
+      showAppMessage(context, 'Signature cropped successfully ✓');
     }
   }
 
@@ -1111,7 +1113,9 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
                         children: [
                           const Text('Signature Uploaded', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                           const SizedBox(height: 4),
-                          Row(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
                             children: [
                               OutlinedButton(
                                 onPressed: _pickSignatureImage,
@@ -1121,7 +1125,14 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
                                 ),
                                 child: const Text('Change', style: TextStyle(fontSize: 12)),
                               ),
-                              const SizedBox(width: 8),
+                              OutlinedButton(
+                                onPressed: _cropCurrentSignature,
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                ),
+                                child: const Text('Crop / Edit', style: TextStyle(fontSize: 12)),
+                              ),
                               TextButton(
                                 onPressed: _removeSignature,
                                 style: TextButton.styleFrom(
@@ -1142,8 +1153,8 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
             ] else ...[
               OutlinedButton.icon(
                 onPressed: _pickSignatureImage,
-                icon: const Icon(Icons.add_photo_alternate_outlined, size: 20),
-                label: const Text('Upload Signature from Gallery'),
+                icon: const Icon(Icons.add_photo_alternate_rounded, size: 20),
+                label: const Text('Add Digital Signature (Camera / Gallery)'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),

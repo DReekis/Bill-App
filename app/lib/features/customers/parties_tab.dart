@@ -28,14 +28,45 @@ class _PartiesTabState extends State<PartiesTab> {
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-        child: SegmentedButton<int>(
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment(value: 0, label: Text(l10n.text('customers'))),
-            ButtonSegment(value: 1, label: Text(l10n.text('suppliers'))),
-          ],
-          selected: {segment},
-          onSelectionChanged: (s) => setState(() => segment = s.first),
+        child: SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<int>(
+            showSelectedIcon: false,
+            expandedInsets: EdgeInsets.zero,
+            style: SegmentedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+            ),
+            segments: [
+              ButtonSegment(
+                value: 0,
+                label: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    l10n.text('customers'),
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              ButtonSegment(
+                value: 1,
+                label: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    l10n.text('suppliers'),
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+            selected: {segment},
+            onSelectionChanged: (s) => setState(() => segment = s.first),
+          ),
         ),
       ),
       Expanded(

@@ -1,7 +1,7 @@
 name: billket
 description: Billket business billing application.
 publish_to: 'none'
-version: 1.0.7+9
+version: 1.0.7+10
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -73,6 +73,8 @@ dependencies:
   google_sign_in: ^7.2.0
   razorpay_flutter: ^1.4.7
   permission_handler: 11.3.1
+  image_picker: ^1.2.4
+  image: ^4.3.0
 
 dev_dependencies:
   flutter_lints: 4.0.0

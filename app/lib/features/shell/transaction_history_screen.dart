@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
 import '../../data/repositories.dart';
+import '../../utils/widgets.dart';
 import '../purchases/purchase_order_detail_screen.dart';
 import '../sales/delivery_challan_detail_screen.dart';
 import '../sales/quotation_detail_screen.dart';
@@ -163,13 +164,4 @@ class _List extends StatelessWidget {
       },
     );
   }
-}
-
-
-
-void showAppMessage(BuildContext context, String msg, {bool error = false}) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(msg),
-    backgroundColor: error ? Colors.red : null,
-  ));
 }
