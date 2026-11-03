@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
@@ -264,16 +264,27 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
   }
 
   Future<void> _pickBusinessLogo() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['png', 'jpg', 'jpeg'],
-    );
-    if (result != null && result.files.single.path != null && _business != null) {
-      final newBiz = _business!.copyWith(logoPath: result.files.single.path);
-      await Repository.instance.updateBusiness(newBiz);
-      setState(() {
-        _business = newBiz;
-      });
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 90,
+      );
+      if (picked != null && _business != null) {
+        final newBiz = _business!.copyWith(logoPath: picked.path);
+        await Repository.instance.updateBusiness(newBiz);
+        if (!mounted) return;
+        setState(() {
+          _business = newBiz;
+        });
+        showAppMessage(context, 'Business logo updated ✓');
+      }
+    } catch (e) {
+      if (mounted) {
+        showAppMessage(context, 'Failed to pick logo: $e', error: true);
+      }
     }
   }
 

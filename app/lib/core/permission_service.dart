@@ -49,7 +49,6 @@ class PermissionService {
     if (Platform.isAndroid) {
       // Storage for saving reports, PDF bills, Excel/JSON exports
       permissionsToRequest.add(Permission.storage);
-      permissionsToRequest.add(Permission.photos);
       permissionsToRequest.add(Permission.notification);
     } else if (Platform.isIOS) {
       permissionsToRequest.add(Permission.photos);
@@ -88,12 +87,9 @@ class PermissionService {
   static Future<bool> requestStoragePermission(BuildContext context) async {
     if (kIsWeb || !Platform.isAndroid) return true;
 
-    // On Android 13+ (SDK 33+), Permission.storage is always denied; photo/media permissions or Scoped Storage apply.
+    // Scoped storage / app documents are used without broad storage on modern Android.
     final status = await Permission.storage.request();
     if (status.isGranted) return true;
-
-    final photoStatus = await Permission.photos.request();
-    if (photoStatus.isGranted) return true;
 
     if (status.isPermanentlyDenied && context.mounted) {
       _showOpenSettingsDialog(

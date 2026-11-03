@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models.dart';
@@ -207,16 +207,19 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
 
   Future<void> _pickBusinessLogo() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['png', 'jpg', 'jpeg'],
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 90,
       );
-      if (result != null && result.files.single.path != null) {
+      if (picked != null) {
         if (!mounted) return;
         setState(() {
-          _logoPath = result.files.single.path;
+          _logoPath = picked.path;
         });
-        showAppMessage(context, 'Brand logo updated');
+        showAppMessage(context, 'Brand logo updated ✓');
       }
     } catch (e) {
       if (mounted) {
