@@ -61,8 +61,8 @@ android {
                     "signing keystore. See app/android/key.properties.template."
                 )
             }
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
