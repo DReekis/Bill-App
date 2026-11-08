@@ -271,7 +271,18 @@ class _SignatureCropScreenState extends State<SignatureCropScreen> {
   static img.Image? _decodeAndOrient(Uint8List bytes) {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return null;
-    return img.bakeOrientation(decoded);
+    final oriented = img.bakeOrientation(decoded);
+    if (oriented.width > 2048 || oriented.height > 2048) {
+      final maxDim = oriented.width > oriented.height ? oriented.width : oriented.height;
+      final scale = 2048.0 / maxDim;
+      return img.copyResize(
+        oriented,
+        width: (oriented.width * scale).round(),
+        height: (oriented.height * scale).round(),
+        interpolation: img.Interpolation.linear,
+      );
+    }
+    return oriented;
   }
 
   Future<void> _rotate90() async {

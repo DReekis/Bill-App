@@ -903,28 +903,37 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Brand Hero Emblem
-                  Container(
-                    width: 76,
-                    height: 76,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(22),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF4F46E5).withValues(alpha: 0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(22),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        width: 76,
+                        height: 76,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(22),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF4F46E5).withValues(alpha: 0.3),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.receipt_long_rounded,
-                      color: Colors.white,
-                      size: 40,
+                        child: const Icon(
+                          Icons.receipt_long_rounded,
+                          color: Colors.white,
+                          size: 40,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),

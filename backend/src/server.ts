@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
 import { config } from './config.js';
-import { verifyAccessToken } from './lib/jwt.js';
+import { signAccessToken, verifyAccessToken, verifyExpiredToken } from './lib/jwt.js';
 import { hashPassword, verifyPassword } from './lib/crypto.js';
 import { registerUser, loginUser, googleAuth, phoneAuth } from './services/auth.js';
 import { calculateInvoiceTotals } from './services/ledger.js';
@@ -435,6 +435,67 @@ app.post('/api/v1/auth/phone/verify', async (request, reply) => {
   }
 });
 
+app.post('/api/v1/auth/refresh', async (request, reply) => {
+  const authHeader = request.headers.authorization;
+  const body = request.body as { token?: string } | undefined;
+  let rawToken = authHeader?.startsWith('Bearer ')
+    ? authHeader.replace(/^Bearer\s+/i, '').replace(/["']/g, '').trim()
+    : body?.token?.trim();
+
+  if (!rawToken || rawToken === 'null' || rawToken === 'undefined') {
+    return reply.code(400).send({ error: 'Token is required for refresh', code: 'MISSING_TOKEN' });
+  }
+
+  try {
+    const payload = verifyExpiredToken(rawToken) as any;
+    if (!payload?.sub) {
+      return reply.code(401).send({ error: 'Invalid token payload', code: 'INVALID_TOKEN' });
+    }
+
+    const exp = payload.exp ? payload.exp * 1000 : 0;
+    const now = Date.now();
+    const maxGracePeriod = 90 * 24 * 60 * 60 * 1000;
+    if (exp > 0 && now - exp > maxGracePeriod) {
+      return reply.code(401).send({ error: 'Token expired beyond refresh window. Please sign in again.', code: 'TOKEN_EXPIRED' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      include: { businesses: true },
+    });
+
+    if (!user) {
+      return reply.code(401).send({ error: 'User account not found', code: 'USER_NOT_FOUND' });
+    }
+
+    let businessId = payload.businessId;
+    if (!businessId && user.businesses.length > 0) {
+      businessId = user.businesses[0].id;
+    }
+
+    const newToken = signAccessToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      businessId,
+    });
+
+    return reply.send({
+      token: newToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        displayName: user.name,
+        email: user.email,
+        role: user.role,
+      },
+      business: businessId ? { id: businessId } : undefined,
+    });
+  } catch (err: any) {
+    return reply.code(401).send({ error: 'Invalid token signature', code: 'INVALID_TOKEN' });
+  }
+});
+
 const gstStateCodes: Record<string, string> = {
   '01': 'Jammu and Kashmir',
   '02': 'Himachal Pradesh',
@@ -647,22 +708,28 @@ app.addHook('preHandler', async (request, reply) => {
   if (isPublicRoute) {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
-        const token = authHeader.replace('Bearer ', '');
+        const token = authHeader.replace(/^Bearer\s+/i, '').replace(/["']/g, '').trim();
         const payload = verifyAccessToken(token);
         (request as any).user = payload;
-      } catch (_) {}
+      } catch (_) { }
     }
     return;
   }
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return reply.code(401).send({ error: 'Missing bearer token' });
+    return reply.code(401).send({ error: 'Missing bearer token', code: 'MISSING_TOKEN' });
   }
   try {
-    const token = authHeader.replace('Bearer ', '');
+    const token = authHeader.replace(/^Bearer\s+/i, '').replace(/["']/g, '').trim();
+    if (!token || token === 'null' || token === 'undefined') {
+      return reply.code(401).send({ error: 'Invalid token', code: 'INVALID_TOKEN' });
+    }
     const payload = verifyAccessToken(token);
     (request as any).user = payload;
-  } catch {
-    return reply.code(401).send({ error: 'Invalid token' });
+  } catch (err: any) {
+    if (err?.name === 'TokenExpiredError') {
+      return reply.code(401).send({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
+    }
+    return reply.code(401).send({ error: 'Invalid token', code: 'INVALID_TOKEN' });
   }
 });
 

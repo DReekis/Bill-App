@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/api_client.dart';
 import '../core/models.dart';
+import '../core/session.dart';
 import '../core/sync_service.dart';
 import '../data/repositories.dart';
 
@@ -30,6 +31,13 @@ class SyncEngine extends ChangeNotifier {
   int lastPushedCount = 0;
   int lastPulledCount = 0;
   Timer? _autoSyncTimer;
+
+  bool get isAuthError =>
+      lastError != null &&
+      (lastError!.toLowerCase().contains('expired') ||
+          lastError!.toLowerCase().contains('invalid token') ||
+          lastError!.toLowerCase().contains('sign in') ||
+          lastError!.toLowerCase().contains('reconnect'));
 
   Future<bool> checkConnectivity() async {
     final online = await _service.checkHealth();
@@ -97,11 +105,25 @@ class SyncEngine extends ChangeNotifier {
 
       // Configure session credentials onto ApiClient
       final session = Repository.instance.session;
-      if (session.token == null || session.token!.isEmpty) {
+      final currentToken = session.token?.trim();
+      if (currentToken == null || currentToken.isEmpty || currentToken == 'null' || currentToken == 'undefined') {
         lastError = 'Sign in to Billket Cloud before syncing.';
         return;
       }
-      apiClient.setToken(session.token);
+
+      // If token is expired or close to expiry, proactively attempt token refresh
+      if (Session.isTokenExpired(currentToken)) {
+        apiClient.setToken(currentToken);
+        final refreshedToken = await apiClient.refreshToken();
+        if (refreshedToken != null) {
+          await session.updateToken(refreshedToken);
+        } else {
+          lastError = 'Cloud session expired. Tap to reconnect account.';
+          return;
+        }
+      } else {
+        apiClient.setToken(currentToken);
+      }
 
       var cloudBizId = session.cloudBusinessId;
       if ((cloudBizId == null || cloudBizId.isEmpty) && session.token != null) {
@@ -175,8 +197,13 @@ class SyncEngine extends ChangeNotifier {
               await Repository.instance.markSyncSuccess(rec.id!);
               pushedCount++;
             } catch (singleError) {
-              lastError = singleError.toString();
-              await Repository.instance.markSyncFailed(rec.id!, singleError.toString());
+              final errStr = singleError.toString();
+              if (errStr.contains('Invalid token') || errStr.contains('Token expired') || errStr.contains('401')) {
+                lastError = 'Cloud session expired. Tap to reconnect account.';
+              } else {
+                lastError = errStr;
+              }
+              await Repository.instance.markSyncFailed(rec.id!, errStr);
               break;
             }
           }
@@ -219,7 +246,12 @@ class SyncEngine extends ChangeNotifier {
       lastSyncedAt = DateTime.now();
       lastError = null;
     } catch (e) {
-      lastError = e.toString();
+      final errStr = e.toString();
+      if (errStr.contains('Invalid token') || errStr.contains('Token expired') || errStr.contains('401')) {
+        lastError = 'Cloud session expired. Tap to reconnect account.';
+      } else {
+        lastError = errStr;
+      }
     } finally {
       syncing = false;
       await refreshPending();

@@ -64,11 +64,62 @@ class ApiClient {
     }
   }
 
-  void setToken(String? token) => _token = token;
+  void setToken(String? token) {
+    if (token == 'null' || token == 'undefined' || (token?.trim().isEmpty ?? true)) {
+      _token = null;
+    } else {
+      _token = token!.trim();
+    }
+  }
   void setBusinessId(String? businessId) => _businessId = businessId;
   void clearToken() => _token = null;
   String? get token => _token;
   bool get hasAuth => _token != null && _token!.isNotEmpty;
+
+  bool _isRefreshing = false;
+  void Function(String newToken)? onTokenRefreshed;
+  void Function()? onAuthExpired;
+
+  Future<String?> refreshToken() async {
+    if (_isRefreshing) return null;
+    final currentToken = _token;
+    if (currentToken == null || currentToken.isEmpty || currentToken == 'null' || currentToken == 'undefined') {
+      return null;
+    }
+
+    _isRefreshing = true;
+    try {
+      await ensureReady();
+      final uri = Uri.parse('$_baseUrl/api/v1/auth/refresh');
+      final res = await _client.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $currentToken',
+        },
+        body: jsonEncode({'token': currentToken}),
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        if (decoded is Map && decoded['token'] != null) {
+          final newToken = decoded['token'].toString().trim();
+          setToken(newToken);
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('session.token', newToken);
+          } catch (_) {}
+          onTokenRefreshed?.call(newToken);
+          return newToken;
+        }
+      } else if (res.statusCode == 401) {
+        onAuthExpired?.call();
+      }
+    } catch (_) {} finally {
+      _isRefreshing = false;
+    }
+    return null;
+  }
 
   Map<String, String> _headers({Map<String, String>? extra}) {
     final headers = <String, String>{
@@ -144,9 +195,20 @@ class ApiClient {
       effectiveHeaders['Authorization'] = 'Bearer $token';
     }
     final uri = Uri.parse('$_baseUrl$path');
-    return await _client
+    var response = await _client
         .post(uri, headers: effectiveHeaders, body: jsonEncode(body))
         .timeout(timeout);
+
+    if (response.statusCode == 401 && _token != null && _token!.isNotEmpty && !path.startsWith('/api/v1/auth/')) {
+      final newToken = await refreshToken();
+      if (newToken != null) {
+        effectiveHeaders['Authorization'] = 'Bearer $newToken';
+        response = await _client
+            .post(uri, headers: effectiveHeaders, body: jsonEncode(body))
+            .timeout(timeout);
+      }
+    }
+    return response;
   }
 
   Future<http.Response> get(
@@ -161,9 +223,20 @@ class ApiClient {
       effectiveHeaders['Authorization'] = 'Bearer $token';
     }
     final uri = Uri.parse('$_baseUrl$path');
-    return await _client
+    var response = await _client
         .get(uri, headers: effectiveHeaders)
         .timeout(timeout);
+
+    if (response.statusCode == 401 && _token != null && _token!.isNotEmpty && !path.startsWith('/api/v1/auth/')) {
+      final newToken = await refreshToken();
+      if (newToken != null) {
+        effectiveHeaders['Authorization'] = 'Bearer $newToken';
+        response = await _client
+            .get(uri, headers: effectiveHeaders)
+            .timeout(timeout);
+      }
+    }
+    return response;
   }
 
   Future<AuthSessionResult> loginWithGoogle({

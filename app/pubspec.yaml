@@ -1,7 +1,7 @@
 name: billket
 description: Billket business billing application.
 publish_to: 'none'
-version: 1.0.8+12
+version: 1.0.8+15
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -85,4 +85,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  
+  assets:
+    - assets/images/

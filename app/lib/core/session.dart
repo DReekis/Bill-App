@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/app_database.dart';
@@ -190,7 +191,12 @@ class Session extends ChangeNotifier {
   Future<void> load() async {
     _prefs ??= await SharedPreferences.getInstance();
     mobile = _prefs!.getString(_kMobile);
-    token = _prefs!.getString(_kToken);
+    final rawToken = _prefs!.getString(_kToken);
+    if (rawToken == null || rawToken == 'null' || rawToken == 'undefined' || rawToken.trim().isEmpty) {
+      token = null;
+    } else {
+      token = rawToken.trim();
+    }
     businessId = _prefs!.getInt(_kBusinessId);
     currentUser = _prefs!.getString(_kCurrentUser) ?? 'Owner';
     currentRole = _prefs!.getString(_kCurrentRole) ?? 'Owner';
@@ -206,11 +212,42 @@ class Session extends ChangeNotifier {
     cloudProvider = _prefs!.getString(_kCloudProvider);
     cloudBusinessId = _prefs!.getString(_kCloudBusinessId);
 
+    // Sync refreshed tokens from ApiClient to Session
+    ApiClient.instance.onTokenRefreshed = (newToken) {
+      token = newToken;
+      notifyListeners();
+    };
+
     if (flagSecureEnabled) {
       SecurityService.instance.setFlagSecure(true);
     }
     _locked = true; // stays locked only when a PIN exists — see `locked`
     notifyListeners();
+  }
+
+  Future<void> updateToken(String newToken) async {
+    token = newToken.trim();
+    notifyListeners();
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
+      await _prefs!.setString(_kToken, token!);
+    } catch (_) {}
+  }
+
+  static bool isTokenExpired(String jwtToken) {
+    try {
+      final parts = jwtToken.split('.');
+      if (parts.length != 3) return false;
+      final normalized = base64Url.normalize(parts[1]);
+      final payloadStr = utf8.decode(base64Url.decode(normalized));
+      final payload = jsonDecode(payloadStr);
+      if (payload is Map && payload['exp'] != null) {
+        final expSeconds = payload['exp'] as int;
+        final expDate = DateTime.fromMillisecondsSinceEpoch(expSeconds * 1000);
+        return DateTime.now().isAfter(expDate.subtract(const Duration(seconds: 30)));
+      }
+    } catch (_) {}
+    return false;
   }
 
   Future<void> linkCloudSession(AuthSessionResult result) async {

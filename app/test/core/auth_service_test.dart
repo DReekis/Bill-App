@@ -182,5 +182,31 @@ void main() {
       // platformClientId is null on Android (Google Play Services auto-discovers via SHA-1)
       // On desktop/test runner it returns the desktop/web client ID
     });
+
+    test('Session correctly detects expired and valid JWT tokens', () {
+      // 1. Valid token expiring in 1 hour
+      final futureExp = DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch ~/ 1000;
+      final validPayload = base64Url.encode(utf8.encode(jsonEncode({'sub': 'user_1', 'exp': futureExp})));
+      final validJwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.$validPayload.mock_sig';
+      expect(Session.isTokenExpired(validJwt), isFalse);
+
+      // 2. Expired token (expired 2 hours ago)
+      final pastExp = DateTime.now().subtract(const Duration(hours: 2)).millisecondsSinceEpoch ~/ 1000;
+      final expiredPayload = base64Url.encode(utf8.encode(jsonEncode({'sub': 'user_1', 'exp': pastExp})));
+      final expiredJwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.$expiredPayload.mock_sig';
+      expect(Session.isTokenExpired(expiredJwt), isTrue);
+
+      // 3. Malformed token returns false (lets server decide)
+      expect(Session.isTokenExpired('not_a_jwt'), isFalse);
+    });
+
+    test('Session load sanitizes null or undefined string literals', () async {
+      SharedPreferences.setMockInitialValues({
+        'session.token': 'null',
+      });
+      final session = Session();
+      await session.load();
+      expect(session.token, isNull);
+    });
   });
 }

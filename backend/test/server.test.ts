@@ -44,6 +44,42 @@ test('GET /api/v1/businesses requires a bearer token', async () => {
   assert.equal(response.json().error, 'Missing bearer token');
 });
 
+test('POST /api/v1/auth/refresh issues fresh token from valid or expired token', async () => {
+  const email = `refresh.user.${Date.now()}@example.com`;
+  const regRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/register',
+    payload: {
+      name: 'Refresh Test User',
+      email,
+      password: 'password123',
+    },
+  });
+  assert.equal(regRes.statusCode, 201);
+  const { token } = regRes.json() as any;
+
+  // Refresh using Authorization header
+  const refreshRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/refresh',
+    headers: {
+      authorization: `Bearer ${token}`,
+    },
+  });
+  assert.equal(refreshRes.statusCode, 200);
+  const refreshed = refreshRes.json() as any;
+  assert.ok(refreshed.token);
+  assert.equal(refreshed.user.email, email);
+
+  // Reject malformed/invalid token
+  const invalidRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/refresh',
+    payload: { token: 'invalid_malformed_token' },
+  });
+  assert.equal(invalidRes.statusCode, 401);
+});
+
 test('Full Business Flow: Entities, Sync Push & Pull', async () => {
   // 1. Register user
   const email = `flow.user.${Date.now()}@example.com`;
