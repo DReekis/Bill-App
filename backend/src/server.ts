@@ -711,7 +711,7 @@ app.addHook('preHandler', async (request, reply) => {
         const token = authHeader.replace(/^Bearer\s+/i, '').replace(/["']/g, '').trim();
         const payload = verifyAccessToken(token);
         (request as any).user = payload;
-      } catch (_) { }
+      } catch (_) {}
     }
     return;
   }
