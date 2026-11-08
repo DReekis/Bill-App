@@ -1221,52 +1221,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                               ),
                             ),
-                            const SizedBox(height: 14),
-                            // Google Play Reviewer / Demo Credential Quick-Fill Card
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.verified_user_outlined, size: 18, color: Color(0xFF4F46E5)),
-                                  const SizedBox(width: 10),
-                                  const Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Reviewer / Demo Access',
-                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
-                                        ),
-                                        SizedBox(height: 1),
-                                        Text(
-                                          '9999999999 • OTP: 123456 (Full Pro)',
-                                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  TextButton(
-                                    onPressed: _phoneBusy
-                                        ? null
-                                        : () {
-                                            setState(() {
-                                              _phoneController.text = '9999999999';
-                                            });
-                                          },
-                                    style: TextButton.styleFrom(
-                                      visualDensity: VisualDensity.compact,
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    ),
-                                    child: const Text('Auto-Fill', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                                  ),
-                                ],
-                              ),
-                            ),
+
                           ] else ...[
                             const SizedBox(height: 16),
                             Text(
@@ -1504,52 +1459,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                               ),
                             ),
-                            const SizedBox(height: 14),
-                            // Google Play Reviewer Staff Demo Quick-Fill Card
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.badge_outlined, size: 18, color: Color(0xFF2563EB)),
-                                  const SizedBox(width: 10),
-                                  const Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Staff Demo Access',
-                                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
-                                        ),
-                                        SizedBox(height: 1),
-                                        Text(
-                                          '9999900001 • PIN: 1234 (Cashier)',
-                                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  TextButton(
-                                    onPressed: _staffLookingUp
-                                        ? null
-                                        : () {
-                                            setState(() {
-                                              _staffPhoneController.text = '9999900001';
-                                            });
-                                          },
-                                    style: TextButton.styleFrom(
-                                      visualDensity: VisualDensity.compact,
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    ),
-                                    child: const Text('Auto-Fill', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                                  ),
-                                ],
-                              ),
-                            ),
+
                           ] else ...[
                             // Step 2: Staff Identified, Enter PIN / OTP
                             Container(
