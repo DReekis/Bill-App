@@ -36,10 +36,10 @@ function showToast(message, type = 'success') {
   toast.className = `toast toast-${type}`;
   toast.innerHTML = `
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      ${type === 'success'
-      ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>'
-      : '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>'
-    }
+      ${type === 'success' 
+        ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>' 
+        : '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>'
+      }
     </svg>
     <span>${message}</span>
   `;
@@ -382,7 +382,7 @@ async function pingTelemetry() {
     document.getElementById('sidebar-db-size').textContent = health.database.sizeFormatted;
     document.getElementById('sidebar-pending-sync-badge').textContent =
       health.database.recordCounts.syncQueueItems || 0;
-  } catch { }
+  } catch {}
 }
 
 // ==========================================
@@ -578,17 +578,17 @@ async function renderBusinessesView() {
             </thead>
             <tbody>
               ${businesses.length ? businesses.map((b) => {
-      state.businessesMap[b.id] = b;
-      const rev = (b.totalRevenueCents / 100).toLocaleString('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        maximumFractionDigits: 0,
-      });
-      const statusClass = b.subscriptionStatus === 'active' ? 'status-active'
-        : b.subscriptionStatus === 'trial' ? 'status-trial'
-          : b.subscriptionStatus === 'grace_period' ? 'status-grace' : 'status-expired';
+                state.businessesMap[b.id] = b;
+                const rev = (b.totalRevenueCents / 100).toLocaleString('en-IN', {
+                  style: 'currency',
+                  currency: 'INR',
+                  maximumFractionDigits: 0,
+                });
+                const statusClass = b.subscriptionStatus === 'active' ? 'status-active'
+                  : b.subscriptionStatus === 'trial' ? 'status-trial'
+                  : b.subscriptionStatus === 'grace_period' ? 'status-grace' : 'status-expired';
 
-      return `
+                return `
                   <tr>
                     <td>
                       <span class="table-entity-title">${escapeHtml(b.name)}</span>
@@ -620,7 +620,7 @@ async function renderBusinessesView() {
                     </td>
                   </tr>
                 `;
-    }).join('') : '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No businesses found</td></tr>'}
+              }).join('') : '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No businesses found</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -675,16 +675,16 @@ async function renderSubscriptionsView() {
             </thead>
             <tbody>
               ${businesses.map((b) => {
-      state.businessesMap[b.id] = b;
-      const statusClass = b.subscriptionStatus === 'active' ? 'status-active'
-        : b.subscriptionStatus === 'trial' ? 'status-trial'
-          : b.subscriptionStatus === 'grace_period' ? 'status-grace' : 'status-expired';
+                state.businessesMap[b.id] = b;
+                const statusClass = b.subscriptionStatus === 'active' ? 'status-active'
+                  : b.subscriptionStatus === 'trial' ? 'status-trial'
+                  : b.subscriptionStatus === 'grace_period' ? 'status-grace' : 'status-expired';
 
-      const expiryFormatted = b.subscriptionExpiresAt
-        ? new Date(b.subscriptionExpiresAt).toLocaleDateString()
-        : 'Never (Perpetual)';
+                const expiryFormatted = b.subscriptionExpiresAt 
+                  ? new Date(b.subscriptionExpiresAt).toLocaleDateString() 
+                  : 'Never (Perpetual)';
 
-      return `
+                return `
                   <tr>
                     <td>
                       <span class="table-entity-title">${escapeHtml(b.name)}</span>
@@ -701,7 +701,7 @@ async function renderSubscriptionsView() {
                     </td>
                   </tr>
                 `;
-    }).join('')}
+              }).join('')}
             </tbody>
           </table>
         </div>
@@ -763,8 +763,8 @@ async function renderSyncView() {
             </thead>
             <tbody>
               ${items.length ? items.map((i) => {
-      state.syncItemsMap[i.id] = i;
-      return `
+                state.syncItemsMap[i.id] = i;
+                return `
                 <tr>
                   <td>${new Date(i.createdAt).toLocaleTimeString()}</td>
                   <td><span class="table-entity-title">${escapeHtml(i.business?.name || i.businessId)}</span></td>
@@ -785,7 +785,7 @@ async function renderSyncView() {
                   </td>
                 </tr>
               `;
-    }).join('') : '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No sync records found</td></tr>'}
+              }).join('') : '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No sync records found</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -806,30 +806,30 @@ async function renderSyncView() {
         if (item) openInspectModal(item);
       });
     });
-    const item = JSON.parse(b.getAttribute('data-item'));
-    openInspectModal(item);
-  });
-});
+        const item = JSON.parse(b.getAttribute('data-item'));
+        openInspectModal(item);
+      });
+    });
 
-document.querySelectorAll('.btn-retry-sync').forEach((b) => {
-  b.addEventListener('click', async () => {
-    const id = b.getAttribute('data-id');
-    b.disabled = true;
-    b.textContent = 'Retrying...';
-    try {
-      await api(`/api/v1/admin/sync/retry/${id}`, { method: 'POST' });
-      showToast('Sync item processed successfully!');
-      renderSyncView();
-    } catch (err) {
-      showToast(err.message, 'error');
-      b.disabled = false;
-      b.textContent = 'Retry';
-    }
-  });
-});
+    document.querySelectorAll('.btn-retry-sync').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const id = b.getAttribute('data-id');
+        b.disabled = true;
+        b.textContent = 'Retrying...';
+        try {
+          await api(`/api/v1/admin/sync/retry/${id}`, { method: 'POST' });
+          showToast('Sync item processed successfully!');
+          renderSyncView();
+        } catch (err) {
+          showToast(err.message, 'error');
+          b.disabled = false;
+          b.textContent = 'Retry';
+        }
+      });
+    });
   } catch (err) {
-  mount.innerHTML = `<div class="auth-error-banner">Failed to load sync queue: ${err.message}</div>`;
-}
+    mount.innerHTML = `<div class="auth-error-banner">Failed to load sync queue: ${err.message}</div>`;
+  }
 }
 
 // --- VIEW 5: HEALTH & BACKUPS ---
@@ -1116,7 +1116,7 @@ function openInspectModal(item) {
   let formatted = item.payload;
   try {
     formatted = JSON.stringify(JSON.parse(item.payload), null, 2);
-  } catch { }
+  } catch {}
 
   document.getElementById('inspect-sync-payload').textContent = formatted || 'Empty payload';
 

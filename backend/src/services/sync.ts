@@ -25,7 +25,7 @@ export async function enqueueSync(input: {
         });
         try {
           await processSyncItem(existing.id);
-        } catch { }
+        } catch {}
       }
       return await prisma.syncQueueItem.findUnique({ where: { id: existing.id } }) ?? existing;
     }
@@ -393,7 +393,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) { }
+        } catch (_) {}
       }
       break;
     }
@@ -622,7 +622,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) { }
+        } catch (_) {}
       }
       break;
     }
@@ -680,7 +680,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) { }
+        } catch (_) {}
       }
       break;
     }
@@ -736,7 +736,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) { }
+        } catch (_) {}
       }
       break;
     }
@@ -790,7 +790,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) { }
+        } catch (_) {}
       }
       break;
     }
@@ -845,7 +845,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) { }
+        } catch (_) {}
       }
       break;
     }
@@ -1072,7 +1072,7 @@ export async function pullSyncChanges(businessId: string, since?: string, limit 
         const parts = exp.description.split('<!--ITEMS:');
         payloadObj.description = parts[0].trim() || null;
         payloadObj.items = JSON.parse(parts[1].replace('-->', '').trim());
-      } catch (_) { }
+      } catch (_) {}
     }
     changes.push({
       entity: exp.category === 'Purchase' ? 'purchase' : 'expense',
@@ -1137,7 +1137,7 @@ export async function pullSyncChanges(businessId: string, since?: string, limit 
           currObj.items = prevObj.items;
           c.payload = JSON.stringify(currObj);
         }
-      } catch (_) { }
+      } catch (_) {}
     }
     deduped.set(key, c);
   }
