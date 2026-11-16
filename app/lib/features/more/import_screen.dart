@@ -268,15 +268,31 @@ class _ImportScreenState extends State<ImportScreen> {
             final opBal = parsePaise(getVal(row, 'opening_balance'));
             final limit = parsePaise(getVal(row, 'credit_limit'));
 
-            await Repository.instance.upsertCustomer(Customer(
-              name: name,
-              phone: phone.isNotEmpty ? phone : null,
-              gstin: gstin.isNotEmpty ? gstin : null,
-              billingAddress: addr.isNotEmpty ? addr : null,
-              state: state.isNotEmpty ? state : null,
-              openingBalance: opBal,
-              creditLimit: limit,
-            ));
+            final bizId = Repository.instance.session.businessId!;
+            final existingCustList = await Repository.instance.customers(bizId);
+            final existingCust = existingCustList.where((c) =>
+                c.name.trim().toLowerCase() == name.trim().toLowerCase() ||
+                (phone.isNotEmpty && c.phone != null && c.phone!.trim() == phone.trim())).firstOrNull;
+
+            if (existingCust != null) {
+              if (phone.isNotEmpty) existingCust.phone = phone;
+              if (gstin.isNotEmpty) existingCust.gstin = gstin;
+              if (addr.isNotEmpty) existingCust.billingAddress = addr;
+              if (state.isNotEmpty) existingCust.state = state;
+              if (opBal != 0) existingCust.openingBalance = opBal;
+              if (limit != 0) existingCust.creditLimit = limit;
+              await Repository.instance.upsertCustomer(existingCust);
+            } else {
+              await Repository.instance.upsertCustomer(Customer(
+                name: name,
+                phone: phone.isNotEmpty ? phone : null,
+                gstin: gstin.isNotEmpty ? gstin : null,
+                billingAddress: addr.isNotEmpty ? addr : null,
+                state: state.isNotEmpty ? state : null,
+                openingBalance: opBal,
+                creditLimit: limit,
+              ));
+            }
 
           case ImportEntity.suppliers:
             final phone = getVal(row, 'phone');
@@ -285,28 +301,58 @@ class _ImportScreenState extends State<ImportScreen> {
             final state = getVal(row, 'state');
             final opBal = parsePaise(getVal(row, 'opening_balance'));
 
-            await Repository.instance.upsertSupplier(Supplier(
-              name: name,
-              phone: phone.isNotEmpty ? phone : null,
-              gstin: gstin.isNotEmpty ? gstin : null,
-              address: addr.isNotEmpty ? addr : null,
-              state: state.isNotEmpty ? state : null,
-              openingBalance: opBal,
-            ));
+            final bizId = Repository.instance.session.businessId!;
+            final existingSupList = await Repository.instance.suppliers(bizId);
+            final existingSup = existingSupList.where((s) =>
+                s.name.trim().toLowerCase() == name.trim().toLowerCase() ||
+                (phone.isNotEmpty && s.phone != null && s.phone!.trim() == phone.trim())).firstOrNull;
+
+            if (existingSup != null) {
+              if (phone.isNotEmpty) existingSup.phone = phone;
+              if (gstin.isNotEmpty) existingSup.gstin = gstin;
+              if (addr.isNotEmpty) existingSup.address = addr;
+              if (state.isNotEmpty) existingSup.state = state;
+              if (opBal != 0) existingSup.openingBalance = opBal;
+              await Repository.instance.upsertSupplier(existingSup);
+            } else {
+              await Repository.instance.upsertSupplier(Supplier(
+                name: name,
+                phone: phone.isNotEmpty ? phone : null,
+                gstin: gstin.isNotEmpty ? gstin : null,
+                address: addr.isNotEmpty ? addr : null,
+                state: state.isNotEmpty ? state : null,
+                openingBalance: opBal,
+              ));
+            }
 
           case ImportEntity.openingBalances:
             final type = getVal(row, 'type').toLowerCase();
             final amt = parsePaise(getVal(row, 'amount'));
+            final bizId = Repository.instance.session.businessId!;
             if (type.contains('supp') || type == 'supplier') {
-              await Repository.instance.upsertSupplier(Supplier(
-                name: name,
-                openingBalance: amt,
-              ));
+              final existingSupList = await Repository.instance.suppliers(bizId);
+              final existingSup = existingSupList.where((s) => s.name.trim().toLowerCase() == name.trim().toLowerCase()).firstOrNull;
+              if (existingSup != null) {
+                existingSup.openingBalance = amt;
+                await Repository.instance.upsertSupplier(existingSup);
+              } else {
+                await Repository.instance.upsertSupplier(Supplier(
+                  name: name,
+                  openingBalance: amt,
+                ));
+              }
             } else {
-              await Repository.instance.upsertCustomer(Customer(
-                name: name,
-                openingBalance: amt,
-              ));
+              final existingCustList = await Repository.instance.customers(bizId);
+              final existingCust = existingCustList.where((c) => c.name.trim().toLowerCase() == name.trim().toLowerCase()).firstOrNull;
+              if (existingCust != null) {
+                existingCust.openingBalance = amt;
+                await Repository.instance.upsertCustomer(existingCust);
+              } else {
+                await Repository.instance.upsertCustomer(Customer(
+                  name: name,
+                  openingBalance: amt,
+                ));
+              }
             }
         }
 

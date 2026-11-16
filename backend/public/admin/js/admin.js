@@ -11,7 +11,19 @@ const state = {
   refreshInterval: null,
   searchQuery: '',
   syncFilter: 'all',
+  businessesMap: {},
+  syncItemsMap: {},
 };
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 // ==========================================
 // Toast Notification System
@@ -24,10 +36,10 @@ function showToast(message, type = 'success') {
   toast.className = `toast toast-${type}`;
   toast.innerHTML = `
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      ${type === 'success' 
-        ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>' 
-        : '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>'
-      }
+      ${type === 'success'
+      ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>'
+      : '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>'
+    }
     </svg>
     <span>${message}</span>
   `;
@@ -370,7 +382,7 @@ async function pingTelemetry() {
     document.getElementById('sidebar-db-size').textContent = health.database.sizeFormatted;
     document.getElementById('sidebar-pending-sync-badge').textContent =
       health.database.recordCounts.syncQueueItems || 0;
-  } catch {}
+  } catch { }
 }
 
 // ==========================================
@@ -501,12 +513,12 @@ async function renderOverviewView() {
                 <tr>
                   <td>${new Date(a.createdAt).toLocaleString('en-IN')}</td>
                   <td>
-                    <span class="table-entity-title">${a.actor?.name || 'System Auto'}</span>
-                    <span class="table-entity-sub">${a.actor?.email || 'daemon'}</span>
+                    <span class="table-entity-title">${escapeHtml(a.actor?.name || 'System Auto')}</span>
+                    <span class="table-entity-sub">${escapeHtml(a.actor?.email || 'daemon')}</span>
                   </td>
-                  <td><span class="status-badge status-active">${a.action}</span></td>
-                  <td>${a.entity}</td>
-                  <td>${a.business?.name || 'Global'}</td>
+                  <td><span class="status-badge status-active">${escapeHtml(a.action)}</span></td>
+                  <td>${escapeHtml(a.entity)}</td>
+                  <td>${escapeHtml(a.business?.name || 'Global')}</td>
                 </tr>
               `).join('') : '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No recent audit entries</td></tr>'}
             </tbody>
@@ -566,32 +578,33 @@ async function renderBusinessesView() {
             </thead>
             <tbody>
               ${businesses.length ? businesses.map((b) => {
-                const rev = (b.totalRevenueCents / 100).toLocaleString('en-IN', {
-                  style: 'currency',
-                  currency: 'INR',
-                  maximumFractionDigits: 0,
-                });
-                const statusClass = b.subscriptionStatus === 'active' ? 'status-active'
-                  : b.subscriptionStatus === 'trial' ? 'status-trial'
-                  : b.subscriptionStatus === 'grace_period' ? 'status-grace' : 'status-expired';
+      state.businessesMap[b.id] = b;
+      const rev = (b.totalRevenueCents / 100).toLocaleString('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        maximumFractionDigits: 0,
+      });
+      const statusClass = b.subscriptionStatus === 'active' ? 'status-active'
+        : b.subscriptionStatus === 'trial' ? 'status-trial'
+          : b.subscriptionStatus === 'grace_period' ? 'status-grace' : 'status-expired';
 
-                return `
+      return `
                   <tr>
                     <td>
-                      <span class="table-entity-title">${b.name}</span>
-                      <span class="table-entity-sub">${b.city || 'Not set'}, ${b.state || 'India'}</span>
+                      <span class="table-entity-title">${escapeHtml(b.name)}</span>
+                      <span class="table-entity-sub">${escapeHtml(b.city || 'Not set')}, ${escapeHtml(b.state || 'India')}</span>
                     </td>
                     <td>
-                      <span class="table-entity-title">${b.ownerName || b.owner?.name || 'Owner'}</span>
-                      <span class="table-entity-sub">${b.phone || b.owner?.email || '--'}</span>
+                      <span class="table-entity-title">${escapeHtml(b.ownerName || b.owner?.name || 'Owner')}</span>
+                      <span class="table-entity-sub">${escapeHtml(b.phone || b.owner?.email || '--')}</span>
                     </td>
-                    <td><code>${b.gstin || 'Unregistered'}</code></td>
+                    <td><code>${escapeHtml(b.gstin || 'Unregistered')}</code></td>
                     <td>
-                      <span class="status-badge ${statusClass}">${b.subscriptionTier} (${b.subscriptionStatus})</span>
+                      <span class="status-badge ${escapeHtml(statusClass)}">${escapeHtml(b.subscriptionTier)} (${escapeHtml(b.subscriptionStatus)})</span>
                       <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">Max ${b.maxDevices} devices</div>
                     </td>
                     <td>
-                      <span class="table-entity-title">${rev}</span>
+                      <span class="table-entity-title">${escapeHtml(rev)}</span>
                       <span class="table-entity-sub">${b.counts.invoices} bills</span>
                     </td>
                     <td>${b.counts.customers} parties / ${b.counts.products} items</td>
@@ -601,13 +614,13 @@ async function renderBusinessesView() {
                       </span>
                     </td>
                     <td style="text-align: right;">
-                      <button class="btn btn-sm btn-secondary btn-edit-sub" data-biz='${JSON.stringify(b)}'>
+                      <button class="btn btn-sm btn-secondary btn-edit-sub" data-biz-id="${escapeHtml(b.id)}">
                         License Gate
                       </button>
                     </td>
                   </tr>
                 `;
-              }).join('') : '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No businesses found</td></tr>'}
+    }).join('') : '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No businesses found</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -617,8 +630,9 @@ async function renderBusinessesView() {
     // Wire license gate buttons
     document.querySelectorAll('.btn-edit-sub').forEach((btn) => {
       btn.addEventListener('click', (e) => {
-        const b = JSON.parse(btn.getAttribute('data-biz'));
-        openSubscriptionModal(b);
+        const bizId = btn.getAttribute('data-biz-id');
+        const b = state.businessesMap[bizId];
+        if (b) openSubscriptionModal(b);
       });
     });
   } catch (err) {
@@ -661,32 +675,33 @@ async function renderSubscriptionsView() {
             </thead>
             <tbody>
               ${businesses.map((b) => {
-                const statusClass = b.subscriptionStatus === 'active' ? 'status-active'
-                  : b.subscriptionStatus === 'trial' ? 'status-trial'
-                  : b.subscriptionStatus === 'grace_period' ? 'status-grace' : 'status-expired';
+      state.businessesMap[b.id] = b;
+      const statusClass = b.subscriptionStatus === 'active' ? 'status-active'
+        : b.subscriptionStatus === 'trial' ? 'status-trial'
+          : b.subscriptionStatus === 'grace_period' ? 'status-grace' : 'status-expired';
 
-                const expiryFormatted = b.subscriptionExpiresAt 
-                  ? new Date(b.subscriptionExpiresAt).toLocaleDateString() 
-                  : 'Never (Perpetual)';
+      const expiryFormatted = b.subscriptionExpiresAt
+        ? new Date(b.subscriptionExpiresAt).toLocaleDateString()
+        : 'Never (Perpetual)';
 
-                return `
+      return `
                   <tr>
                     <td>
-                      <span class="table-entity-title">${b.name}</span>
-                      <span class="table-entity-sub">${b.ownerName || 'Owner'}</span>
+                      <span class="table-entity-title">${escapeHtml(b.name)}</span>
+                      <span class="table-entity-sub">${escapeHtml(b.ownerName || 'Owner')}</span>
                     </td>
-                    <td><strong style="text-transform: uppercase; font-size: 0.8rem; color: #FFF;">${b.subscriptionTier}</strong></td>
-                    <td><span class="status-badge ${statusClass}">${b.subscriptionStatus}</span></td>
+                    <td><strong style="text-transform: uppercase; font-size: 0.8rem; color: #FFF;">${escapeHtml(b.subscriptionTier)}</strong></td>
+                    <td><span class="status-badge ${escapeHtml(statusClass)}">${escapeHtml(b.subscriptionStatus)}</span></td>
                     <td>${b.maxDevices} Devices Allowed</td>
                     <td>${expiryFormatted}</td>
                     <td style="text-align: right;">
-                      <button class="btn btn-sm btn-primary btn-edit-sub" data-biz='${JSON.stringify(b)}'>
+                      <button class="btn btn-sm btn-primary btn-edit-sub" data-biz-id="${escapeHtml(b.id)}">
                         Configure License
                       </button>
                     </td>
                   </tr>
                 `;
-              }).join('')}
+    }).join('')}
             </tbody>
           </table>
         </div>
@@ -695,8 +710,9 @@ async function renderSubscriptionsView() {
 
     document.querySelectorAll('.btn-edit-sub').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const b = JSON.parse(btn.getAttribute('data-biz'));
-        openSubscriptionModal(b);
+        const bizId = btn.getAttribute('data-biz-id');
+        const b = state.businessesMap[bizId];
+        if (b) openSubscriptionModal(b);
       });
     });
   } catch (err) {
@@ -746,27 +762,30 @@ async function renderSyncView() {
               </tr>
             </thead>
             <tbody>
-              ${items.length ? items.map((i) => `
+              ${items.length ? items.map((i) => {
+      state.syncItemsMap[i.id] = i;
+      return `
                 <tr>
                   <td>${new Date(i.createdAt).toLocaleTimeString()}</td>
-                  <td><span class="table-entity-title">${i.business?.name || i.businessId}</span></td>
+                  <td><span class="table-entity-title">${escapeHtml(i.business?.name || i.businessId)}</span></td>
                   <td>
-                    <span class="table-entity-title">${i.entity}</span>
-                    <span class="table-entity-sub" style="text-transform: uppercase;">${i.op}</span>
+                    <span class="table-entity-title">${escapeHtml(i.entity)}</span>
+                    <span class="table-entity-sub" style="text-transform: uppercase;">${escapeHtml(i.op)}</span>
                   </td>
-                  <td><code>${i.entityId.substring(0, 16)}...</code></td>
+                  <td><code>${escapeHtml(i.entityId.substring(0, 16))}...</code></td>
                   <td>
                     <span class="status-badge ${i.status === 'synced' ? 'status-active' : i.status === 'pending' ? 'status-grace' : 'status-expired'}">
-                      ${i.status}
+                      ${escapeHtml(i.status)}
                     </span>
                   </td>
                   <td>${i.attempts}</td>
                   <td style="text-align: right;">
-                    <button class="btn btn-sm btn-ghost btn-inspect-sync" data-item='${JSON.stringify(i)}'>Inspect</button>
-                    ${i.status !== 'synced' ? `<button class="btn btn-sm btn-secondary btn-retry-sync" data-id="${i.id}">Retry</button>` : ''}
+                    <button class="btn btn-sm btn-ghost btn-inspect-sync" data-item-id="${escapeHtml(i.id)}">Inspect</button>
+                    ${i.status !== 'synced' ? `<button class="btn btn-sm btn-secondary btn-retry-sync" data-id="${escapeHtml(i.id)}">Retry</button>` : ''}
                   </td>
                 </tr>
-              `).join('') : '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No sync records found</td></tr>'}
+              `;
+    }).join('') : '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No sync records found</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -782,30 +801,35 @@ async function renderSyncView() {
 
     document.querySelectorAll('.btn-inspect-sync').forEach((b) => {
       b.addEventListener('click', () => {
-        const item = JSON.parse(b.getAttribute('data-item'));
-        openInspectModal(item);
+        const itemId = b.getAttribute('data-item-id');
+        const item = state.syncItemsMap[itemId];
+        if (item) openInspectModal(item);
       });
     });
+    const item = JSON.parse(b.getAttribute('data-item'));
+    openInspectModal(item);
+  });
+});
 
-    document.querySelectorAll('.btn-retry-sync').forEach((b) => {
-      b.addEventListener('click', async () => {
-        const id = b.getAttribute('data-id');
-        b.disabled = true;
-        b.textContent = 'Retrying...';
-        try {
-          await api(`/api/v1/admin/sync/retry/${id}`, { method: 'POST' });
-          showToast('Sync item processed successfully!');
-          renderSyncView();
-        } catch (err) {
-          showToast(err.message, 'error');
-          b.disabled = false;
-          b.textContent = 'Retry';
-        }
-      });
-    });
+document.querySelectorAll('.btn-retry-sync').forEach((b) => {
+  b.addEventListener('click', async () => {
+    const id = b.getAttribute('data-id');
+    b.disabled = true;
+    b.textContent = 'Retrying...';
+    try {
+      await api(`/api/v1/admin/sync/retry/${id}`, { method: 'POST' });
+      showToast('Sync item processed successfully!');
+      renderSyncView();
+    } catch (err) {
+      showToast(err.message, 'error');
+      b.disabled = false;
+      b.textContent = 'Retry';
+    }
+  });
+});
   } catch (err) {
-    mount.innerHTML = `<div class="auth-error-banner">Failed to load sync queue: ${err.message}</div>`;
-  }
+  mount.innerHTML = `<div class="auth-error-banner">Failed to load sync queue: ${err.message}</div>`;
+}
 }
 
 // --- VIEW 5: HEALTH & BACKUPS ---
@@ -983,15 +1007,15 @@ async function renderAuditView() {
                 <tr>
                   <td>${new Date(l.createdAt).toLocaleString('en-IN')}</td>
                   <td>
-                    <span class="table-entity-title">${l.actor?.name || 'System Auto'}</span>
-                    <span class="table-entity-sub">${l.actor?.email || 'daemon'}</span>
+                    <span class="table-entity-title">${escapeHtml(l.actor?.name || 'System Auto')}</span>
+                    <span class="table-entity-sub">${escapeHtml(l.actor?.email || 'daemon')}</span>
                   </td>
-                  <td><span class="status-badge status-active">${l.action}</span></td>
-                  <td>${l.entity} (${l.entityId || '--'})</td>
-                  <td>${l.business?.name || 'Global'}</td>
+                  <td><span class="status-badge status-active">${escapeHtml(l.action)}</span></td>
+                  <td>${escapeHtml(l.entity)} (${escapeHtml(l.entityId || '--')})</td>
+                  <td>${escapeHtml(l.business?.name || 'Global')}</td>
                   <td>
                     <code style="font-size: 0.72rem; max-width: 320px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                      ${l.after || l.before || 'No diff'}
+                      ${escapeHtml(l.after || l.before || 'No diff')}
                     </code>
                   </td>
                 </tr>
@@ -1092,7 +1116,7 @@ function openInspectModal(item) {
   let formatted = item.payload;
   try {
     formatted = JSON.stringify(JSON.parse(item.payload), null, 2);
-  } catch {}
+  } catch { }
 
   document.getElementById('inspect-sync-payload').textContent = formatted || 'Empty payload';
 

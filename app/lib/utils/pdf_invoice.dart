@@ -25,14 +25,11 @@ enum InvoicePaperSize {
   final PdfPageFormat format;
 }
 
-String getBusinessUpiId(Business business) {
+String? getBusinessUpiId(Business business) {
   if (business.upiId != null && business.upiId!.trim().isNotEmpty) {
     return business.upiId!.trim();
   }
-  if (business.displayInvoicePhone.isNotEmpty) {
-    return '${business.displayInvoicePhone}@upi';
-  }
-  return 'merchant@upi';
+  return null;
 }
 
 String getEffectiveBusinessName(Business business, [InvoiceCustomizationSettings? customSettings]) {
@@ -43,13 +40,16 @@ String getEffectiveBusinessName(Business business, [InvoiceCustomizationSettings
   return business.name;
 }
 
-String generateUpiPaymentUri({
+String? generateUpiPaymentUri({
   required Business business,
   required String invoiceNumber,
   required int amountPaise,
   InvoiceCustomizationSettings? customSettings,
 }) {
   final vpa = getBusinessUpiId(business);
+  if (vpa == null || amountPaise <= 0) {
+    return null;
+  }
   final payeeName = Uri.encodeComponent(getEffectiveBusinessName(business, customSettings).trim());
   final amount = (amountPaise / 100).toStringAsFixed(2);
   final note = Uri.encodeComponent('Invoice $invoiceNumber');
@@ -524,11 +524,21 @@ Future<Uint8List> buildDocumentPdf({
   }
   final hsnBreakupList = hsnMap.values.toList();
 
-  final upiUri = generateUpiPaymentUri(
-    business: business,
-    invoiceNumber: number,
-    amountPaise: total,
-  );
+  final bool shouldShowUpiQr = customSettings.showUpiQr &&
+      !isDeliveryChallan &&
+      !isReturnNote &&
+      !isPurchaseBill &&
+      !isPurchaseOrder &&
+      outstandingPaise > 0;
+
+  final upiUri = shouldShowUpiQr
+      ? generateUpiPaymentUri(
+          business: business,
+          invoiceNumber: number,
+          amountPaise: outstandingPaise,
+          customSettings: customSettings,
+        )
+      : null;
 
   // Compute robust table column widths and alignments based on active columns
   int colIdx = 0;
@@ -1953,7 +1963,8 @@ Future<Uint8List> buildDocumentPdf({
               !isPurchaseBill &&
               !isPurchaseOrder &&
               !isDeliveryChallan &&
-              !isDebitNote;
+              !isDebitNote &&
+              upiUri != null;
           final hasBankOrQr = hasBank || hasQr;
 
           final effectiveChallanTerms = isDeliveryChallan

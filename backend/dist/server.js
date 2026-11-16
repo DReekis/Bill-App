@@ -1151,23 +1151,41 @@ app.post('/api/v1/sync/push', async (request, reply) => {
             return reply.code(400).send({ error: 'Invalid batch sync payload', details: parsed.error.issues });
         }
         const records = [];
+        let hasFailure = false;
+        let failureMsg = '';
         for (const item of parsed.data) {
             const resolvedBizId = await resolveBusinessIdForSync(request, item.businessId);
             const rec = await enqueueSync({ ...item, businessId: resolvedBizId });
+            if (rec.status === 'failed') {
+                hasFailure = true;
+                failureMsg = rec.lastError || `Failed to process sync item for ${rec.entity}:${rec.entityId}`;
+            }
             records.push(rec);
         }
-        return reply.code(202).send({ accepted: true, count: records.length, records });
+        if (hasFailure) {
+            return reply.code(422).send({ error: failureMsg, count: records.length, records });
+        }
+        return reply.code(200).send({ accepted: true, count: records.length, records });
     }
     // 2. Object batch payload: { items: [ {...}, {...} ] }
     const batchParsed = batchSchema.safeParse(rawBody);
     if (batchParsed.success) {
         const records = [];
+        let hasFailure = false;
+        let failureMsg = '';
         for (const item of batchParsed.data.items) {
             const resolvedBizId = await resolveBusinessIdForSync(request, item.businessId);
             const rec = await enqueueSync({ ...item, businessId: resolvedBizId });
+            if (rec.status === 'failed') {
+                hasFailure = true;
+                failureMsg = rec.lastError || `Failed to process sync item for ${rec.entity}:${rec.entityId}`;
+            }
             records.push(rec);
         }
-        return reply.code(202).send({ accepted: true, count: records.length, records });
+        if (hasFailure) {
+            return reply.code(422).send({ error: failureMsg, count: records.length, records });
+        }
+        return reply.code(200).send({ accepted: true, count: records.length, records });
     }
     // 3. Single record payload fallback
     const parsed = queueItemSchema.safeParse(rawBody);
@@ -1183,7 +1201,10 @@ app.post('/api/v1/sync/push', async (request, reply) => {
         payload: parsed.data.payload ?? null,
         idempotencyKey: parsed.data.idempotencyKey ?? null,
     });
-    return reply.code(202).send({ accepted: true, record, records: [record] });
+    if (record.status === 'failed') {
+        return reply.code(422).send({ error: record.lastError || `Failed to process sync for ${record.entity}:${record.entityId}`, record, records: [record] });
+    }
+    return reply.code(200).send({ accepted: true, record, records: [record] });
 });
 // Sync Pull (Delta cursor)
 app.get('/api/v1/sync/pull', async (request, reply) => {

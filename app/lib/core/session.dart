@@ -494,19 +494,38 @@ class Session extends ChangeNotifier {
   Future<void> deleteBusinessData(int targetBusinessId) async {
     final db = await AppDatabase.instance.database;
     await db.transaction((txn) async {
-      await txn.delete('invoices', where: 'business_id = ?', whereArgs: [targetBusinessId]);
-      await txn.delete('invoice_items', where: 'invoice_id NOT IN (SELECT id FROM invoices)');
-      await txn.delete('customers', where: 'business_id = ?', whereArgs: [targetBusinessId]);
-      await txn.delete('suppliers', where: 'business_id = ?', whereArgs: [targetBusinessId]);
-      await txn.delete('products', where: 'business_id = ?', whereArgs: [targetBusinessId]);
-      await txn.delete('payments', where: 'business_id = ?', whereArgs: [targetBusinessId]);
-      await txn.delete('expenses', where: 'business_id = ?', whereArgs: [targetBusinessId]);
-      await txn.delete('bank_accounts', where: 'business_id = ?', whereArgs: [targetBusinessId]);
-      await txn.delete('cheques', where: 'business_id = ?', whereArgs: [targetBusinessId]);
-      await txn.delete('ledger_entries', where: 'business_id = ?', whereArgs: [targetBusinessId]);
-      await txn.delete('sync_queue', where: 'business_id = ?', whereArgs: [targetBusinessId]);
-      await txn.delete('audit_logs', where: 'business_id = ?', whereArgs: [targetBusinessId]);
-      await txn.delete('businesses', where: 'id = ?', whereArgs: [targetBusinessId]);
+      Future<void> safeDelete(String table, String where, List<Object?> args) async {
+        try {
+          await txn.delete(table, where: where, whereArgs: args);
+        } catch (_) {}
+      }
+
+      await safeDelete('invoice_items', 'invoice_id IN (SELECT id FROM invoices WHERE business_id = ?)', [targetBusinessId]);
+      await safeDelete('invoices', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('quotation_items', 'quotation_id IN (SELECT id FROM quotations WHERE business_id = ?)', [targetBusinessId]);
+      await safeDelete('quotations', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('return_items', 'return_id IN (SELECT id FROM returns WHERE business_id = ?)', [targetBusinessId]);
+      await safeDelete('returns', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('sales_order_items', 'order_id IN (SELECT id FROM sales_orders WHERE business_id = ?)', [targetBusinessId]);
+      await safeDelete('sales_orders', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('purchase_order_items', 'order_id IN (SELECT id FROM purchase_orders WHERE business_id = ?)', [targetBusinessId]);
+      await safeDelete('purchase_orders', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('delivery_challan_items', 'challan_id IN (SELECT id FROM delivery_challans WHERE business_id = ?)', [targetBusinessId]);
+      await safeDelete('delivery_challans', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('stock_moves', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('customers', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('suppliers', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('products', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('payments', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('expenses', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('bank_accounts', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('cheques', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('ledger', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('sync_queue', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('audit_log', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('staff_members', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('invoice_customization_settings', 'business_id = ?', [targetBusinessId]);
+      await safeDelete('businesses', 'id = ?', [targetBusinessId]);
     });
     await logout();
   }

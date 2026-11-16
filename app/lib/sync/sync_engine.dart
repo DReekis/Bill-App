@@ -215,19 +215,31 @@ class SyncEngine extends ChangeNotifier {
       final pullBizId = (cloudBizId != null && cloudBizId.isNotEmpty) ? cloudBizId : session.businessId?.toString();
       if (pullBizId != null) {
         final prefs = await SharedPreferences.getInstance();
-        final lastSyncIso = prefs.getString(_kLastSyncTimeKey);
+        var currentSince = prefs.getString(_kLastSyncTimeKey);
 
-        final pullResult = await _service.pull(pullBizId, since: lastSyncIso);
-        final changes = pullResult['changes'] as List<Map<String, dynamic>>;
+        while (true) {
+          final pullResult = await _service.pull(pullBizId, since: currentSince, limit: 100);
+          final changes = pullResult['changes'] as List<Map<String, dynamic>>;
+          if (changes.isEmpty) {
+            final serverTime = pullResult['serverTime'] as String?;
+            if (serverTime != null) {
+              await prefs.setString(_kLastSyncTimeKey, serverTime);
+            }
+            break;
+          }
 
-        for (final change in changes) {
-          await Repository.instance.reconcileRemoteChange(change);
-          pulledCount++;
-        }
+          for (final change in changes) {
+            await Repository.instance.reconcileRemoteChange(change);
+            pulledCount++;
+          }
 
-        final serverTime = pullResult['serverTime'] as String?;
-        if (serverTime != null) {
-          await prefs.setString(_kLastSyncTimeKey, serverTime);
+          final serverTime = pullResult['serverTime'] as String?;
+          if (serverTime != null) {
+            await prefs.setString(_kLastSyncTimeKey, serverTime);
+            currentSince = serverTime;
+          }
+
+          if (changes.length < 100) break;
         }
       }
 

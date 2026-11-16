@@ -255,7 +255,14 @@ class _GstCenterScreenState extends State<GstCenterScreen> {
                           ),
                           onPressed: () => Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => Gstr3bScreen(summary: s, period: periodLabel)),
+                            MaterialPageRoute(
+                              builder: (_) => Gstr3bScreen(
+                                summary: s,
+                                period: periodLabel,
+                                fromDate: fromDate,
+                                toDate: toDate,
+                              ),
+                            ),
                           ),
                           child: const Text('Review 3B', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                         ),
@@ -475,7 +482,12 @@ class _GstCenterScreenState extends State<GstCenterScreen> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => Gstr3bScreen(summary: s, period: periodLabel),
+                            builder: (_) => Gstr3bScreen(
+                              summary: s,
+                              period: periodLabel,
+                              fromDate: fromDate,
+                              toDate: toDate,
+                            ),
                           ),
                         ),
                         onExport: () => _openExport(GstReturnType.gstr3b),

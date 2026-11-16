@@ -659,20 +659,34 @@ class InvoiceLine {
         unit: map['unit'] as String?,
       );
 
-  InvoiceLine copyWith({double? quantity}) => InvoiceLine(
-        productId: productId,
-        name: name,
-        hsn: hsn,
-        gstRate: gstRate,
+  InvoiceLine copyWith({
+    int? productId,
+    String? name,
+    String? hsn,
+    int? gstRate,
+    double? quantity,
+    int? price,
+    int? discount,
+    double? discountPercent,
+    int? taxable,
+    int? tax,
+    String? unit,
+    String? batchNumber,
+    String? serialNumber,
+  }) => InvoiceLine(
+        productId: productId ?? this.productId,
+        name: name ?? this.name,
+        hsn: hsn ?? this.hsn,
+        gstRate: gstRate ?? this.gstRate,
         quantity: quantity ?? this.quantity,
-        price: price,
-        discount: discount,
-        discountPercent: discountPercent,
-        taxable: taxable,
-        tax: tax,
-        unit: unit,
-        batchNumber: batchNumber,
-        serialNumber: serialNumber,
+        price: price ?? this.price,
+        discount: discount ?? this.discount,
+        discountPercent: discountPercent ?? this.discountPercent,
+        taxable: taxable ?? this.taxable,
+        tax: tax ?? this.tax,
+        unit: unit ?? this.unit,
+        batchNumber: batchNumber ?? this.batchNumber,
+        serialNumber: serialNumber ?? this.serialNumber,
       );
 }
 

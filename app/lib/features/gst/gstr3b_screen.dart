@@ -14,10 +14,14 @@ class Gstr3bScreen extends StatefulWidget {
     super.key,
     this.summary,
     this.period = 'Current Month',
+    this.fromDate,
+    this.toDate,
   });
 
   final GstTaxSummary? summary;
   final String period;
+  final DateTime? fromDate;
+  final DateTime? toDate;
 
   @override
   State<Gstr3bScreen> createState() => _Gstr3bScreenState();
@@ -41,7 +45,28 @@ class _Gstr3bScreenState extends State<Gstr3bScreen> {
 
     try {
       final b = await Repository.instance.getBusiness(bizId);
-      final s = await Repository.instance.getGstr3bData(bizId, period: widget.period);
+      DateTime? from = widget.fromDate;
+      DateTime? to = widget.toDate;
+      if (from == null && to == null) {
+        final now = DateTime.now();
+        if (widget.period == 'This Month' || widget.period == 'Current Month') {
+          from = DateTime(now.year, now.month, 1);
+          to = DateTime(now.year, now.month + 1, 0);
+        } else if (widget.period == 'Last Month') {
+          from = DateTime(now.year, now.month - 1, 1);
+          to = DateTime(now.year, now.month, 0);
+        } else if (widget.period == 'This Quarter') {
+          final qStartMonth = ((now.month - 1) ~/ 3) * 3 + 1;
+          from = DateTime(now.year, qStartMonth, 1);
+          to = DateTime(now.year, qStartMonth + 3, 0);
+        }
+      }
+      final s = await Repository.instance.getGstr3bData(
+        bizId,
+        period: widget.period,
+        from: from,
+        to: to,
+      );
       if (!mounted) return;
       setState(() {
         business = b;

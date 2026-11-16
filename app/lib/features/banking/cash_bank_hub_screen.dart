@@ -447,10 +447,22 @@ class _CashBankHubScreenState extends State<CashBankHubScreen> with SingleTicker
                           return;
                         }
 
+                        int? resolvedPartyId;
+                        if (type == 'inward') {
+                          final custList = await Repository.instance.customers(bizId);
+                          final match = custList.where((c) => c.name.trim().toLowerCase() == party.toLowerCase()).firstOrNull;
+                          if (match != null) resolvedPartyId = match.id;
+                        } else {
+                          final supList = await Repository.instance.suppliers(bizId);
+                          final match = supList.where((s) => s.name.trim().toLowerCase() == party.toLowerCase()).firstOrNull;
+                          if (match != null) resolvedPartyId = match.id;
+                        }
+
                         final chq = Cheque(
                           businessId: bizId,
                           chequeNumber: no,
                           partyType: type == 'inward' ? 'customer' : 'supplier',
+                          partyId: resolvedPartyId,
                           partyName: party,
                           amount: amtPaise,
                           date: isoDate(DateTime.now()),

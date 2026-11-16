@@ -26,7 +26,7 @@ void main() {
       expect(uri, contains('tn=Invoice%20INV-001'));
     });
 
-    test('generateUpiPaymentUri falls back to phone@upi when upiId is missing', () {
+    test('generateUpiPaymentUri returns null when upiId is missing to prevent payment errors', () {
       final biz = Business(
         id: 2,
         name: 'Patel Electronics',
@@ -39,8 +39,7 @@ void main() {
         amountPaise: 129900, // Rs. 1299.00
       );
 
-      expect(uri, contains('pa=9123456780@upi'));
-      expect(uri, contains('am=1299.00'));
+      expect(uri, isNull);
     });
 
     test('getBusinessUpiId returns trimmed upiId if present', () {

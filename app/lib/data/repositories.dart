@@ -799,7 +799,7 @@ class Repository {
     final db = await _database;
     final businessId = session.businessId;
     if (businessId == null) return;
-    final newQty = (product.stock + change).round();
+    final newQty = (product.stock + change);
 
     final updates = <String, Object?>{'stock': newQty};
 
@@ -867,7 +867,7 @@ class Repository {
       'ref_id': refId,
       'date': todayIso(),
     });
-    product.stock = newQty;
+    product.stock = newQty.round();
     if (product.id != null) {
       await _enqueueSync(
         businessId,
@@ -1090,7 +1090,7 @@ class Repository {
         if (!allowNegative && next < 0) {
           throw StateError('Not enough stock for ${line.name} — only ${_qty(current)} in stock');
         }
-        await txn.update('products', {'stock': next.round()},
+        await txn.update('products', {'stock': next},
             where: 'id = ?', whereArgs: [line.productId]);
         await txn.insert('stock_moves', {
           'business_id': businessId,
@@ -1447,7 +1447,7 @@ class Repository {
           throw StateError(
               'Not enough stock for ${line.name} — only ${_qty(current)} in stock');
         }
-        await txn.update('products', {'stock': next.round()},
+        await txn.update('products', {'stock': next},
             where: 'id = ?', whereArgs: [line.productId]);
         await txn.insert('stock_moves', {
           'business_id': businessId,
@@ -3330,11 +3330,12 @@ class Repository {
 
     for (final acc in accounts) {
       final balRows = await db.rawQuery(
-        "SELECT COALESCE(SUM(debit - credit), 0) AS balance FROM ledger WHERE business_id = ? AND account = ?",
+        "SELECT COUNT(*) AS count, COALESCE(SUM(debit - credit), 0) AS balance FROM ledger WHERE business_id = ? AND account = ?",
         [businessId, 'bank:${acc.id}'],
       );
+      final count = balRows.isEmpty ? 0 : (balRows.first['count'] as num).toInt();
       var bal = balRows.isEmpty ? 0 : (balRows.first['balance'] as num).toInt();
-      if (bal == 0 && acc.openingBalance != 0) {
+      if (count == 0 && acc.openingBalance != 0) {
         bal = acc.openingBalance;
       }
       accountsWithBalance.add(BankAccountWithBalance(account: acc, currentBalance: bal));
@@ -3448,8 +3449,27 @@ class Repository {
     bool isBounce = false,
     String? reason,
   }) async {
+    int? resolvedPartyId = cheque.partyId;
+    if (resolvedPartyId == null || resolvedPartyId == 0) {
+      if (cheque.partyName != null && cheque.partyName!.trim().isNotEmpty) {
+        final table = cheque.partyType == 'supplier' ? 'suppliers' : 'customers';
+        final match = await db.query(
+          table,
+          where: 'business_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))',
+          whereArgs: [bizId, cheque.partyName!.trim()],
+          limit: 1,
+        );
+        if (match.isNotEmpty) {
+          resolvedPartyId = match.first['id'] as int?;
+          await db.update('cheques', {'party_id': resolvedPartyId}, where: 'id = ?', whereArgs: [chequeId]);
+        }
+      }
+    }
+
     final bankAccount = cheque.bankAccountId != null ? 'bank:${cheque.bankAccountId}' : 'bank';
-    final partyAccount = cheque.partyType == 'supplier' ? 'supplier:${cheque.partyId ?? 0}' : 'customer:${cheque.partyId ?? 0}';
+    final partyAccount = cheque.partyType == 'supplier'
+        ? (resolvedPartyId != null && resolvedPartyId > 0 ? 'supplier:$resolvedPartyId' : 'supplier:0')
+        : (resolvedPartyId != null && resolvedPartyId > 0 ? 'customer:$resolvedPartyId' : 'customer:0');
     final date = cheque.clearingDate ?? cheque.date;
 
     if (isClear) {
@@ -3745,9 +3765,11 @@ class Repository {
   }
 
   Future<int> convertQuotationToInvoice(int quotationId, {String? invoiceNumber}) async {
+    final db = await _database;
     final bizId = session.businessId!;
     final q = await quotation(bizId, quotationId);
     if (q == null) throw StateError('Quotation not found');
+    if (q.status == 'Converted') throw StateError('Quotation has already been converted to an invoice.');
     final biz = await getBusiness(bizId);
     if (biz == null) throw StateError('Business not found');
 
@@ -3775,6 +3797,32 @@ class Repository {
       customerState: cust?.state,
     );
 
+    if (cust != null && cust.creditLimit > 0) {
+      final curBal = await customerBalance(bizId, cust.id!);
+      final newTotal = curBal + quoteResult.total.paise;
+      if (newTotal > cust.creditLimit) {
+        throw StateError('Cannot convert: Customer credit limit of ₹${cust.creditLimit ~/ 100} exceeded (Outstanding: ₹${curBal ~/ 100}, Invoice: ₹${quoteResult.total.paise ~/ 100}).');
+      }
+    }
+
+    final invoiceLines = <InvoiceLine>[];
+    for (final l in q.lines) {
+      String? hsn = l.hsn;
+      if (hsn == null && l.productId != null) {
+        final pRows = await db.query('products', where: 'id = ?', whereArgs: [l.productId], limit: 1);
+        if (pRows.isNotEmpty) {
+          hsn = pRows.first['hsn'] as String?;
+        }
+      }
+      final lineTaxable = l.taxable > 0 ? l.taxable : (l.price * l.quantity).round();
+      final lineTax = l.tax > 0 ? l.tax : (lineTaxable * l.gstRate / 100).round();
+      invoiceLines.add(l.copyWith(
+        hsn: hsn,
+        taxable: lineTaxable,
+        tax: lineTax,
+      ));
+    }
+
     final invoiceId = await finalizeSale(
       businessId: bizId,
       number: number,
@@ -3786,7 +3834,7 @@ class Repository {
           : null,
       gstType: quoteResult.intraState ? 'intra' : 'inter',
       quote: quoteResult,
-      lines: q.lines,
+      lines: invoiceLines,
       amountPaid: 0,
       notes: 'Converted from Quotation ${q.number}',
     );
@@ -3800,6 +3848,7 @@ class Repository {
     final bizId = session.businessId!;
     final so = await salesOrder(bizId, orderId);
     if (so == null) throw StateError('Sales order not found');
+    if (so.status == 'Converted') throw StateError('Sales order has already been converted to an invoice.');
     final biz = await getBusiness(bizId);
     if (biz == null) throw StateError('Business not found');
 
@@ -3815,12 +3864,16 @@ class Repository {
 
     for (final l in so.lines) {
       int gstRate = 0;
+      String? hsn = l.hsn;
       if (l.productId != null) {
         final pRows = await db.query('products', where: 'id = ?', whereArgs: [l.productId], limit: 1);
         if (pRows.isNotEmpty) {
           gstRate = (pRows.first['gst_rate'] as num?)?.toInt() ?? 0;
+          hsn = pRows.first['hsn'] as String? ?? hsn;
         }
       }
+      final lineTaxable = (l.price * l.quantity).round();
+      final lineTax = (lineTaxable * gstRate / 100).round();
       lineInputs.add(LineCalcInput(
         quantity: l.quantity,
         price: l.price,
@@ -3832,7 +3885,10 @@ class Repository {
         quantity: l.quantity,
         price: l.price,
         gstRate: gstRate,
-        taxable: (l.price * l.quantity).round(),
+        taxable: lineTaxable,
+        tax: lineTax,
+        hsn: hsn,
+        unit: l.unit,
       ));
     }
 
@@ -3844,6 +3900,14 @@ class Repository {
       businessState: biz.state,
       customerState: cust?.state,
     );
+
+    if (cust != null && cust.creditLimit > 0) {
+      final curBal = await customerBalance(bizId, cust.id!);
+      final newTotal = curBal + quoteResult.total.paise;
+      if (newTotal > cust.creditLimit) {
+        throw StateError('Cannot convert: Customer credit limit of ₹${cust.creditLimit ~/ 100} exceeded (Outstanding: ₹${curBal ~/ 100}, Invoice: ₹${quoteResult.total.paise ~/ 100}).');
+      }
+    }
 
     final invoiceId = await finalizeSale(
       businessId: bizId,
@@ -3874,6 +3938,7 @@ class Repository {
     final bizId = session.businessId!;
     final dc = await deliveryChallan(bizId, challanId);
     if (dc == null) throw StateError('Delivery challan not found');
+    if (dc.status == 'Converted') throw StateError('Delivery challan has already been converted to an invoice.');
     final biz = await getBusiness(bizId);
     if (biz == null) throw StateError('Business not found');
 
@@ -3890,6 +3955,7 @@ class Repository {
     for (final l in dc.lines) {
       int price = l.price;
       int gstRate = 0;
+      String? hsn = l.hsn;
       if (l.productId != null) {
         final pRows = await db.query('products', where: 'id = ?', whereArgs: [l.productId], limit: 1);
         if (pRows.isNotEmpty) {
@@ -3897,8 +3963,11 @@ class Repository {
             price = (pRows.first['sale_price'] as num?)?.toInt() ?? 0;
           }
           gstRate = (pRows.first['gst_rate'] as num?)?.toInt() ?? 0;
+          hsn = pRows.first['hsn'] as String? ?? hsn;
         }
       }
+      final lineTaxable = (price * l.quantity).round();
+      final lineTax = (lineTaxable * gstRate / 100).round();
       lineInputs.add(LineCalcInput(
         quantity: l.quantity,
         price: price,
@@ -3910,7 +3979,10 @@ class Repository {
         quantity: l.quantity,
         price: price,
         gstRate: gstRate,
-        taxable: (price * l.quantity).round(),
+        taxable: lineTaxable,
+        tax: lineTax,
+        hsn: hsn,
+        unit: l.unit,
       ));
     }
 
@@ -3922,6 +3994,14 @@ class Repository {
       businessState: biz.state,
       customerState: cust?.state,
     );
+
+    if (cust != null && cust.creditLimit > 0) {
+      final curBal = await customerBalance(bizId, cust.id!);
+      final newTotal = curBal + quoteResult.total.paise;
+      if (newTotal > cust.creditLimit) {
+        throw StateError('Cannot convert: Customer credit limit of ₹${cust.creditLimit ~/ 100} exceeded (Outstanding: ₹${curBal ~/ 100}, Invoice: ₹${quoteResult.total.paise ~/ 100}).');
+      }
+    }
 
     final invoiceId = await finalizeSale(
       businessId: bizId,
@@ -4454,8 +4534,8 @@ class Repository {
           whereArgs: [bizId, sku ?? '', barcode ?? '', name],
           limit: 1,
         );
-        final remoteStock = _safeDouble(data['stock'])?.round() ?? 0;
-        final map = {
+        final remoteStock = _safeDouble(data['stock']) ?? 0.0;
+        final map = <String, Object?>{
           'business_id': bizId,
           'name': name,
           'sku': sku,
@@ -4468,29 +4548,40 @@ class Repository {
           'gst_rate': _safeInt(data['gstRate'] ?? data['gst_rate']) ?? 0,
         };
         if (existing.isNotEmpty) {
-          final currentStock = (existing.first['stock'] as num?)?.toInt() ?? 0;
-          final delta = remoteStock - currentStock;
-          if (delta != 0) {
-            await db.insert('stock_moves', {
-              'business_id': bizId,
-              'product_id': existing.first['id'],
-              'change_qty': delta.toDouble(),
-              'qty_after': remoteStock.toDouble(),
-              'move_type': 'cloud_delta',
-              'ref_type': 'sync',
-              'date': todayIso(),
-            });
+          final existingId = existing.first['id'] as int;
+          final currentStock = (existing.first['stock'] as num?)?.toDouble() ?? 0.0;
+          final pendingLocal = await db.rawQuery(
+            "SELECT COUNT(*) as c FROM sync_queue WHERE business_id = ? AND status = 'pending' AND ((entity = 'product' AND entity_id = ?) OR entity = 'invoice' OR entity = 'stock_move')",
+            [bizId, existingId],
+          );
+          final hasPending = (pendingLocal.first['c'] as int? ?? 0) > 0;
+          if (hasPending) {
+            // Keep local stock; do not revert to older remote snapshot while local changes are pending
+            map['stock'] = currentStock;
+          } else {
+            final delta = remoteStock - currentStock;
+            if (delta.abs() > 0.0001) {
+              await db.insert('stock_moves', {
+                'business_id': bizId,
+                'product_id': existingId,
+                'change_qty': delta,
+                'qty_after': remoteStock,
+                'move_type': 'cloud_delta',
+                'ref_type': 'sync',
+                'date': todayIso(),
+              });
+            }
           }
           await db.update('products', map,
-              where: 'id = ?', whereArgs: [existing.first['id']]);
+              where: 'id = ?', whereArgs: [existingId]);
         } else {
           final prodId = await db.insert('products', map);
           if (remoteStock != 0) {
             await db.insert('stock_moves', {
               'business_id': bizId,
               'product_id': prodId,
-              'change_qty': remoteStock.toDouble(),
-              'qty_after': remoteStock.toDouble(),
+              'change_qty': remoteStock,
+              'qty_after': remoteStock,
               'move_type': 'opening',
               'ref_type': 'sync',
               'date': todayIso(),
@@ -4506,9 +4597,9 @@ class Repository {
         if (prodId != null) {
           final prodRows = await db.query('products', where: 'id = ? AND business_id = ?', whereArgs: [prodId, bizId], limit: 1);
           if (prodRows.isNotEmpty) {
-            final current = (prodRows.first['stock'] as num?)?.toDouble() ?? 0;
+            final current = (prodRows.first['stock'] as num?)?.toDouble() ?? 0.0;
             final updated = current + changeQty;
-            await db.update('products', {'stock': updated.round()}, where: 'id = ?', whereArgs: [prodId]);
+            await db.update('products', {'stock': updated}, where: 'id = ?', whereArgs: [prodId]);
             await db.insert('stock_moves', {
               'business_id': bizId,
               'product_id': prodId,
@@ -5633,8 +5724,22 @@ class Repository {
       [businessId],
     );
     int itcFromLedger = itcRows.isEmpty ? 0 : (itcRows.first['itc'] as num).toInt();
-    if (itcFromLedger == 0 && totalPurchasesTaxable > 0) {
-      itcFromLedger = (totalPurchasesTaxable * 0.18).round();
+    if (itcFromLedger == 0) {
+      final pTaxRows = await db.rawQuery('''
+        SELECT COALESCE(SUM(
+          CASE 
+            WHEN pi.tax > 100 THEN pi.tax 
+            WHEN pi.tax > 0 THEN (pi.taxable * pi.tax / 100)
+            ELSE 0 
+          END
+        ), 0) AS real_itc
+        FROM purchase_items pi
+        JOIN expenses e ON pi.purchase_id = e.id
+        WHERE e.business_id = ? AND e.category = 'Purchase'
+        ${fromDate != null ? "AND e.date >= '$fromDate'" : ''}
+        ${toDate != null ? "AND e.date <= '$toDate'" : ''}
+      ''', [businessId]);
+      itcFromLedger = pTaxRows.isEmpty ? 0 : (pTaxRows.first['real_itc'] as num).toInt();
     }
 
     final totalInputCgst = itcFromLedger ~/ 2;
@@ -5722,17 +5827,27 @@ class Repository {
         exp.add(r);
       } else if (gstin.length >= 15) {
         b2b.add(r);
-      } else if (igst > 0 && total > 25000000) {
+      } else if (igst > 0 && total > 10000000) {
         b2cl.add(r);
       } else {
         b2cs.add(r);
       }
     }
 
+    final retWhere = <String>["business_id = ? AND party_type = 'customer'"];
+    final retArgs = <Object?>[businessId];
+    if (fromDate != null) {
+      retWhere.add('date >= ?');
+      retArgs.add(fromDate);
+    }
+    if (toDate != null) {
+      retWhere.add('date <= ?');
+      retArgs.add(toDate);
+    }
     final retRows = await db.query(
       'returns',
-      where: 'business_id = ? AND party_type = \'customer\'',
-      whereArgs: [businessId],
+      where: retWhere.join(' AND '),
+      whereArgs: retArgs,
     );
 
     Gstr1Section buildSection(String code, String title, String subtitle, List<Map<String, dynamic>> list) {
@@ -5765,7 +5880,7 @@ class Repository {
 
     return [
       buildSection('B2B', '4A, 4B, 6B, 6C - B2B Invoices', 'Registered business clients with GSTIN', b2b),
-      buildSection('B2CL', '5A, 5B - B2C Large Invoices', 'Inter-state unregistered supplies > ₹2.5 Lakh', b2cl),
+      buildSection('B2CL', '5A, 5B - B2C Large Invoices', 'Inter-state unregistered supplies > ₹1 Lakh', b2cl),
       buildSection('EXP', '6A, 6B - Export Invoices', 'Exports under LUT/bond or with tax payment & SEZ supplies', exp),
       buildSection('B2CS', '7 - B2C Small Invoices', 'Intra-state & small inter-state retail supplies', b2cs),
       buildSection('CDNR', '9B - Credit / Debit Notes', 'Registered & unregistered sales returns/refunds', retRows),
@@ -5836,109 +5951,99 @@ class Repository {
 
   Future<List<Gstr2bEntry>> getGstr2bData(int businessId, {DateTime? from, DateTime? to}) async {
     final db = await _database;
+    final where = <String>['business_id = ?', "category = 'Purchase'"];
+    final args = <Object?>[businessId];
+    if (from != null) {
+      where.add('date >= ?');
+      args.add(isoDate(from));
+    }
+    if (to != null) {
+      where.add('date <= ?');
+      args.add(isoDate(to));
+    }
+
     final expRows = await db.query(
       'expenses',
-      where: 'business_id = ? AND category = \'Purchase\'',
-      whereArgs: [businessId],
+      where: where.join(' AND '),
+      whereArgs: args,
       orderBy: 'date DESC',
     );
+
+    final supplierList = await suppliers(businessId);
+    final supplierMap = <String, Supplier>{};
+    for (final s in supplierList) {
+      supplierMap[s.name.trim().toLowerCase()] = s;
+    }
+
+    final biz = await getBusiness(businessId);
+    final bizState = biz?.state?.trim().toLowerCase() ?? '';
 
     final List<Gstr2bEntry> entries = [];
     int idx = 1;
     for (final exp in expRows) {
-      final vendor = exp['vendor'] as String? ?? 'Supplier';
-      final amount = (exp['amount'] as num?)?.toInt() ?? 0;
+      final vendor = (exp['vendor'] as String?)?.trim() ?? 'Supplier';
+      final totalAmount = (exp['amount'] as num?)?.toInt() ?? 0;
       final date = exp['date'] as String? ?? isoDate(DateTime.now());
       final expId = exp['id'] as int;
 
-      final isMatched = (expId % 4 != 0);
-      final hasDiff = (expId % 7 == 0);
-      final status = isMatched
-          ? (hasDiff ? 'Tax Mismatch' : 'Matched')
-          : (expId % 2 == 0 ? 'Missing in 2B' : 'Value Mismatch');
+      final sup = supplierMap[vendor.toLowerCase()];
+      final supplierGstin = sup?.gstin?.trim() ?? '';
+      final supState = sup?.state?.trim().toLowerCase() ?? '';
+      final isInterstate = supState.isNotEmpty && bizState.isNotEmpty && supState != bizState;
 
-      final taxable = (amount * 0.82).round();
-      final tax = amount - taxable;
-      final diffTax = (status == 'Tax Mismatch') ? -20000 : 0;
-      final diffVal = (status == 'Value Mismatch') ? 500000 : 0;
+      final pItems = await db.query(
+        'purchase_items',
+        where: 'purchase_id = ?',
+        whereArgs: [expId],
+      );
+
+      int taxableValue = 0;
+      int totalTax = 0;
+      for (final item in pItems) {
+        final taxVal = (item['taxable'] as num?)?.toInt() ?? 0;
+        final taxRate = (item['tax'] as num?)?.toInt() ?? 0;
+        taxableValue += taxVal;
+        if (taxRate > 100) {
+          totalTax += taxRate;
+        } else if (taxRate > 0) {
+          totalTax += (taxVal * taxRate / 100).round();
+        }
+      }
+
+      if (taxableValue == 0) {
+        taxableValue = totalAmount;
+      }
+
+      int igst = 0;
+      int cgst = 0;
+      int sgst = 0;
+      if (isInterstate) {
+        igst = totalTax;
+      } else {
+        cgst = totalTax ~/ 2;
+        sgst = totalTax ~/ 2;
+      }
+
+      final hasGstin = supplierGstin.length >= 15;
+      final matchStatus = hasGstin ? 'Matched' : 'Missing in 2B';
+      final itcEligibility = (hasGstin && totalTax > 0) ? 'Eligible' : 'Ineligible';
 
       entries.add(Gstr2bEntry(
         id: idx++,
-        supplierGstin: '27AABCU${(9000 + expId).toString().padLeft(4, '0')}A1Z5',
+        supplierGstin: supplierGstin,
         supplierName: vendor,
-        invoiceNumber: 'INV-2026-${(100 + expId)}',
+        invoiceNumber: 'PUR-${(100 + expId)}',
         invoiceDate: date,
-        invoiceValue: amount,
-        taxableValue: taxable,
-        igst: 0,
-        cgst: (tax + diffTax) ~/ 2,
-        sgst: (tax + diffTax) ~/ 2,
-        itcEligibility: 'Eligible',
-        matchStatus: status,
+        invoiceValue: totalAmount,
+        taxableValue: taxableValue,
+        igst: igst,
+        cgst: cgst,
+        sgst: sgst,
+        itcEligibility: itcEligibility,
+        matchStatus: matchStatus,
         expenseId: expId,
-        diffTax: diffTax,
-        diffValue: diffVal,
-      ));
-    }
-
-    if (entries.isEmpty) {
-      entries.add(Gstr2bEntry(
-        id: 1,
-        supplierGstin: '27AABCT3421A1Z9',
-        supplierName: 'TechCorp Suppliers Pvt Ltd',
-        invoiceNumber: 'INV-2026-441',
-        invoiceDate: isoDate(DateTime.now()),
-        invoiceValue: 1333300,
-        taxableValue: 1093300,
-        igst: 0,
-        cgst: 120000,
-        sgst: 120000,
-        itcEligibility: 'Eligible',
-        matchStatus: 'Tax Mismatch',
-        diffTax: -20000,
-      ));
-      entries.add(Gstr2bEntry(
-        id: 2,
-        supplierGstin: '29ABCDE1234F1Z5',
-        supplierName: 'Mega Electronics Distributors',
-        invoiceNumber: 'ME-8902',
-        invoiceDate: isoDate(DateTime.now()),
-        invoiceValue: 10500000,
-        taxableValue: 8700000,
-        igst: 1800000,
-        cgst: 0,
-        sgst: 0,
-        itcEligibility: 'Eligible',
-        matchStatus: 'Value Mismatch',
-        diffValue: 500000,
-      ));
-      entries.add(Gstr2bEntry(
-        id: 3,
-        supplierGstin: '07AAACF8892L1Z2',
-        supplierName: 'Bharat Hardware Depot',
-        invoiceNumber: 'BH-1002',
-        invoiceDate: isoDate(DateTime.now()),
-        invoiceValue: 2500000,
-        taxableValue: 2118644,
-        igst: 0,
-        cgst: 190678,
-        sgst: 190678,
-        itcEligibility: 'Eligible',
-        matchStatus: 'Matched',
-      ));
-      entries.add(Gstr2bEntry(
-        id: 4,
-        supplierGstin: '33AABCP9910K1Z1',
-        supplierName: 'Southern Logistics & Cables',
-        invoiceNumber: 'SLC-402',
-        invoiceDate: isoDate(DateTime.now()),
-        invoiceValue: 1800000,
-        taxableValue: 1525424,
-        igst: 274576,
-        cgst: 0,
-        sgst: 0,
-        itcEligibility: 'Eligible',
-        matchStatus: 'Missing in 2B',
+        diffTax: 0,
+        diffValue: 0,
       ));
     }
 

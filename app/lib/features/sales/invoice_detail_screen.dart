@@ -190,13 +190,24 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (inv == null || biz == null) return;
 
     final outstanding = inv.outstanding.paise;
-    final amountPaise = outstanding > 0 ? outstanding : inv.total;
+    if (outstanding <= 0) {
+      showAppMessage(context, 'This invoice is already fully paid.');
+      return;
+    }
+
+    final amountPaise = outstanding;
+    final upiVpa = getBusinessUpiId(biz);
+    if (upiVpa == null || upiVpa.isEmpty) {
+      showAppMessage(context, 'Please configure your UPI ID in Business Settings to collect payments.', error: true);
+      return;
+    }
+
     final upiUri = generateUpiPaymentUri(
       business: biz,
       invoiceNumber: inv.number,
       amountPaise: amountPaise,
     );
-    final upiVpa = getBusinessUpiId(biz);
+    if (upiUri == null) return;
 
     showModalBottomSheet<void>(
       context: context,

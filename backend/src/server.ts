@@ -711,7 +711,7 @@ app.addHook('preHandler', async (request, reply) => {
         const token = authHeader.replace(/^Bearer\s+/i, '').replace(/["']/g, '').trim();
         const payload = verifyAccessToken(token);
         (request as any).user = payload;
-      } catch (_) {}
+      } catch (_) { }
     }
     return;
   }
@@ -1277,10 +1277,19 @@ app.post('/api/v1/sync/push', async (request, reply) => {
       return reply.code(400).send({ error: 'Invalid batch sync payload', details: parsed.error.issues });
     }
     const records = [];
+    let hasFailure = false;
+    let failureMsg = '';
     for (const item of parsed.data) {
       const resolvedBizId = await resolveBusinessIdForSync(request, item.businessId);
       const rec = await enqueueSync({ ...item, businessId: resolvedBizId });
+      if (rec.status === 'failed') {
+        hasFailure = true;
+        failureMsg = rec.lastError || `Failed to process sync item for ${rec.entity}:${rec.entityId}`;
+      }
       records.push(rec);
+    }
+    if (hasFailure) {
+      return reply.code(422).send({ error: failureMsg, count: records.length, records });
     }
     return reply.code(202).send({ accepted: true, count: records.length, records });
   }
@@ -1289,10 +1298,19 @@ app.post('/api/v1/sync/push', async (request, reply) => {
   const batchParsed = batchSchema.safeParse(rawBody);
   if (batchParsed.success) {
     const records = [];
+    let hasFailure = false;
+    let failureMsg = '';
     for (const item of batchParsed.data.items) {
       const resolvedBizId = await resolveBusinessIdForSync(request, item.businessId);
       const rec = await enqueueSync({ ...item, businessId: resolvedBizId });
+      if (rec.status === 'failed') {
+        hasFailure = true;
+        failureMsg = rec.lastError || `Failed to process sync item for ${rec.entity}:${rec.entityId}`;
+      }
       records.push(rec);
+    }
+    if (hasFailure) {
+      return reply.code(422).send({ error: failureMsg, count: records.length, records });
     }
     return reply.code(202).send({ accepted: true, count: records.length, records });
   }
@@ -1312,6 +1330,10 @@ app.post('/api/v1/sync/push', async (request, reply) => {
     payload: parsed.data.payload ?? null,
     idempotencyKey: parsed.data.idempotencyKey ?? null,
   });
+
+  if (record.status === 'failed') {
+    return reply.code(422).send({ error: record.lastError || `Failed to process sync for ${record.entity}:${record.entityId}`, record, records: [record] });
+  }
 
   return reply.code(202).send({ accepted: true, record, records: [record] });
 });

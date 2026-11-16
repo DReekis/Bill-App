@@ -14,12 +14,20 @@ export async function enqueueSync(input: {
       where: { idempotencyKey: input.idempotencyKey },
     });
     if (existing) {
-      if (existing.status === 'failed') {
+      if (existing.status === 'failed' || (input.payload && input.payload !== existing.payload)) {
+        await prisma.syncQueueItem.update({
+          where: { id: existing.id },
+          data: {
+            payload: input.payload ?? existing.payload,
+            op: input.op,
+            status: 'pending',
+          },
+        });
         try {
           await processSyncItem(existing.id);
-        } catch {}
+        } catch { }
       }
-      return existing;
+      return await prisma.syncQueueItem.findUnique({ where: { id: existing.id } }) ?? existing;
     }
   }
 
@@ -385,7 +393,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -614,7 +622,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -672,7 +680,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -728,7 +736,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -782,7 +790,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -837,7 +845,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -1064,7 +1072,7 @@ export async function pullSyncChanges(businessId: string, since?: string, limit 
         const parts = exp.description.split('<!--ITEMS:');
         payloadObj.description = parts[0].trim() || null;
         payloadObj.items = JSON.parse(parts[1].replace('-->', '').trim());
-      } catch (_) {}
+      } catch (_) { }
     }
     changes.push({
       entity: exp.category === 'Purchase' ? 'purchase' : 'expense',
@@ -1129,7 +1137,7 @@ export async function pullSyncChanges(businessId: string, since?: string, limit 
           currObj.items = prevObj.items;
           c.payload = JSON.stringify(currObj);
         }
-      } catch (_) {}
+      } catch (_) { }
     }
     deduped.set(key, c);
   }
@@ -1137,8 +1145,13 @@ export async function pullSyncChanges(businessId: string, since?: string, limit 
   const finalChanges = Array.from(deduped.values());
   finalChanges.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
+  const returnedChanges = finalChanges.slice(0, limit);
+  const nextCursor = returnedChanges.length > 0 && returnedChanges.length < finalChanges.length
+    ? returnedChanges[returnedChanges.length - 1].timestamp
+    : (returnedChanges.length > 0 ? returnedChanges[returnedChanges.length - 1].timestamp : new Date().toISOString());
+
   return {
-    changes: finalChanges.slice(0, limit),
-    serverTime: new Date().toISOString(),
+    changes: returnedChanges,
+    serverTime: nextCursor,
   };
 }

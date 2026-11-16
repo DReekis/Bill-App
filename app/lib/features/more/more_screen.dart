@@ -1265,10 +1265,16 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
             onPressed: () async {
               if (controller.text.trim() == 'DELETE') {
                 Navigator.pop(ctx);
-                await session.deleteBusinessData(businessId);
-                if (mounted) {
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                  showAppMessage(context, 'Business data wiped cleanly');
+                try {
+                  await session.deleteBusinessData(businessId);
+                  if (mounted) {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    showAppMessage(context, 'Business data wiped cleanly');
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    showAppMessage(context, 'Failed to wipe business data: $e', error: true);
+                  }
                 }
               } else {
                 showAppMessage(ctx, 'Type DELETE to proceed', error: true);
