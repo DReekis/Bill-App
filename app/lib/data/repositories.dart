@@ -923,6 +923,9 @@ class Repository {
     required String number,
     required int? customerId,
     required String customerName,
+    String? billingAddress,
+    String? customerPhone,
+    String? customerGstin,
     required String date,
     String? dueDate,
     required String gstType,
@@ -982,11 +985,31 @@ class Repository {
         }
       }
 
+      Map<String, dynamic> cfMap = {};
+      try {
+        if (customFieldsJson != null && customFieldsJson.isNotEmpty) {
+          final decoded = jsonDecode(customFieldsJson);
+          if (decoded is Map<String, dynamic>) cfMap = Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+      if (billingAddress != null && billingAddress.isNotEmpty) {
+        cfMap['billing_address'] = billingAddress;
+      }
+      if (customerPhone != null && customerPhone.isNotEmpty) {
+        cfMap['customer_phone'] = customerPhone;
+      }
+      if (customerGstin != null && customerGstin.isNotEmpty) {
+        cfMap['customer_gstin'] = customerGstin;
+      }
+
       final invoiceId = await txn.insert('invoices', {
         'business_id': businessId,
         'number': finalNumber,
         'customer_id': customerId,
         'customer_name': customerName,
+        'billing_address': billingAddress,
+        'customer_phone': customerPhone,
+        'customer_gstin': customerGstin,
         'date': date,
         'due_date': dueDate,
         'gst_type': gstType,
@@ -1015,7 +1038,7 @@ class Repository {
         'eway_bill_number': ewayBillNumber,
         'lr_rr_number': lrRrNumber,
         'reverse_charge': reverseCharge ? 1 : 0,
-        'custom_fields_json': customFieldsJson ?? '{}',
+        'custom_fields_json': jsonEncode(cfMap),
         'charges_json': jsonEncode(charges.map((c) => c.toMap()).toList()),
       });
 
@@ -1263,6 +1286,9 @@ class Repository {
     required String number,
     required int? customerId,
     required String customerName,
+    String? billingAddress,
+    String? customerPhone,
+    String? customerGstin,
     required String date,
     String? dueDate,
     required String gstType,
@@ -1579,10 +1605,30 @@ class Repository {
 
       // 10. Update invoices table record
       final status = resolveInvoiceStatus(total: total, amountPaid: amountPaid);
+      Map<String, dynamic> updateCfMap = {};
+      try {
+        if (customFieldsJson != null && customFieldsJson.isNotEmpty) {
+          final decoded = jsonDecode(customFieldsJson);
+          if (decoded is Map<String, dynamic>) updateCfMap = Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+      if (billingAddress != null && billingAddress.isNotEmpty) {
+        updateCfMap['billing_address'] = billingAddress;
+      }
+      if (customerPhone != null && customerPhone.isNotEmpty) {
+        updateCfMap['customer_phone'] = customerPhone;
+      }
+      if (customerGstin != null && customerGstin.isNotEmpty) {
+        updateCfMap['customer_gstin'] = customerGstin;
+      }
+
       await txn.update('invoices', {
         'number': number,
         'customer_id': customerId,
         'customer_name': customerName,
+        'billing_address': billingAddress,
+        'customer_phone': customerPhone,
+        'customer_gstin': customerGstin,
         'date': date,
         'due_date': dueDate,
         'gst_type': gstType,
@@ -1611,7 +1657,7 @@ class Repository {
         'eway_bill_number': ewayBillNumber,
         'lr_rr_number': lrRrNumber,
         'reverse_charge': reverseCharge ? 1 : 0,
-        'custom_fields_json': customFieldsJson ?? '{}',
+        'custom_fields_json': jsonEncode(updateCfMap),
         'charges_json': jsonEncode(charges.map((c) => c.toMap()).toList()),
       }, where: 'id = ?', whereArgs: [invoiceId]);
     });
@@ -3829,6 +3875,9 @@ class Repository {
       number: number,
       customerId: q.customerId,
       customerName: q.customerName ?? 'Walk-in',
+      billingAddress: cust?.billingAddress ?? cust?.address,
+      customerPhone: cust?.phone,
+      customerGstin: cust?.gstin,
       date: todayIso(),
       dueDate: cust != null && cust.paymentTermsDays > 0
           ? isoDate(DateTime.now().add(Duration(days: cust.paymentTermsDays)))
@@ -3837,6 +3886,10 @@ class Repository {
       quote: quoteResult,
       lines: invoiceLines,
       amountPaid: 0,
+      shipToName: cust?.name,
+      shipToAddress: cust?.shippingAddress ?? cust?.billingAddress ?? cust?.address,
+      shipToState: cust?.state,
+      shipToPincode: cust?.pin,
       notes: 'Converted from Quotation ${q.number}',
     );
 
@@ -3915,6 +3968,9 @@ class Repository {
       number: number,
       customerId: so.customerId,
       customerName: so.customerName ?? 'Walk-in',
+      billingAddress: cust?.billingAddress ?? cust?.address,
+      customerPhone: cust?.phone,
+      customerGstin: cust?.gstin,
       date: todayIso(),
       dueDate: so.dueDate ?? (cust != null && cust.paymentTermsDays > 0
           ? isoDate(DateTime.now().add(Duration(days: cust.paymentTermsDays)))
@@ -3923,6 +3979,10 @@ class Repository {
       quote: quoteResult,
       lines: invoiceLines,
       amountPaid: 0,
+      shipToName: so.customerName ?? cust?.name,
+      shipToAddress: cust?.shippingAddress ?? cust?.billingAddress ?? cust?.address,
+      shipToState: cust?.state,
+      shipToPincode: cust?.pin,
       notes: 'Converted from Sales Order ${so.number}',
     );
 
@@ -4009,6 +4069,9 @@ class Repository {
       number: number,
       customerId: dc.customerId,
       customerName: dc.customerName ?? 'Walk-in',
+      billingAddress: cust?.billingAddress ?? cust?.address,
+      customerPhone: cust?.phone,
+      customerGstin: cust?.gstin,
       date: todayIso(),
       dueDate: cust != null && cust.paymentTermsDays > 0
           ? isoDate(DateTime.now().add(Duration(days: cust.paymentTermsDays)))
@@ -4017,6 +4080,11 @@ class Repository {
       quote: quoteResult,
       lines: invoiceLines,
       amountPaid: 0,
+      shipToName: dc.customerName ?? cust?.name,
+      shipToAddress: dc.address ?? cust?.shippingAddress ?? cust?.billingAddress ?? cust?.address,
+      shipToState: cust?.state,
+      shipToPincode: cust?.pin,
+      vehicleNumber: dc.vehicleNo,
       notes: 'Converted from Delivery Challan ${dc.number}',
     );
 

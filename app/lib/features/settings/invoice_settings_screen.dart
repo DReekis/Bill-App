@@ -102,6 +102,8 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
 
   String _getTemplateName(String style) {
     switch (style) {
+      case 'tally':
+        return 'Tally Standard';
       case 'billbook_stylish':
       case 'modern_band':
         return 'Billbook Modern';

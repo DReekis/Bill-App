@@ -781,6 +781,9 @@ class Invoice {
     required this.number,
     this.customerId,
     this.customerName,
+    this.billingAddress,
+    this.customerPhone,
+    this.customerGstin,
     required this.date,
     this.dueDate,
     this.gstType = 'gst',
@@ -821,6 +824,9 @@ class Invoice {
   String number;
   int? customerId;
   String? customerName;
+  String? billingAddress;
+  String? customerPhone;
+  String? customerGstin;
   String date;
   String? dueDate;
   String gstType;
@@ -881,11 +887,30 @@ class Invoice {
   int? get distanceKm => (customFields['distance_km'] as num?)?.toInt();
   bool get hasEWayBill => ewayBillNumber != null && ewayBillNumber!.trim().isNotEmpty && ewbStatus != 'CNL';
 
-  Map<String, Object?> toMap() => {
+  Map<String, Object?> toMap() {
+    Map<String, dynamic> cf = {};
+    try {
+      final decoded = jsonDecode(customFieldsJson);
+      if (decoded is Map<String, dynamic>) cf = Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    if (billingAddress != null && billingAddress!.isNotEmpty) {
+      cf['billing_address'] = billingAddress;
+    }
+    if (customerPhone != null && customerPhone!.isNotEmpty) {
+      cf['customer_phone'] = customerPhone;
+    }
+    if (customerGstin != null && customerGstin!.isNotEmpty) {
+      cf['customer_gstin'] = customerGstin;
+    }
+
+    return {
         'business_id': businessId,
         'number': number,
         'customer_id': customerId,
         'customer_name': customerName,
+        'billing_address': billingAddress,
+        'customer_phone': customerPhone,
+        'customer_gstin': customerGstin,
         'date': date,
         'due_date': dueDate,
         'gst_type': gstType,
@@ -917,9 +942,10 @@ class Invoice {
         'eway_bill_number': ewayBillNumber,
         'lr_rr_number': lrRrNumber,
         'reverse_charge': reverseCharge ? 1 : 0,
-        'custom_fields_json': customFieldsJson,
+        'custom_fields_json': jsonEncode(cf),
         'charges_json': jsonEncode(charges.map((c) => c.toMap()).toList()),
       };
+  }
 
   static Invoice fromMap(Map<String, Object?> map) => Invoice(
         id: map['id'] as int?,
@@ -927,6 +953,45 @@ class Invoice {
         number: map['number'] as String? ?? '',
         customerId: map['customer_id'] as int?,
         customerName: map['customer_name'] as String?,
+        billingAddress: (map['billing_address'] as String?) ??
+            (() {
+              try {
+                final raw = map['custom_fields_json'] as String?;
+                if (raw != null && raw.isNotEmpty) {
+                  final decoded = jsonDecode(raw);
+                  if (decoded is Map<String, dynamic>) {
+                    return decoded['billing_address'] as String?;
+                  }
+                }
+              } catch (_) {}
+              return null;
+            })(),
+        customerPhone: (map['customer_phone'] as String?) ??
+            (() {
+              try {
+                final raw = map['custom_fields_json'] as String?;
+                if (raw != null && raw.isNotEmpty) {
+                  final decoded = jsonDecode(raw);
+                  if (decoded is Map<String, dynamic>) {
+                    return decoded['customer_phone'] as String?;
+                  }
+                }
+              } catch (_) {}
+              return null;
+            })(),
+        customerGstin: (map['customer_gstin'] as String?) ??
+            (() {
+              try {
+                final raw = map['custom_fields_json'] as String?;
+                if (raw != null && raw.isNotEmpty) {
+                  final decoded = jsonDecode(raw);
+                  if (decoded is Map<String, dynamic>) {
+                    return decoded['customer_gstin'] as String?;
+                  }
+                }
+              } catch (_) {}
+              return null;
+            })(),
         date: map['date'] as String? ?? '',
         dueDate: map['due_date'] as String?,
         gstType: map['gst_type'] as String? ?? 'gst',
@@ -1014,7 +1079,7 @@ class InvoiceCustomizationSettings {
 
   final String id;
   final int businessId;
-  String themeStyle; // 'classic_grid', 'modern_band', 'minimal_clean', 'retail_pos'
+  String themeStyle; // 'tally', 'classic_grid', 'billbook_stylish', 'modern_minimal', 'gst_tax_pro', 'compact_pos'
   String primaryColorHex;
   bool showHsnColumn;
   bool showUnitColumn;

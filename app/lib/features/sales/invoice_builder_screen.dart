@@ -76,6 +76,11 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   String? initialPaymentMode;
   String? existingNotes;
 
+  // Billing Address ("Bill To")
+  final billingAddressController = TextEditingController();
+  final customerPhoneController = TextEditingController();
+  final customerGstinController = TextEditingController();
+
   // Shipping Address ("Ship To")
   bool shipToDifferent = false;
   final shipToNameController = TextEditingController();
@@ -100,6 +105,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
 
   @override
   void dispose() {
+    billingAddressController.dispose();
+    customerPhoneController.dispose();
+    customerGstinController.dispose();
     shipToNameController.dispose();
     shipToAddressController.dispose();
     shipToPincodeController.dispose();
@@ -224,12 +232,16 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           customerId = inv.customerId;
           customerName = inv.customerName;
           customerState = _clean(matchedCust?.state);
-          shipToNameController.text = inv.shipToName ?? '';
-          shipToAddressController.text = inv.shipToAddress ?? '';
-          shipToState = inv.shipToState;
-          shipToPincodeController.text = inv.shipToPincode ?? '';
-          shipToDifferent = (inv.shipToName != null && inv.shipToName!.isNotEmpty) ||
-              (inv.shipToAddress != null && inv.shipToAddress!.isNotEmpty);
+          billingAddressController.text = inv.billingAddress ?? matchedCust?.billingAddress ?? matchedCust?.address ?? '';
+          customerPhoneController.text = inv.customerPhone ?? matchedCust?.phone ?? '';
+          customerGstinController.text = inv.customerGstin ?? matchedCust?.gstin ?? '';
+          shipToNameController.text = inv.shipToName ?? inv.customerName ?? matchedCust?.name ?? '';
+          shipToAddressController.text = inv.shipToAddress ?? matchedCust?.shippingAddress ?? matchedCust?.billingAddress ?? matchedCust?.address ?? '';
+          shipToState = inv.shipToState ?? matchedCust?.state;
+          shipToPincodeController.text = inv.shipToPincode ?? matchedCust?.pin ?? '';
+          shipToDifferent = (inv.shipToAddress != null &&
+              inv.shipToAddress!.isNotEmpty &&
+              inv.shipToAddress != billingAddressController.text);
           placeOfSupply = inv.placeOfSupply;
           manualPosOverride = inv.placeOfSupply != null;
           vehicleNoController.text = inv.vehicleNumber ?? '';
@@ -360,6 +372,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
       'customerId': customerId,
       'customerName': customerName,
       'customerState': customerState,
+      'billingAddress': billingAddressController.text,
+      'customerPhone': customerPhoneController.text,
+      'customerGstin': customerGstinController.text,
       'dueDate': dueDate,
       'invoiceDiscountType': invoiceDiscountType,
       'invoiceDiscountValue': invoiceDiscountValue,
@@ -526,6 +541,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           customerId = decoded['customerId'] as int?;
           customerName = decoded['customerName'] as String?;
           customerState = decoded['customerState'] as String?;
+          billingAddressController.text = (decoded['billingAddress'] as String?) ?? '';
+          customerPhoneController.text = (decoded['customerPhone'] as String?) ?? '';
+          customerGstinController.text = (decoded['customerGstin'] as String?) ?? '';
           dueDate = decoded['dueDate'] as String?;
           invoiceDiscountType = (decoded['invoiceDiscountType'] as String?) ?? 'percent';
           invoiceDiscountValue = (decoded['invoiceDiscountValue'] as num?)?.toDouble() ?? 0.0;
@@ -593,6 +611,23 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
       customerId = c.id;
       customerName = c.name;
       customerState = _clean(c.state);
+      billingAddressController.text = c.billingAddress ?? c.address ?? '';
+      customerPhoneController.text = c.phone ?? '';
+      customerGstinController.text = c.gstin ?? '';
+
+      final effShipping = (c.shippingAddress != null && c.shippingAddress!.trim().isNotEmpty)
+          ? c.shippingAddress!.trim()
+          : (c.billingAddress != null && c.billingAddress!.trim().isNotEmpty)
+              ? c.billingAddress!.trim()
+              : (c.address ?? '');
+      shipToNameController.text = c.name;
+      shipToAddressController.text = effShipping;
+      shipToState = _clean(c.state);
+      shipToPincodeController.text = c.pin ?? '';
+      shipToDifferent = (c.shippingAddress != null &&
+          c.shippingAddress!.trim().isNotEmpty &&
+          c.shippingAddress != c.billingAddress);
+
       if (!manualPosOverride) {
         placeOfSupply = shipToDifferent ? (shipToState ?? customerState) : customerState;
       }
@@ -637,7 +672,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
     }
     setState(() {
       shipToNameController.text = customerName ?? '';
-      shipToAddressController.text = c?.billingAddress ?? '';
+      shipToAddressController.text = billingAddressController.text.isNotEmpty
+          ? billingAddressController.text
+          : (c?.billingAddress ?? '');
       shipToState = c?.state ?? customerState;
       shipToPincodeController.text = c?.pin ?? '';
       if (!manualPosOverride && shipToState != null) {
@@ -1614,6 +1651,27 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
       final amountPaid = _toPaise(paidController.text);
       final effectivePos = placeOfSupply ?? (shipToDifferent ? shipToState : customerState);
 
+      final billAddr = billingAddressController.text.trim().isNotEmpty
+          ? billingAddressController.text.trim()
+          : null;
+      final custPhone = customerPhoneController.text.trim().isNotEmpty
+          ? customerPhoneController.text.trim()
+          : null;
+      final custGstin = customerGstinController.text.trim().isNotEmpty
+          ? customerGstinController.text.trim()
+          : null;
+
+      final sName = shipToNameController.text.trim().isNotEmpty
+          ? shipToNameController.text.trim()
+          : (customerName ?? 'Walk-in');
+      final sAddr = shipToAddressController.text.trim().isNotEmpty
+          ? shipToAddressController.text.trim()
+          : billAddr;
+      final sState = shipToState ?? customerState;
+      final sPin = shipToPincodeController.text.trim().isNotEmpty
+          ? shipToPincodeController.text.trim()
+          : null;
+
       if (widget.existingInvoiceId != null) {
         await Repository.instance.updateSale(
           businessId: businessId,
@@ -1621,6 +1679,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           number: number,
           customerId: customerId,
           customerName: customerName ?? 'Walk-in',
+          billingAddress: billAddr,
+          customerPhone: custPhone,
+          customerGstin: custGstin,
           date: date,
           dueDate: dueDate,
           gstType: gstType,
@@ -1630,10 +1691,10 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           paymentMode: amountPaid > 0 ? (mode ?? 'Cash') : null,
           notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
           amountPaid: amountPaid,
-          shipToName: shipToDifferent ? shipToNameController.text.trim() : null,
-          shipToAddress: shipToDifferent ? shipToAddressController.text.trim() : null,
-          shipToState: shipToDifferent ? shipToState : null,
-          shipToPincode: shipToDifferent ? shipToPincodeController.text.trim() : null,
+          shipToName: sName,
+          shipToAddress: sAddr,
+          shipToState: sState,
+          shipToPincode: sPin,
           placeOfSupply: effectivePos,
           poNumber: poNumberController.text.trim().isEmpty ? null : poNumberController.text.trim(),
           poDate: poDate,
@@ -1657,6 +1718,9 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           number: number,
           customerId: customerId,
           customerName: customerName ?? 'Walk-in',
+          billingAddress: billAddr,
+          customerPhone: custPhone,
+          customerGstin: custGstin,
           date: date,
           dueDate: dueDate,
           gstType: gstType,
@@ -1666,10 +1730,10 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
           paymentMode: amountPaid > 0 ? (mode ?? 'Cash') : null,
           notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
           amountPaid: amountPaid,
-          shipToName: shipToDifferent ? shipToNameController.text.trim() : null,
-          shipToAddress: shipToDifferent ? shipToAddressController.text.trim() : null,
-          shipToState: shipToDifferent ? shipToState : null,
-          shipToPincode: shipToDifferent ? shipToPincodeController.text.trim() : null,
+          shipToName: sName,
+          shipToAddress: sAddr,
+          shipToState: sState,
+          shipToPincode: sPin,
           placeOfSupply: effectivePos,
           poNumber: poNumberController.text.trim().isEmpty ? null : poNumberController.text.trim(),
           poDate: poDate,
@@ -1746,6 +1810,15 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
               ),
             ],
           ),
+          if (!shipToDifferent) ...[
+            const SizedBox(height: 6),
+            Text(
+              billingAddressController.text.isNotEmpty
+                  ? 'Delivering to: ${billingAddressController.text}'
+                  : 'Delivering to billing address (Same as Bill To)',
+              style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary),
+            ),
+          ],
           if (shipToDifferent) ...[
             const Divider(height: 18),
             Row(
@@ -1764,12 +1837,14 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
             TextField(
               controller: shipToNameController,
               decoration: inputDecoration('Ship-to Recipient / Firm Name'),
+              onChanged: (_) => _saveDraft(),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: shipToAddressController,
               maxLines: 2,
               decoration: inputDecoration('Shipping Address'),
+              onChanged: (_) => _saveDraft(),
             ),
             const SizedBox(height: 8),
             Row(
@@ -1796,6 +1871,7 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
                     controller: shipToPincodeController,
                     keyboardType: TextInputType.number,
                     decoration: inputDecoration('PIN Code'),
+                    onChanged: (_) => _saveDraft(),
                   ),
                 ),
               ],
@@ -2332,30 +2408,77 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
         const SizedBox(height: 10),
         AppCard(
           padding: const EdgeInsets.all(14),
-          child: InkWell(
-            onTap: _pickCustomer,
-            borderRadius: BorderRadius.circular(10),
-            child: Row(children: [
-              if (customerName != null)
-                InitialsAvatar(customerName!, size: 38)
-              else
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(color: StitchColors.surfaceVariant, borderRadius: BorderRadius.circular(11)),
-                  child: const Icon(Icons.person_outline_rounded, color: StitchColors.primary, size: 20),
-                ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(customerName ?? 'Walk-in customer',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: customerName == null ? StitchColors.textSecondary : StitchColors.textPrimary)),
-                  Text(customerName == null ? 'Tap to choose a customer' : 'Tap to change',
-                      style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              InkWell(
+                onTap: _pickCustomer,
+                borderRadius: BorderRadius.circular(10),
+                child: Row(children: [
+                  if (customerName != null)
+                    InitialsAvatar(customerName!, size: 38)
+                  else
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(color: StitchColors.surfaceVariant, borderRadius: BorderRadius.circular(11)),
+                      child: const Icon(Icons.person_outline_rounded, color: StitchColors.primary, size: 20),
+                    ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(customerName ?? 'Walk-in customer',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: customerName == null ? StitchColors.textSecondary : StitchColors.textPrimary)),
+                      Text(customerName == null ? 'Tap to choose a customer' : 'Tap to change customer',
+                          style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+                    ]),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, color: StitchColors.textTertiary),
                 ]),
               ),
-              const Icon(Icons.chevron_right_rounded, color: StitchColors.textTertiary),
-            ]),
+              const Divider(height: 18),
+              const Row(
+                children: [
+                  Icon(Icons.receipt_long_outlined, size: 14, color: StitchColors.primary),
+                  SizedBox(width: 6),
+                  Text('Bill To / Buyer Address', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: billingAddressController,
+                maxLines: 2,
+                decoration: inputDecoration('Billing Address (Street, Building, Area)'),
+                onChanged: (_) {
+                  setState(() {});
+                  _saveDraft();
+                },
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      controller: customerPhoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: inputDecoration('Phone / Mobile'),
+                      onChanged: (_) => _saveDraft(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 4,
+                    child: TextField(
+                      controller: customerGstinController,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: inputDecoration('GSTIN (Optional)'),
+                      onChanged: (_) => _saveDraft(),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 10),

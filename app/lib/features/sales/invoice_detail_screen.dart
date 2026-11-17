@@ -33,6 +33,7 @@ class InvoiceDetailScreen extends StatefulWidget {
 class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Invoice? invoice;
   Business? business;
+  Customer? customer;
   List<DeliveryChallan> challans = [];
   bool busy = false;
   bool _hasAutoPreviewed = false;
@@ -43,11 +44,15 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (session.businessId == null) return;
     final inv = await repo.invoice(session.businessId!, widget.invoiceId);
     final biz = await repo.getBusiness(session.businessId!);
+    final cust = (inv != null && inv.customerId != null)
+        ? await repo.customer(session.businessId!, inv.customerId!)
+        : null;
     final dcs = await repo.deliveryChallansForInvoice(session.businessId!, widget.invoiceId);
     if (!mounted) return;
     setState(() {
       invoice = inv;
       business = biz;
+      customer = cust;
       challans = dcs;
     });
     if (widget.autoPreview && !_hasAutoPreviewed && inv != null && biz != null) {
@@ -70,7 +75,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (inv == null || biz == null) return;
     setState(() => busy = true);
     try {
-      await shareInvoice(business: biz, invoice: inv);
+      await shareInvoice(business: biz, invoice: inv, customer: customer);
     } catch (e) {
       if (mounted) showAppMessage(context, 'Share failed: $e', error: true);
     } finally {
@@ -100,6 +105,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         pdfBuilder: () => buildInvoicePdf(
           business: biz,
           invoice: inv,
+          customer: customer,
           bankAccount: bank,
           settings: settings,
         ),
@@ -175,7 +181,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     if (selected != null && mounted) {
       setState(() => busy = true);
       try {
-        await printInvoice(business: biz, invoice: inv, paperSize: selected);
+        await printInvoice(business: biz, invoice: inv, customer: customer, paperSize: selected);
       } catch (e) {
         if (mounted) showAppMessage(context, 'Print failed: $e', error: true);
       } finally {
@@ -498,11 +504,37 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
   Widget build(BuildContext context) {
     final inv = invoice;
     final biz = business;
+    final cust = customer;
     final isCancelled = inv?.status.toLowerCase() == 'cancelled';
     final outstanding = isCancelled ? 0 : (inv?.outstanding.paise ?? 0);
     final session = context.watch<Session>();
     final canEdit = inv != null && !isCancelled && session.canEditInvoice(inv.date);
     final canCancel = inv != null && !isCancelled && (session.role == UserRole.owner || session.role == UserRole.admin);
+
+    final billAddress = (inv?.billingAddress?.trim().isNotEmpty == true)
+        ? inv!.billingAddress!.trim()
+        : (cust?.billingAddress?.trim().isNotEmpty == true
+            ? cust!.billingAddress!.trim()
+            : (cust?.address?.trim().isNotEmpty == true ? cust!.address!.trim() : ''));
+    final billPhone = (inv?.customerPhone?.trim().isNotEmpty == true)
+        ? inv!.customerPhone!.trim()
+        : (cust?.phone?.trim() ?? '');
+    final billGstin = (inv?.customerGstin?.trim().isNotEmpty == true)
+        ? inv!.customerGstin!.trim()
+        : (cust?.gstin?.trim() ?? '');
+
+    final shipName = (inv?.shipToName?.trim().isNotEmpty == true)
+        ? inv!.shipToName!.trim()
+        : '';
+    final shipAddress = (inv?.shipToAddress?.trim().isNotEmpty == true)
+        ? inv!.shipToAddress!.trim()
+        : (cust?.shippingAddress?.trim().isNotEmpty == true ? cust!.shippingAddress!.trim() : '');
+    final shipState = (inv?.shipToState?.trim().isNotEmpty == true)
+        ? inv!.shipToState!.trim()
+        : (cust?.state?.trim() ?? '');
+    final shipPin = (inv?.shipToPincode?.trim().isNotEmpty == true)
+        ? inv!.shipToPincode!.trim()
+        : (cust?.pin?.trim() ?? '');
 
     return Scaffold(
       appBar: AppBar(
@@ -717,20 +749,60 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     StitchStatusChip(inv.status),
                   ]),
                   const Divider(height: 22),
-                  Row(children: [
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        const Text('Bill to', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
-                        const SizedBox(height: 3),
-                        Text(inv.customerName ?? 'Walk-in customer', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('Bill to', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
+                          const SizedBox(height: 3),
+                          Text(inv.customerName ?? 'Walk-in customer', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                          if (billAddress.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(billAddress, style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary)),
+                            ),
+                          if (billPhone.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text('Phone: $billPhone', style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                            ),
+                          if (billGstin.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 1),
+                              child: Text('GSTIN: $billGstin', style: const TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                            ),
+                        ]),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                        Text('Date: ${displayDate(inv.date)}', style: const TextStyle(fontSize: 12)),
+                        if (inv.dueDate != null)
+                          Text('Due: ${displayDate(inv.dueDate)}', style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
                       ]),
-                    ),
-                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                      Text('Date: ${displayDate(inv.date)}', style: const TextStyle(fontSize: 12)),
-                      if (inv.dueDate != null)
-                        Text('Due: ${displayDate(inv.dueDate)}', style: const TextStyle(fontSize: 12, color: StitchColors.textSecondary)),
+                    ],
+                  ),
+                  if (shipAddress.isNotEmpty || shipName.isNotEmpty) ...[
+                    const Divider(height: 20),
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('Ship to', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: StitchColors.textSecondary)),
+                      const SizedBox(height: 3),
+                      if (shipName.isNotEmpty && shipName != (inv.customerName ?? ''))
+                        Text(shipName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      if (shipAddress.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            [
+                              shipAddress,
+                              if (shipState.isNotEmpty) shipState,
+                              if (shipPin.isNotEmpty) shipPin,
+                            ].join(', '),
+                            style: const TextStyle(fontSize: 11.5, color: StitchColors.textSecondary),
+                          ),
+                        ),
                     ]),
-                  ]),
+                  ],
                 ]),
               ),
               const SizedBox(height: 12),

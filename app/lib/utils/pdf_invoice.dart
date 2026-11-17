@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../core/dates.dart';
+import '../core/gst_service.dart';
 import '../core/models.dart';
 import '../core/money.dart';
 import '../data/repositories.dart';
@@ -185,10 +186,6 @@ Future<Uint8List> buildDocumentPdf({
   }
 
   final isInterState = igst > 0;
-  final hasShipTo = customSettings.showShipTo &&
-      ((shipToName != null && shipToName.trim().isNotEmpty) ||
-          (shipToAddress != null && shipToAddress.trim().isNotEmpty));
-
   final cleanTitleUpper = title.trim().toUpperCase();
   final isDeliveryChallan = cleanTitleUpper.contains('CHALLAN');
   final isPurchaseBill = cleanTitleUpper.contains('PURCHASE BILL') || cleanTitleUpper.contains('PURCHASE INVOICE');
@@ -294,11 +291,24 @@ Future<Uint8List> buildDocumentPdf({
 
   final cBilling = cust?.billingAddress?.trim();
   final cAddress = cust?.address?.trim();
-  final effectivePartyAddress = (partyAddress != null && partyAddress.trim().isNotEmpty)
+  String? resolvedPartyAddress = (partyAddress != null && partyAddress.trim().isNotEmpty)
       ? partyAddress.trim()
       : (cBilling != null && cBilling.isNotEmpty
           ? cBilling
           : (cAddress != null && cAddress.isNotEmpty ? cAddress : null));
+
+  if (resolvedPartyAddress != null && cust != null) {
+    final lowerAddr = resolvedPartyAddress.toLowerCase();
+    final parts = <String>[resolvedPartyAddress];
+    if (cust.city != null && cust.city!.trim().isNotEmpty && !lowerAddr.contains(cust.city!.trim().toLowerCase())) {
+      parts.add(cust.city!.trim());
+    }
+    if (cust.pin != null && cust.pin!.trim().isNotEmpty && !lowerAddr.contains(cust.pin!.trim().toLowerCase())) {
+      parts.add('PIN: ${cust.pin!.trim()}');
+    }
+    resolvedPartyAddress = parts.join(', ');
+  }
+  final effectivePartyAddress = resolvedPartyAddress;
 
   final cGstin = cust?.gstin?.trim().toUpperCase();
   final effectivePartyGstin = (partyGstin != null && partyGstin.trim().isNotEmpty)
@@ -319,6 +329,27 @@ Future<Uint8List> buildDocumentPdf({
 
   final cEmail = cust?.email?.trim();
   final effectivePartyEmail = (cEmail != null && cEmail.isNotEmpty) ? cEmail : null;
+
+  final effectiveShipToName = (shipToName != null && shipToName.trim().isNotEmpty)
+      ? shipToName.trim()
+      : (effectivePartyName ?? '');
+
+  final effectiveShipToAddress = (shipToAddress != null && shipToAddress.trim().isNotEmpty)
+      ? shipToAddress.trim()
+      : (customSettings.showShipTo ? effectivePartyAddress : null);
+
+  final effectiveShipToState = (shipToState != null && shipToState.trim().isNotEmpty)
+      ? shipToState.trim()
+      : effectivePartyState;
+
+  final cPin = cust?.pin?.trim();
+  final effectiveShipToPincode = (shipToPincode != null && shipToPincode.trim().isNotEmpty)
+      ? shipToPincode.trim()
+      : (cPin != null && cPin.isNotEmpty ? cPin : null);
+
+  final hasShipTo = customSettings.showShipTo &&
+      ((effectiveShipToAddress != null && effectiveShipToAddress.isNotEmpty) ||
+          (effectiveShipToName.isNotEmpty && effectiveShipToName != 'Cash / Walk-in Customer'));
 
   final String partyBoxTitle = isPurchaseBill || isPurchaseOrder || isDebitNote
       ? 'SUPPLIER / VENDOR (BILL FROM)'
@@ -348,16 +379,16 @@ Future<Uint8List> buildDocumentPdf({
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            (shipToName != null && shipToName.trim().isNotEmpty) ? shipToName.trim() : (effectivePartyName ?? ''),
+            effectiveShipToName.isNotEmpty ? effectiveShipToName : (effectivePartyName ?? ''),
             style: pw.TextStyle(font: bold, fontSize: 8.5, color: slateDark),
           ),
-          if (shipToAddress != null && shipToAddress.trim().isNotEmpty)
-            pw.Text(shipToAddress.trim(), style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark)),
-          if (shipToState != null || shipToPincode != null)
+          if (effectiveShipToAddress != null && effectiveShipToAddress.isNotEmpty)
+            pw.Text(effectiveShipToAddress, style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark)),
+          if (effectiveShipToState != null || effectiveShipToPincode != null)
             pw.Text(
               [
-                if (shipToState != null && shipToState.trim().isNotEmpty) 'State: ${shipToState.trim()}',
-                if (shipToPincode != null && shipToPincode.trim().isNotEmpty) 'PIN: ${shipToPincode.trim()}',
+                if (effectiveShipToState != null && effectiveShipToState.isNotEmpty) 'State: $effectiveShipToState',
+                if (effectiveShipToPincode != null && effectiveShipToPincode.isNotEmpty) 'PIN: $effectiveShipToPincode',
               ].join(' | '),
               style: pw.TextStyle(font: regular, fontSize: 7.5, color: isMinimal ? slateMuted : slateDark),
             ),
@@ -592,6 +623,68 @@ Future<Uint8List> buildDocumentPdf({
           : (customSettings.themeStyle == 'retail_pos')
               ? 'compact_pos'
               : customSettings.themeStyle;
+
+  if (themeStyle == 'tally') {
+    return _buildTallyDocumentPdf(
+      doc: doc,
+      regular: regular,
+      bold: bold,
+      business: business,
+      title: title,
+      effectiveTitle: effectiveTitle,
+      number: number,
+      date: date,
+      dueDate: dueDate,
+      customer: customer,
+      effectivePartyName: effectivePartyName,
+      effectivePartyAddress: effectivePartyAddress,
+      effectivePartyGstin: effectivePartyGstin,
+      effectivePartyState: effectivePartyState,
+      effectivePartyPhone: effectivePartyPhone,
+      effectivePartyPan: effectivePartyPan,
+      effectivePartyEmail: effectivePartyEmail,
+      effectiveShipToName: effectiveShipToName,
+      effectiveShipToAddress: effectiveShipToAddress,
+      effectiveShipToState: effectiveShipToState,
+      effectiveShipToPincode: effectiveShipToPincode,
+      productLines: productLines,
+      charges: charges,
+      effectiveCharges: effectiveCharges,
+      subtotal: subtotal,
+      discount: discount,
+      taxable: taxable,
+      igst: igst,
+      cgst: cgst,
+      sgst: sgst,
+      roundOff: roundOff,
+      total: total,
+      outstandingPaise: outstandingPaise,
+      notes: notes,
+      termsText: termsText,
+      bankAccount: bankAccount,
+      pageFormat: pageFormat,
+      customSettings: customSettings,
+      placeOfSupply: placeOfSupply,
+      poNumber: poNumber,
+      poDate: poDate,
+      vehicleNumber: vehicleNumber,
+      ewayBillNumber: ewayBillNumber,
+      lrRrNumber: lrRrNumber,
+      reverseCharge: reverseCharge,
+      customData: customData,
+      paymentMode: paymentMode,
+      hsnBreakupList: hsnBreakupList,
+      isInterState: isInterState,
+      logoImage: logoImage,
+      signatureImage: signatureImage,
+      upiUri: upiUri,
+      hasEinvoice: hasEinvoice,
+      effectiveIrn: effectiveIrn,
+      ackNo: ackNo,
+      ackDate: ackDate,
+      signedQr: signedQr,
+    );
+  }
 
   // Setup multi-page with outer bounding border per page
   final isCompactPos = themeStyle == 'compact_pos';
@@ -2402,6 +2495,7 @@ Future<Uint8List> buildThermalReceiptPdf({
   required String date,
   String? dueDate,
   String? partyName,
+  String? partyAddress,
   required List<InvoiceLine> lines,
   List<InvoiceCharge> charges = const [],
   required int subtotal,
@@ -2465,6 +2559,8 @@ Future<Uint8List> buildThermalReceiptPdf({
           ),
           if (partyName != null && partyName.isNotEmpty)
             pw.Text('Party: $partyName', style: pw.TextStyle(font: mono, fontSize: fontSize)),
+          if (partyAddress != null && partyAddress.isNotEmpty)
+            pw.Text('Addr: $partyAddress', style: pw.TextStyle(font: mono, fontSize: fontSize - 1)),
           pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
           ...lines.map(
             (l) => pw.Padding(
@@ -2579,7 +2675,8 @@ Future<Uint8List> buildInvoicePdf({
       number: invoice.number,
       date: invoice.date,
       dueDate: invoice.dueDate,
-      partyName: invoice.customerName,
+      partyName: invoice.customerName ?? customer?.name,
+      partyAddress: invoice.billingAddress ?? customer?.billingAddress ?? customer?.address,
       lines: invoice.lines,
       charges: invoice.charges,
       subtotal: invoice.subtotal,
@@ -2603,10 +2700,16 @@ Future<Uint8List> buildInvoicePdf({
     date: invoice.date,
     dueDate: invoice.dueDate,
     customer: customer,
-    partyName: invoice.customerName,
-    partyPhone: customer?.phone,
-    partyAddress: customer?.billingAddress ?? customer?.address,
-    partyGstin: customer?.gstin,
+    partyName: invoice.customerName ?? customer?.name,
+    partyPhone: (invoice.customerPhone != null && invoice.customerPhone!.trim().isNotEmpty)
+        ? invoice.customerPhone!.trim()
+        : customer?.phone,
+    partyAddress: (invoice.billingAddress != null && invoice.billingAddress!.trim().isNotEmpty)
+        ? invoice.billingAddress!.trim()
+        : (customer?.billingAddress ?? customer?.address),
+    partyGstin: (invoice.customerGstin != null && invoice.customerGstin!.trim().isNotEmpty)
+        ? invoice.customerGstin!.trim()
+        : customer?.gstin,
     partyState: customer?.state,
     lines: invoice.lines,
     charges: invoice.charges,
@@ -2628,10 +2731,18 @@ Future<Uint8List> buildInvoicePdf({
     bankAccount: bankAccount,
     pageFormat: paperSize.format,
     settings: settings,
-    shipToName: invoice.shipToName,
-    shipToAddress: invoice.shipToAddress,
-    shipToState: invoice.shipToState,
-    shipToPincode: invoice.shipToPincode,
+    shipToName: (invoice.shipToName != null && invoice.shipToName!.trim().isNotEmpty)
+        ? invoice.shipToName!.trim()
+        : (invoice.customerName ?? customer?.name),
+    shipToAddress: (invoice.shipToAddress != null && invoice.shipToAddress!.trim().isNotEmpty)
+        ? invoice.shipToAddress!.trim()
+        : (customer?.shippingAddress ?? invoice.billingAddress ?? customer?.billingAddress ?? customer?.address),
+    shipToState: (invoice.shipToState != null && invoice.shipToState!.trim().isNotEmpty)
+        ? invoice.shipToState!.trim()
+        : customer?.state,
+    shipToPincode: (invoice.shipToPincode != null && invoice.shipToPincode!.trim().isNotEmpty)
+        ? invoice.shipToPincode!.trim()
+        : customer?.pin,
     placeOfSupply: invoice.placeOfSupply,
     poNumber: invoice.poNumber,
     poDate: invoice.poDate,
@@ -3561,4 +3672,849 @@ String _amountInWords(int paise) {
   }
   result = '$result only';
   return negative ? 'Minus $result' : result;
+}
+
+String _formatTallyDate(String? iso) {
+  if (iso == null || iso.isEmpty) return '';
+  final parsed = DateTime.tryParse(iso);
+  if (parsed == null) return iso;
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  final yearShort = (parsed.year % 100).toString().padLeft(2, '0');
+  return '${parsed.day}-${months[parsed.month - 1]}-$yearShort';
+}
+
+String _formatTallyState(String? state, String? gstin) {
+  String? code;
+  String? name = state?.trim();
+  if (gstin != null && gstin.trim().length >= 2) {
+    final prefix = gstin.trim().substring(0, 2);
+    if (GstService.stateCodes.containsKey(prefix)) {
+      code = prefix;
+      name ??= GstService.stateCodes[prefix];
+    }
+  }
+  if (code == null && name != null && name.isNotEmpty) {
+    final targetName = name.toLowerCase();
+    for (final entry in GstService.stateCodes.entries) {
+      if (entry.value.toLowerCase() == targetName) {
+        code = entry.key;
+        name = entry.value;
+        break;
+      }
+    }
+  }
+  if (name != null && name.isNotEmpty && code != null) {
+    return 'State Name : $name, Code : $code';
+  } else if (name != null && name.isNotEmpty) {
+    return 'State Name : $name';
+  } else if (code != null) {
+    return 'State Code : $code';
+  }
+  return '';
+}
+
+String _formatTallyWords(int paise) {
+  final clean = _amountInWords(paise);
+  final withoutRupees = clean
+      .replaceAll(RegExp(r'\s+Rupees\s+only', caseSensitive: false), ' Only')
+      .replaceAll(RegExp(r'\s+only', caseSensitive: false), ' Only');
+  return 'INR $withoutRupees';
+}
+
+Future<Uint8List> _buildTallyDocumentPdf({
+  required pw.Document doc,
+  required pw.Font regular,
+  required pw.Font bold,
+  required Business business,
+  required String title,
+  required String effectiveTitle,
+  required String number,
+  required String date,
+  String? dueDate,
+  Customer? customer,
+  String? effectivePartyName,
+  String? effectivePartyAddress,
+  String? effectivePartyGstin,
+  String? effectivePartyState,
+  String? effectivePartyPhone,
+  String? effectivePartyPan,
+  String? effectivePartyEmail,
+  required String effectiveShipToName,
+  String? effectiveShipToAddress,
+  String? effectiveShipToState,
+  String? effectiveShipToPincode,
+  required List<InvoiceLine> productLines,
+  List<InvoiceCharge> charges = const [],
+  required List<InvoiceCharge> effectiveCharges,
+  required int subtotal,
+  required int discount,
+  required int taxable,
+  required int igst,
+  required int cgst,
+  required int sgst,
+  required int roundOff,
+  required int total,
+  required int outstandingPaise,
+  String? notes,
+  String? termsText,
+  BankAccount? bankAccount,
+  required PdfPageFormat pageFormat,
+  required InvoiceCustomizationSettings customSettings,
+  String? placeOfSupply,
+  String? poNumber,
+  String? poDate,
+  String? vehicleNumber,
+  String? ewayBillNumber,
+  String? lrRrNumber,
+  bool reverseCharge = false,
+  Map<String, dynamic> customData = const {},
+  String? paymentMode,
+  required List<_GstBreakupItem> hsnBreakupList,
+  required bool isInterState,
+  pw.MemoryImage? logoImage,
+  pw.MemoryImage? signatureImage,
+  String? upiUri,
+  bool hasEinvoice = false,
+  String? effectiveIrn,
+  String? ackNo,
+  String? ackDate,
+  String? signedQr,
+}) async {
+  final tallyFormat = pageFormat == PdfPageFormat.a4
+      ? PdfPageFormat.a4.copyWith(
+          marginLeft: 18.0,
+          marginRight: 18.0,
+          marginTop: 16.0,
+          marginBottom: 16.0,
+        )
+      : pageFormat;
+
+  final bizName = getEffectiveBusinessName(business, customSettings).toUpperCase();
+  final bizAddressLine = [business.address, business.city, business.state, business.pinCode]
+      .whereType<String>()
+      .where((s) => s.isNotEmpty)
+      .join(', ');
+  final bizStateLine = _formatTallyState(business.state, business.gstin);
+
+  final extraBizList = <String>[];
+  if (business.pan != null && business.pan!.isNotEmpty) extraBizList.add('PAN: ${business.pan}');
+  if (business.displayInvoicePhone.isNotEmpty) extraBizList.add('Ph: ${business.displayInvoicePhone}');
+  final extraBizLine = extraBizList.join(' | ');
+
+  final shipName = effectiveShipToName.isNotEmpty
+      ? effectiveShipToName
+      : (effectivePartyName ?? 'Cash / Walk-in Customer');
+  final shipAddress = (effectiveShipToAddress != null && effectiveShipToAddress.isNotEmpty)
+      ? effectiveShipToAddress
+      : (effectivePartyAddress ?? '');
+  final shipStateLine = _formatTallyState(effectiveShipToState ?? effectivePartyState, effectivePartyGstin);
+
+  final buyerName = effectivePartyName ?? 'Cash / Walk-in Customer';
+  final buyerAddress = effectivePartyAddress ?? '';
+  final buyerStateLine = _formatTallyState(effectivePartyState, effectivePartyGstin);
+
+  pw.Widget metaCell(String label, String value, {bool isBold = false, String? subLabel}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.fromLTRB(4, 2, 4, 2),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(label, style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black)),
+          if (value.isNotEmpty)
+            pw.Text(
+              value,
+              style: pw.TextStyle(font: isBold ? bold : regular, fontSize: 8, color: PdfColors.black),
+            ),
+          if (subLabel != null && subLabel.isNotEmpty)
+            pw.Text(
+              subLabel,
+              style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black),
+            ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget hsnHeaderCell(String text, {pw.Alignment align = pw.Alignment.center}) {
+    return pw.Container(
+      alignment: align,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+      child: pw.Text(text, style: pw.TextStyle(font: bold, fontSize: 6.8, color: PdfColors.black)),
+    );
+  }
+
+  pw.Widget hsnBodyCell(String text, {pw.Alignment align = pw.Alignment.centerLeft, bool isBold = false}) {
+    return pw.Container(
+      alignment: align,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(font: isBold ? bold : regular, fontSize: 7, color: PdfColors.black),
+      ),
+    );
+  }
+
+  final List<List<String>> tableData = [];
+
+  // 1. Product Items
+  for (int i = 0; i < productLines.length; i++) {
+    final l = productLines[i];
+    final qtyStr = _qty(l.quantity);
+    final unitStr = (l.unit != null && l.unit!.trim().isNotEmpty) ? l.unit!.trim() : 'Kgs';
+    final rateStr = (l.price / 100).toStringAsFixed(2);
+    final amtStr = formatPaiseClean(l.taxable);
+
+    tableData.add([
+      '${i + 1}',
+      l.name +
+          (l.batchNumber != null && l.batchNumber!.isNotEmpty ? ' (B: ${l.batchNumber})' : '') +
+          (l.serialNumber != null && l.serialNumber!.isNotEmpty ? ' (S: ${l.serialNumber})' : ''),
+      l.hsn ?? '',
+      '$qtyStr $unitStr',
+      rateStr,
+      unitStr,
+      amtStr,
+    ]);
+  }
+
+  // 2. Tax lines under Description of Goods (Classic Tally)
+  if (!isInterState) {
+    if (cgst > 0) {
+      final double halfRate = productLines.isNotEmpty ? (productLines.first.gstRate / 2) : 2.5;
+      final rateStr = halfRate.toStringAsFixed(halfRate % 1 == 0 ? 0 : 2);
+      tableData.add([
+        '',
+        'CGST @$rateStr%',
+        '',
+        '',
+        '${halfRate.toStringAsFixed(2)} %',
+        '',
+        formatPaiseClean(cgst),
+      ]);
+    }
+    if (sgst > 0) {
+      final double halfRate = productLines.isNotEmpty ? (productLines.first.gstRate / 2) : 2.5;
+      final rateStr = halfRate.toStringAsFixed(halfRate % 1 == 0 ? 0 : 2);
+      tableData.add([
+        '',
+        'SGST @$rateStr%',
+        '',
+        '',
+        '${halfRate.toStringAsFixed(2)} %',
+        '',
+        formatPaiseClean(sgst),
+      ]);
+    }
+  } else {
+    if (igst > 0) {
+      final double igstRate = productLines.isNotEmpty ? productLines.first.gstRate.toDouble() : 5.0;
+      final rateStr = igstRate.toStringAsFixed(igstRate % 1 == 0 ? 0 : 2);
+      tableData.add([
+        '',
+        'IGST @$rateStr%',
+        '',
+        '',
+        '${igstRate.toStringAsFixed(2)} %',
+        '',
+        formatPaiseClean(igst),
+      ]);
+    }
+  }
+
+  // 3. Charges, Discount, Round Off
+  if (discount > 0) {
+    tableData.add([
+      '',
+      'Less: Discount',
+      '',
+      '',
+      '',
+      '',
+      '-${formatPaiseClean(discount)}',
+    ]);
+  }
+  for (final c in effectiveCharges) {
+    tableData.add([
+      '',
+      c.name,
+      c.hsn ?? '',
+      '',
+      '',
+      '',
+      formatPaiseClean(c.totalAmount),
+    ]);
+  }
+  if (roundOff != 0) {
+    tableData.add([
+      '',
+      'Round Off',
+      '',
+      '',
+      '',
+      '',
+      '${roundOff > 0 ? "+" : ""}${formatPaiseClean(roundOff)}',
+    ]);
+  }
+
+  // 4. Spacer for single-page layout matching screenshot
+  if (productLines.length <= 4) {
+    final int emptyCount = 5 - productLines.length;
+    for (int k = 0; k < emptyCount; k++) {
+      tableData.add(['', '', '', '', '', '', '']);
+    }
+  }
+
+  // 5. Total Row
+  final totalQty = productLines.fold(0.0, (sum, l) => sum + l.quantity);
+  final totalQtyStr = '${_qty(totalQty)} ${productLines.isNotEmpty ? ((productLines.first.unit != null && productLines.first.unit!.trim().isNotEmpty) ? productLines.first.unit!.trim() : 'Kgs') : ''}'.trim();
+  tableData.add([
+    '',
+    'Total',
+    '',
+    totalQtyStr,
+    '',
+    '',
+    formatPaisePdf(total, prefixRs: true),
+  ]);
+
+  doc.addPage(
+    pw.MultiPage(
+      pageTheme: pw.PageTheme(
+        pageFormat: tallyFormat,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 18.0, vertical: 16.0),
+        buildBackground: (context) => pw.FullPage(
+          ignoreMargins: true,
+          child: pw.Container(),
+        ),
+      ),
+      footer: (context) => pw.Container(
+        padding: const pw.EdgeInsets.only(top: 3),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              'Generated by Billket',
+              style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.grey700),
+            ),
+            if (context.pagesCount > 1)
+              pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.grey700),
+              ),
+          ],
+        ),
+      ),
+      build: (context) => [
+        // ==========================================
+        // 1. TOP DOCUMENT TITLE
+        // ==========================================
+        pw.Container(
+          alignment: pw.Alignment.center,
+          padding: const pw.EdgeInsets.only(bottom: 3),
+          child: pw.Text(
+            effectiveTitle.isNotEmpty ? effectiveTitle : 'Tax Invoice',
+            style: pw.TextStyle(font: bold, fontSize: 13, color: PdfColors.black),
+          ),
+        ),
+
+        // Optional e-Invoice IRN bar
+        if (hasEinvoice && effectiveIrn != null && effectiveIrn.isNotEmpty) ...[
+          pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 3),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.black, width: 0.6),
+            ),
+            child: pw.Row(
+              children: [
+                pw.Text('e-Invoice IRN: ', style: pw.TextStyle(font: bold, fontSize: 7, color: PdfColors.black)),
+                pw.Expanded(
+                  child: pw.Text(effectiveIrn, style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black), maxLines: 1),
+                ),
+                if (ackNo != null) ...[
+                  pw.SizedBox(width: 8),
+                  pw.Text('Ack No: $ackNo', style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black)),
+                ],
+              ],
+            ),
+          ),
+        ],
+
+        // ==========================================
+        // 2. UPPER METADATA GRID BOX (PARTIES & DISPATCH)
+        // ==========================================
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.black, width: 0.8),
+          columnWidths: const {
+            0: pw.FlexColumnWidth(4.8),
+            1: pw.FlexColumnWidth(5.2),
+          },
+          children: [
+            pw.TableRow(
+              children: [
+                // LEFT COLUMN: Supplier, Consignee (Ship to), Buyer (Bill to)
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    // Company Box
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.fromLTRB(5, 4, 5, 4),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(bizName, style: pw.TextStyle(font: bold, fontSize: 9.5, color: PdfColors.black)),
+                          if (bizAddressLine.isNotEmpty)
+                            pw.Text(bizAddressLine, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          if (extraBizLine.isNotEmpty)
+                            pw.Text(extraBizLine, style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.black)),
+                          if (business.gstin != null && business.gstin!.isNotEmpty)
+                            pw.Text('GSTIN/UIN: ${business.gstin}', style: pw.TextStyle(font: bold, fontSize: 7.5, color: PdfColors.black)),
+                          if (bizStateLine.isNotEmpty)
+                            pw.Text(bizStateLine, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                        ],
+                      ),
+                    ),
+                    pw.Divider(color: PdfColors.black, thickness: 0.5, height: 1),
+                    // Consignee (Ship to) Box
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.fromLTRB(5, 4, 5, 4),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('Consignee (Ship to)', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          pw.Text(shipName, style: pw.TextStyle(font: bold, fontSize: 8.5, color: PdfColors.black)),
+                          if (shipAddress.isNotEmpty)
+                            pw.Text(shipAddress, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          if (effectivePartyGstin != null && effectivePartyGstin.isNotEmpty)
+                            pw.Text('GSTIN/UIN: $effectivePartyGstin', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          if (shipStateLine.isNotEmpty)
+                            pw.Text(shipStateLine, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                        ],
+                      ),
+                    ),
+                    pw.Divider(color: PdfColors.black, thickness: 0.5, height: 1),
+                    // Buyer (Bill to) Box
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.fromLTRB(5, 4, 5, 4),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('Buyer (Bill to)', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          pw.Text(buyerName, style: pw.TextStyle(font: bold, fontSize: 8.5, color: PdfColors.black)),
+                          if (buyerAddress.isNotEmpty)
+                            pw.Text(buyerAddress, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          if (effectivePartyGstin != null && effectivePartyGstin.isNotEmpty)
+                            pw.Text('GSTIN/UIN: $effectivePartyGstin', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          if (buyerStateLine.isNotEmpty)
+                            pw.Text(buyerStateLine, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                // RIGHT COLUMN: 8 Dispatch & Metadata Rows
+                pw.Column(
+                  children: [
+                    pw.Table(
+                      border: const pw.TableBorder(
+                        horizontalInside: pw.BorderSide(color: PdfColors.black, width: 0.5),
+                        verticalInside: pw.BorderSide(color: PdfColors.black, width: 0.5),
+                      ),
+                      columnWidths: const {
+                        0: pw.FlexColumnWidth(1),
+                        1: pw.FlexColumnWidth(1),
+                      },
+                      children: [
+                        // Row 1: Invoice No. | Dated
+                        pw.TableRow(
+                          children: [
+                            metaCell('Invoice No.', number, isBold: true, subLabel: ewayBillNumber != null && ewayBillNumber.isNotEmpty ? 'e-Way Bill No. $ewayBillNumber' : null),
+                            metaCell('Dated', _formatTallyDate(date), isBold: true),
+                          ],
+                        ),
+                        // Row 2: Delivery Note | Mode/Terms of Payment
+                        pw.TableRow(
+                          children: [
+                            metaCell('Delivery Note', customData['delivery_note']?.toString() ?? (vehicleNumber != null && vehicleNumber.isNotEmpty ? 'By Road' : '')),
+                            metaCell('Mode/Terms of Payment', paymentMode?.toUpperCase() ?? customData['payment_terms']?.toString() ?? (outstandingPaise == 0 ? 'Immediate' : 'Credit')),
+                          ],
+                        ),
+                        // Row 3: Reference No. & Date. | Other References
+                        pw.TableRow(
+                          children: [
+                            metaCell('Reference No. & Date.', customData['reference_no']?.toString() ?? ''),
+                            metaCell('Other References', customData['other_references']?.toString() ?? ''),
+                          ],
+                        ),
+                        // Row 4: Buyer's Order No. | Dated
+                        pw.TableRow(
+                          children: [
+                            metaCell('Buyer\'s Order No.', poNumber ?? customData['buyers_order_no']?.toString() ?? '', isBold: true),
+                            metaCell('Dated', poDate != null && poDate.isNotEmpty ? _formatTallyDate(poDate) : '', isBold: true),
+                          ],
+                        ),
+                        // Row 5: Dispatch Doc No. | Delivery Note Date
+                        pw.TableRow(
+                          children: [
+                            metaCell('Dispatch Doc No.', customData['dispatch_doc_no']?.toString() ?? ''),
+                            metaCell('Delivery Note Date', _formatTallyDate(date), isBold: true),
+                          ],
+                        ),
+                        // Row 6: Dispatched through | Destination
+                        pw.TableRow(
+                          children: [
+                            metaCell('Dispatched through', customData['dispatched_through']?.toString() ?? (vehicleNumber != null && vehicleNumber.isNotEmpty ? 'By Road' : '')),
+                            metaCell('Destination', placeOfSupply ?? effectivePartyState ?? customData['destination']?.toString() ?? ''),
+                          ],
+                        ),
+                        // Row 7: Bill of Lading/LR-RR No. | Motor Vehicle No.
+                        pw.TableRow(
+                          children: [
+                            metaCell(
+                              'Bill of Lading/LR-RR No.',
+                              lrRrNumber != null && lrRrNumber.isNotEmpty
+                                  ? '$lrRrNumber dt. ${_formatTallyDate(date)}'
+                                  : 'dt. ${_formatTallyDate(date)}',
+                              isBold: true,
+                            ),
+                            metaCell('Motor Vehicle No.', vehicleNumber ?? '', isBold: true),
+                          ],
+                        ),
+                      ],
+                    ),
+                    pw.Divider(color: PdfColors.black, thickness: 0.5, height: 1),
+                    // Row 8: Terms of Delivery
+                    pw.Container(
+                      width: double.infinity,
+                      padding: const pw.EdgeInsets.fromLTRB(4, 2, 4, 3),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('Terms of Delivery', style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black)),
+                          if (termsText != null && termsText.isNotEmpty)
+                            pw.Text(termsText, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+
+        // ==========================================
+        // 3. LINE ITEMS TABLE (MULTI-PAGE REPEAT HEADER)
+        // ==========================================
+        pw.TableHelper.fromTextArray(
+          border: const pw.TableBorder(
+            left: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            right: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            top: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            verticalInside: pw.BorderSide(color: PdfColors.black, width: 0.5),
+          ),
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.white),
+          headerHeight: 22,
+          headerStyle: pw.TextStyle(font: bold, fontSize: 7.5, color: PdfColors.black),
+          cellStyle: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black),
+          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
+          headers: [
+            'Sl No.',
+            'Description of Goods',
+            'HSN/SAC',
+            'Quantity',
+            'Rate',
+            'per',
+            'Amount',
+          ],
+          columnWidths: const {
+            0: pw.FixedColumnWidth(24),
+            1: pw.FlexColumnWidth(3.2),
+            2: pw.FixedColumnWidth(55),
+            3: pw.FixedColumnWidth(65),
+            4: pw.FixedColumnWidth(50),
+            5: pw.FixedColumnWidth(28),
+            6: pw.FixedColumnWidth(75),
+          },
+          cellAlignments: const {
+            0: pw.Alignment.center,
+            1: pw.Alignment.centerLeft,
+            2: pw.Alignment.center,
+            3: pw.Alignment.centerRight,
+            4: pw.Alignment.centerRight,
+            5: pw.Alignment.center,
+            6: pw.Alignment.centerRight,
+          },
+          data: tableData,
+        ),
+
+        // ==========================================
+        // 4. AMOUNT CHARGEABLE IN WORDS & E. & O.E
+        // ==========================================
+        pw.Container(
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              left: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              right: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            ),
+          ),
+          padding: const pw.EdgeInsets.fromLTRB(5, 3, 5, 3),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Amount Chargeable (in words)', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                  pw.Text('E. & O.E', style: pw.TextStyle(font: bold, fontSize: 7.5, fontStyle: pw.FontStyle.italic, color: PdfColors.black)),
+                ],
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                _formatTallyWords(total),
+                style: pw.TextStyle(font: bold, fontSize: 8.5, color: PdfColors.black),
+              ),
+            ],
+          ),
+        ),
+
+        // ==========================================
+        // 5. STATUTORY HSN/SAC SUMMARY TABLE
+        // ==========================================
+        pw.Container(
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              left: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              right: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            ),
+          ),
+          child: pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
+            columnWidths: isInterState
+                ? const {
+                    0: pw.FlexColumnWidth(2.5),
+                    1: pw.FlexColumnWidth(2.5),
+                    2: pw.FlexColumnWidth(1.5),
+                    3: pw.FlexColumnWidth(2.0),
+                    4: pw.FlexColumnWidth(2.5),
+                  }
+                : const {
+                    0: pw.FlexColumnWidth(2.2),
+                    1: pw.FlexColumnWidth(2.2),
+                    2: pw.FlexColumnWidth(1.2),
+                    3: pw.FlexColumnWidth(1.8),
+                    4: pw.FlexColumnWidth(1.2),
+                    5: pw.FlexColumnWidth(1.8),
+                    6: pw.FlexColumnWidth(2.2),
+                  },
+            children: [
+              // Header Row
+              pw.TableRow(
+                children: isInterState
+                    ? [
+                        hsnHeaderCell('HSN/SAC'),
+                        hsnHeaderCell('Taxable Value'),
+                        hsnHeaderCell('IGST Rate'),
+                        hsnHeaderCell('IGST Amount'),
+                        hsnHeaderCell('Total Tax Amount'),
+                      ]
+                    : [
+                        hsnHeaderCell('HSN/SAC'),
+                        hsnHeaderCell('Taxable Value'),
+                        hsnHeaderCell('CGST Rate'),
+                        hsnHeaderCell('CGST Amount'),
+                        hsnHeaderCell('SGST Rate'),
+                        hsnHeaderCell('SGST Amount'),
+                        hsnHeaderCell('Total Tax Amount'),
+                      ],
+              ),
+              // Data rows per HSN
+              ...hsnBreakupList.map((h) => pw.TableRow(
+                    children: isInterState
+                        ? [
+                            hsnBodyCell(h.hsn, align: pw.Alignment.center),
+                            hsnBodyCell(formatPaiseClean(h.taxable), align: pw.Alignment.centerRight),
+                            hsnBodyCell('${h.gstRate.toStringAsFixed(2)}%', align: pw.Alignment.center),
+                            hsnBodyCell(formatPaiseClean(h.igst), align: pw.Alignment.centerRight),
+                            hsnBodyCell(formatPaiseClean(h.totalTax), align: pw.Alignment.centerRight),
+                          ]
+                        : [
+                            hsnBodyCell(h.hsn, align: pw.Alignment.center),
+                            hsnBodyCell(formatPaiseClean(h.taxable), align: pw.Alignment.centerRight),
+                            hsnBodyCell('${(h.gstRate / 2).toStringAsFixed(2)}%', align: pw.Alignment.center),
+                            hsnBodyCell(formatPaiseClean(h.cgst), align: pw.Alignment.centerRight),
+                            hsnBodyCell('${(h.gstRate / 2).toStringAsFixed(2)}%', align: pw.Alignment.center),
+                            hsnBodyCell(formatPaiseClean(h.sgst), align: pw.Alignment.centerRight),
+                            hsnBodyCell(formatPaiseClean(h.totalTax), align: pw.Alignment.centerRight),
+                          ],
+                  )),
+              // Total Row
+              pw.TableRow(
+                children: isInterState
+                    ? [
+                        hsnBodyCell('Total', align: pw.Alignment.center, isBold: true),
+                        hsnBodyCell(formatPaiseClean(hsnBreakupList.fold(0, (sum, i) => sum + i.taxable)), align: pw.Alignment.centerRight, isBold: true),
+                        hsnBodyCell(''),
+                        hsnBodyCell(formatPaiseClean(hsnBreakupList.fold(0, (sum, i) => sum + i.igst)), align: pw.Alignment.centerRight, isBold: true),
+                        hsnBodyCell(formatPaiseClean(hsnBreakupList.fold(0, (sum, i) => sum + i.totalTax)), align: pw.Alignment.centerRight, isBold: true),
+                      ]
+                    : [
+                        hsnBodyCell('Total', align: pw.Alignment.center, isBold: true),
+                        hsnBodyCell(formatPaiseClean(hsnBreakupList.fold(0, (sum, i) => sum + i.taxable)), align: pw.Alignment.centerRight, isBold: true),
+                        hsnBodyCell(''),
+                        hsnBodyCell(formatPaiseClean(hsnBreakupList.fold(0, (sum, i) => sum + i.cgst)), align: pw.Alignment.centerRight, isBold: true),
+                        hsnBodyCell(''),
+                        hsnBodyCell(formatPaiseClean(hsnBreakupList.fold(0, (sum, i) => sum + i.sgst)), align: pw.Alignment.centerRight, isBold: true),
+                        hsnBodyCell(formatPaiseClean(hsnBreakupList.fold(0, (sum, i) => sum + i.totalTax)), align: pw.Alignment.centerRight, isBold: true),
+                      ],
+              ),
+            ],
+          ),
+        ),
+
+        // ==========================================
+        // 6. TAX AMOUNT IN WORDS
+        // ==========================================
+        pw.Container(
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              left: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              right: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            ),
+          ),
+          padding: const pw.EdgeInsets.fromLTRB(5, 3, 5, 3),
+          child: pw.Text(
+            'Tax Amount (in words) : ${_formatTallyWords(cgst + sgst + igst)}',
+            style: pw.TextStyle(font: bold, fontSize: 8, color: PdfColors.black),
+          ),
+        ),
+
+        // ==========================================
+        // 7. DECLARATION & SIGNATORY BOX
+        // ==========================================
+        pw.Container(
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              left: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              right: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            ),
+          ),
+          child: pw.Table(
+            border: const pw.TableBorder(
+              verticalInside: pw.BorderSide(color: PdfColors.black, width: 0.5),
+            ),
+            columnWidths: const {
+              0: pw.FlexColumnWidth(5.5),
+              1: pw.FlexColumnWidth(4.5),
+            },
+            children: [
+              pw.TableRow(
+                children: [
+                  // Left: Declaration & Bank Details
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(5),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('Declaration', style: pw.TextStyle(font: bold, fontSize: 7.5, color: PdfColors.black)),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          customSettings.showDeclaration && customSettings.declarationText.trim().isNotEmpty
+                              ? customSettings.declarationText.trim()
+                              : 'We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.',
+                          style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.black, lineSpacing: 1.1),
+                        ),
+                        if (customSettings.showBankDetails && bankAccount != null) ...[
+                          pw.SizedBox(height: 4),
+                          pw.Text("Company's Bank Details", style: pw.TextStyle(font: bold, fontSize: 7.5, color: PdfColors.black)),
+                          pw.SizedBox(height: 1),
+                          pw.Row(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              if (upiUri != null && customSettings.showUpiQr) ...[
+                                pw.Container(
+                                  margin: const pw.EdgeInsets.only(right: 6, top: 2),
+                                  child: pw.BarcodeWidget(
+                                    barcode: pw.Barcode.qrCode(),
+                                    data: upiUri,
+                                    width: 36,
+                                    height: 36,
+                                  ),
+                                ),
+                              ],
+                              pw.Expanded(
+                                child: pw.Column(
+                                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                  children: [
+                                    pw.Text('Bank Name : ${bankAccount.bankName}', style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.black)),
+                                    pw.Text('A/c No.   : ${bankAccount.accountNumber}', style: pw.TextStyle(font: bold, fontSize: 7, color: PdfColors.black)),
+                                    if (bankAccount.ifsc != null && bankAccount.ifsc!.isNotEmpty)
+                                      pw.Text('Branch & IFS Code : ${bankAccount.ifsc}', style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.black)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  // Right: Signatory
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(5),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(
+                          'for $bizName',
+                          style: pw.TextStyle(font: bold, fontSize: 8, color: PdfColors.black),
+                          textAlign: pw.TextAlign.right,
+                        ),
+                        pw.SizedBox(height: 6),
+                        if (signatureImage != null)
+                          pw.Container(
+                            height: 34,
+                            alignment: pw.Alignment.centerRight,
+                            child: pw.Image(signatureImage, fit: pw.BoxFit.contain),
+                          )
+                        else
+                          pw.SizedBox(height: 28),
+                        pw.Text(
+                          business.signatureText.isNotEmpty ? business.signatureText : 'Authorised Signatory',
+                          style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black),
+                          textAlign: pw.TextAlign.right,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // ==========================================
+        // 8. COMPUTER GENERATED INVOICE CAPTION
+        // ==========================================
+        pw.Container(
+          alignment: pw.Alignment.center,
+          padding: const pw.EdgeInsets.only(top: 4, bottom: 4),
+          child: pw.Text(
+            'This is a Computer Generated Invoice',
+            style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  return await doc.save();
 }

@@ -204,6 +204,12 @@ class AppDatabase {
     } catch (_) {}
 
     // Commercial Invoice Overhaul Migration (Idempotent)
+    await _addColumnIfNotExists(db, 'invoices', 'billing_address', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'customer_phone', 'TEXT');
+    await _addColumnIfNotExists(db, 'invoices', 'customer_gstin', 'TEXT');
+    await _addColumnIfNotExists(db, 'quotations', 'billing_address', 'TEXT');
+    await _addColumnIfNotExists(db, 'sales_orders', 'billing_address', 'TEXT');
+    await _addColumnIfNotExists(db, 'delivery_challans', 'billing_address', 'TEXT');
     await _addColumnIfNotExists(db, 'invoices', 'ship_to_name', 'TEXT');
     await _addColumnIfNotExists(db, 'invoices', 'ship_to_address', 'TEXT');
     await _addColumnIfNotExists(db, 'invoices', 'ship_to_state', 'TEXT');
@@ -443,6 +449,9 @@ class AppDatabase {
         number TEXT NOT NULL,
         customer_id INTEGER,
         customer_name TEXT,
+        billing_address TEXT,
+        customer_phone TEXT,
+        customer_gstin TEXT,
         date TEXT NOT NULL,
         due_date TEXT,
         gst_type TEXT DEFAULT 'gst',
@@ -578,6 +587,9 @@ class AppDatabase {
         number TEXT NOT NULL,
         customer_id INTEGER,
         customer_name TEXT,
+        billing_address TEXT,
+        customer_phone TEXT,
+        customer_gstin TEXT,
         date TEXT NOT NULL,
         expiry_date TEXT,
         gst_type TEXT DEFAULT 'gst',
@@ -656,6 +668,9 @@ class AppDatabase {
         number TEXT NOT NULL,
         customer_id INTEGER,
         customer_name TEXT,
+        billing_address TEXT,
+        customer_phone TEXT,
+        customer_gstin TEXT,
         date TEXT NOT NULL,
         due_date TEXT,
         status TEXT DEFAULT 'Pending',
@@ -736,6 +751,9 @@ class AppDatabase {
         number TEXT NOT NULL,
         customer_id INTEGER,
         customer_name TEXT,
+        billing_address TEXT,
+        customer_phone TEXT,
+        customer_gstin TEXT,
         date TEXT NOT NULL,
         address TEXT,
         transport_details TEXT,

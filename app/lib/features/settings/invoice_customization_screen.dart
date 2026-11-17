@@ -48,6 +48,14 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
 
   static const List<_InvoiceTemplateOption> _templateOptions = [
     _InvoiceTemplateOption(
+      id: 'tally',
+      name: 'Tally Standard',
+      tag: 'TALLY ERP/PRIME',
+      description: 'Exact Tally ERP 9 / Prime standard format with crisp grid, dispatch details, party boxes & statutory HSN summary.',
+      icon: Icons.table_chart_rounded,
+      accentColor: Color(0xFF0F172A),
+    ),
+    _InvoiceTemplateOption(
       id: 'billbook_stylish',
       name: 'Billbook Modern',
       tag: 'POPULAR',

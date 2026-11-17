@@ -306,7 +306,7 @@ void main() {
         accountNumber: '50200012345678',
         ifsc: 'HDFC0001234',
       );
-      final styles = ['billbook_stylish', 'classic_grid', 'modern_minimal', 'gst_tax_pro', 'compact_pos', 'modern_band'];
+      final styles = ['billbook_stylish', 'classic_grid', 'modern_minimal', 'gst_tax_pro', 'compact_pos', 'modern_band', 'tally'];
       for (final s in styles) {
         final settings = InvoiceCustomizationSettings(themeStyle: s, primaryColorHex: '#065F46');
         final bytes = await generateCommercialSamplePdf(
@@ -425,6 +425,139 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+    });
+
+    test('buildDocumentPdf renders tally template matching exact Tally ERP layout with Chanda Trading sample', () async {
+      final chandaBusiness = Business(
+        id: 1,
+        name: 'CHANDA TRADING',
+        address: '58, rowa, chamtilla, Panisagar, North Tripura, Tripura, 799260',
+        gstin: '16DEHPC7648N1ZZ',
+        state: 'Tripura',
+        pinCode: '799260',
+        pan: 'DEHPC7648N',
+        phone: '9862000000',
+      );
+
+      final chandaCustomer = Customer(
+        id: 2,
+        name: 'Xyz',
+        state: 'Tripura',
+        address: 'Tripura',
+      );
+
+      final chandaLines = [
+        InvoiceLine(
+          name: 'Rubber Sheet',
+          hsn: '40012100',
+          quantity: 12000,
+          unit: 'Kgs',
+          price: 26700,
+          discount: 0,
+          taxable: 320400000,
+          tax: 16020000,
+          gstRate: 5,
+        ),
+      ];
+
+      final settings = InvoiceCustomizationSettings(
+        themeStyle: 'tally',
+        showBankDetails: true,
+        showDeclaration: true,
+        showHsnSummaryTable: true,
+      );
+
+      final pdfBytes = await buildDocumentPdf(
+        business: chandaBusiness,
+        title: 'Tax Invoice',
+        number: '1',
+        date: '2026-10-08',
+        customer: chandaCustomer,
+        partyName: 'Xyz',
+        partyAddress: 'Tripura',
+        partyState: 'Tripura',
+        lines: chandaLines,
+        subtotal: 320400000,
+        discount: 0,
+        taxable: 320400000,
+        igst: 0,
+        cgst: 8010000,
+        sgst: 8010000,
+        roundOff: 0,
+        total: 336420000,
+        outstandingPaise: 336420000,
+        settings: settings,
+        vehicleNumber: '',
+        lrRrNumber: '',
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+    });
+
+    test('buildDocumentPdf renders tally template with multi-page support across 25 items', () async {
+      final multiLines = List.generate(
+        25,
+        (i) => InvoiceLine(
+          name: 'Rubber Sheet Grade ${(i + 1)}',
+          hsn: '40012100',
+          quantity: 100.0 * (i + 1),
+          unit: 'Kgs',
+          price: 25000,
+          discount: 0,
+          taxable: (100 * (i + 1) * 25000),
+          tax: ((100 * (i + 1) * 25000 * 5) ~/ 100),
+          gstRate: 5,
+        ),
+      );
+
+      final totalTaxable = multiLines.fold(0, (sum, l) => sum + l.taxable);
+      final totalTax = multiLines.fold(0, (sum, l) => sum + l.tax);
+      final halfTax = totalTax ~/ 2;
+
+      final settings = InvoiceCustomizationSettings(
+        themeStyle: 'tally',
+        showBankDetails: true,
+        showDeclaration: true,
+        showHsnSummaryTable: true,
+      );
+
+      final multiCustomer = Customer(
+        name: 'Tripura Industrial Rubber Corp',
+        state: 'Tripura',
+        address: 'Sector 4, Industrial Area, Agartala, Tripura',
+        gstin: '16AABCT1234F1Z1',
+      );
+
+      final pdfBytes = await buildDocumentPdf(
+        business: testBusiness,
+        title: 'Tax Invoice',
+        number: 'INV-2026-MULTI-TALLY',
+        date: '2026-10-08',
+        customer: multiCustomer,
+        partyName: multiCustomer.name,
+        partyAddress: multiCustomer.billingAddress,
+        partyState: multiCustomer.state,
+        partyGstin: multiCustomer.gstin,
+        lines: multiLines,
+        subtotal: totalTaxable,
+        discount: 0,
+        taxable: totalTaxable,
+        igst: 0,
+        cgst: halfTax,
+        sgst: totalTax - halfTax,
+        roundOff: 0,
+        total: totalTaxable + totalTax,
+        outstandingPaise: totalTaxable + totalTax,
+        settings: settings,
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      expect(pdfBytes.length, greaterThan(8000));
+      final pdfString = String.fromCharCodes(pdfBytes);
+      final pageCount = RegExp(r'/Type\s*/Page\b').allMatches(pdfString).length;
+      expect(pageCount, greaterThanOrEqualTo(2));
     });
 
     test('buildPurchaseBillPdf generates complete BillBook standard PDF with vendor, buyer card, payment mode, and inward signatory', () async {
