@@ -353,6 +353,22 @@ const demoProfiles: Record<string, Partial<GstLookupResult>> = {
     registrationDate: '2021-03-15',
     isOnlineFetched: true,
   },
+  '16GPZPD6135F1ZH': {
+    businessName: 'BALAJI ENTERPRISE',
+    tradeName: 'BALAJI ENTERPRISE',
+    legalName: 'BALAJI ENTERPRISE',
+    ownerName: 'Gourab Paul',
+    city: 'Dharmanagar',
+    address: 'Ward No 9, Dharmanagar, North Tripura, Tripura - 799250',
+    pinCode: '799250',
+    industry: 'Retail',
+    constitution: 'Sole Proprietorship',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2021-03-15',
+    isOnlineFetched: true,
+  },
 };
 
 export class SandboxService {

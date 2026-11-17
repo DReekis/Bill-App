@@ -31,6 +31,8 @@ class _HardwareScannerDialogState extends State<HardwareScannerDialog> {
   Product? _matchedProduct;
   bool _searchingProduct = false;
   final List<BarcodeScanResult> _history = [];
+  final FocusNode _scannerFocusNode = FocusNode();
+  final TextEditingController _testInputController = TextEditingController();
 
   @override
   void initState() {
@@ -40,11 +42,18 @@ class _HardwareScannerDialogState extends State<HardwareScannerDialog> {
     if (_latestResult != null) {
       _lookupProduct(_latestResult!.barcode);
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _scannerFocusNode.requestFocus();
+      }
+    });
   }
 
   @override
   void dispose() {
     PhysicalBarcodeScanner.instance.removeListener(_onBarcodeScanned);
+    _scannerFocusNode.dispose();
+    _testInputController.dispose();
     super.dispose();
   }
 
@@ -89,8 +98,11 @@ class _HardwareScannerDialogState extends State<HardwareScannerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
+    return Focus(
+      focusNode: _scannerFocusNode,
+      autofocus: true,
+      child: Container(
+        decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -420,8 +432,9 @@ class _HardwareScannerDialogState extends State<HardwareScannerDialog> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildGuideTile({
     required IconData icon,

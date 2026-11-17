@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -53,8 +54,13 @@ class PhysicalBarcodeScanner {
   static const Duration idleInterKeyTimeout = Duration(milliseconds: 650);
 
   /// Maximum allowed average delay between characters when an EditableText has focus.
-  /// Barcode scanners typically emit keys every 5-30ms. Fast humans type > 80ms.
-  static const double maxScannerBurstAverageMs = 60.0;
+  /// Barcode scanners typically emit keys every 5-50ms; Bluetooth BLE scanners may reach 70-90ms.
+  static const double maxScannerBurstAverageMs = 120.0;
+
+  /// Inactivity debounce delay for scanners that do not emit an Enter/Tab terminator.
+  static const Duration autoFlushDelay = Duration(milliseconds: 75);
+
+  Timer? _inactivityTimer;
 
   /// Minimum characters required for a valid barcode.
   static const int minBarcodeLength = 2;
@@ -71,6 +77,7 @@ class PhysicalBarcodeScanner {
     if (!_isListening) return;
     HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     _isListening = false;
+    _inactivityTimer?.cancel();
     _buffer.clear();
   }
 
@@ -171,44 +178,7 @@ class PhysicalBarcodeScanner {
 
     // Check terminator key (End of barcode transmission)
     if (isTerminatorKey(event)) {
-      if (_buffer.length >= minBarcodeLength) {
-        final totalDurationFromEvent = _buffer.last.eventTimeStamp - _buffer.first.eventTimeStamp;
-        final totalDurationFromWallClock = _buffer.last.timestamp.difference(_buffer.first.timestamp);
-        final totalDuration = totalDurationFromEvent.inMilliseconds > 0
-            ? totalDurationFromEvent
-            : totalDurationFromWallClock;
-        final avgMs = _buffer.length > 1
-            ? totalDuration.inMilliseconds / (_buffer.length - 1)
-            : 0.0;
-
-        final isFocused = isEditableFocused();
-
-        // If an editable input has focus, only intercept if it was a true scanner burst
-        if (isFocused && avgMs > maxScannerBurstAverageMs) {
-          // Manual typing by human into text field: do not intercept
-          _buffer.clear();
-          return false;
-        }
-
-        final rawBarcode = _buffer.map((k) => k.character).join();
-        final result = BarcodeScanResult(
-          barcode: rawBarcode.trim(),
-          charCount: _buffer.length,
-          totalDuration: totalDuration,
-          averageInterKeyMs: avgMs,
-          scannedAt: now,
-        );
-
-        _buffer.clear();
-
-        // Notify subscribers
-        _dispatchScan(result);
-
-        // Consume event so Enter doesn't trigger secondary actions
-        return true;
-      }
-      _buffer.clear();
-      return false;
+      return _commitBuffer(now, wasTerminator: true);
     }
 
     // Printable character key
@@ -228,14 +198,63 @@ class PhysicalBarcodeScanner {
 
       _buffer.add(_BufferedKey(char, now, event.timeStamp));
 
-      // If no text field is focused, we can consume the printable character
-      // so it doesn't trigger unexpected shortcut keys.
+      // Schedule auto-flush for scanners without Enter / Tab terminators
+      _inactivityTimer?.cancel();
+      _inactivityTimer = Timer(autoFlushDelay, () {
+        if (_buffer.length >= minBarcodeLength) {
+          _commitBuffer(nowProvider(), wasTerminator: false);
+        }
+      });
+
+      // If no text field is focused, we consume the printable character
       if (!isEditableFocused()) {
         return true;
       }
     }
 
     return false;
+  }
+
+  bool _commitBuffer(DateTime now, {required bool wasTerminator}) {
+    _inactivityTimer?.cancel();
+    if (_buffer.length < minBarcodeLength) {
+      _buffer.clear();
+      return false;
+    }
+
+    final totalDurationFromEvent = _buffer.last.eventTimeStamp - _buffer.first.eventTimeStamp;
+    final totalDurationFromWallClock = _buffer.last.timestamp.difference(_buffer.first.timestamp);
+    final totalDuration = totalDurationFromEvent.inMilliseconds > 0
+        ? totalDurationFromEvent
+        : totalDurationFromWallClock;
+    final avgMs = _buffer.length > 1
+        ? totalDuration.inMilliseconds / (_buffer.length - 1)
+        : 0.0;
+
+    final isFocused = isEditableFocused();
+
+    // If an editable input has focus, only intercept if it was a true scanner burst
+    if (isFocused && avgMs > maxScannerBurstAverageMs) {
+      // Manual typing by human into text field: do not intercept
+      _buffer.clear();
+      return false;
+    }
+
+    final rawBarcode = _buffer.map((k) => k.character).join();
+    final result = BarcodeScanResult(
+      barcode: rawBarcode.trim(),
+      charCount: _buffer.length,
+      totalDuration: totalDuration,
+      averageInterKeyMs: avgMs,
+      scannedAt: now,
+    );
+
+    _buffer.clear();
+
+    // Notify subscribers
+    _dispatchScan(result);
+
+    return true;
   }
 
   void _dispatchScan(BarcodeScanResult result) {

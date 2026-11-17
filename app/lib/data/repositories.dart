@@ -129,6 +129,7 @@ class Repository {
     if (id == null) return;
     await db.update('businesses', business.toMap(), where: 'id = ?', whereArgs: [id]);
     await _audit(id, action: 'update', entity: 'business', entityId: id, after: business.toMap());
+    await _enqueueSync(id, entity: 'business', entityId: id, op: 'update', payload: jsonEncode(business.toMap()));
   }
 
   Future<int> _resolveHighestInvoiceSequence(DatabaseExecutor db, int businessId, String prefix) async {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api_client.dart';
+import '../../core/business_service.dart';
 import '../../core/gst_service.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
@@ -214,9 +215,59 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
           invoicePrefix: _prefix.text.trim().isEmpty ? 'INV' : _prefix.text.trim(),
           taxRegistered: taxRegistered,
         );
+        final session = context.read<Session>();
         await Repository.instance.updateBusiness(updated, businessIdOverride: b.id);
+
+        if (session.token != null && session.token!.isNotEmpty) {
+          final client = ApiClient()..setToken(session.token!);
+          try {
+            final cloudBizId = session.cloudBusinessId;
+            if (cloudBizId != null && cloudBizId.isNotEmpty) {
+              await BusinessService(client).updateBusiness(
+                cloudBizId,
+                name: updated.name,
+                ownerName: updated.ownerName,
+                phone: updated.phone,
+                email: updated.email,
+                gstin: updated.gstin,
+                pan: updated.pan,
+                address: updated.address,
+                city: updated.city,
+                state: updated.state,
+                pinCode: updated.pinCode,
+                country: updated.country,
+                industry: updated.industry,
+                taxRegistered: updated.taxRegistered,
+                invoicePrefix: updated.invoicePrefix,
+                upiId: updated.upiId,
+              ).timeout(const Duration(seconds: 4));
+            } else {
+              final created = await BusinessService(client).createBusiness(
+                name: updated.name,
+                ownerName: updated.ownerName,
+                phone: updated.phone,
+                email: updated.email,
+                gstin: updated.gstin,
+                pan: updated.pan,
+                address: updated.address,
+                city: updated.city,
+                state: updated.state,
+                pinCode: updated.pinCode,
+                country: updated.country,
+                industry: updated.industry,
+                taxRegistered: updated.taxRegistered,
+                invoicePrefix: updated.invoicePrefix,
+                upiId: updated.upiId,
+              ).timeout(const Duration(seconds: 4));
+              await session.setCloudBusinessId(created.id);
+            }
+          } catch (e) {
+            debugPrint('Cloud business sync notice: $e');
+          }
+        }
+
         if (mounted) {
-          showAppMessage(context, 'Business updated');
+          showAppMessage(context, 'Business updated ✓');
           Navigator.of(context).pop(true);
         }
       }

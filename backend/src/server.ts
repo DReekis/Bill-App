@@ -85,12 +85,22 @@ const authLoginSchema = z.object({
 });
 
 const businessSchema = z.object({
-  name: z.string().min(2),
-  ownerName: z.string().optional(),
-  gstin: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
+  name: z.string().min(1),
+  ownerName: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  gstin: z.string().nullable().optional(),
+  pan: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  state: z.string().nullable().optional(),
+  pinCode: z.string().nullable().optional(),
+  country: z.string().default('India'),
+  industry: z.string().nullable().optional(),
+  taxRegistered: z.boolean().default(false),
+  invoicePrefix: z.string().default('INV'),
   currency: z.string().default('INR'),
+  upiId: z.string().nullable().optional(),
 });
 
 const customerSchema = z.object({
@@ -744,10 +754,28 @@ app.get('/api/v1/businesses', async (request) => {
 app.post('/api/v1/businesses', async (request, reply) => {
   const parsed = businessSchema.safeParse(request.body);
   if (!parsed.success) {
-    return reply.code(400).send({ error: 'Invalid business payload' });
+    return reply.code(400).send({ error: 'Invalid business payload', details: parsed.error.issues });
   }
 
   const user = (request as any).user;
+  
+  // If user already has an existing business with default/placeholder name, update it instead of creating duplicates
+  const existingBizList = await prisma.business.findMany({
+    where: { ownerId: user.sub },
+  });
+
+  const placeholderBiz = existingBizList.find(
+    (b) => !b.gstin && (b.name.includes("'s Business") || b.name.startsWith('User '))
+  );
+
+  if (placeholderBiz) {
+    const updated = await prisma.business.update({
+      where: { id: placeholderBiz.id },
+      data: parsed.data,
+    });
+    return reply.code(201).send(updated);
+  }
+
   const business = await prisma.business.create({
     data: {
       ...parsed.data,
@@ -755,6 +783,50 @@ app.post('/api/v1/businesses', async (request, reply) => {
     },
   });
   return reply.code(201).send(business);
+});
+
+app.patch('/api/v1/businesses/:id', async (request, reply) => {
+  const user = (request as any).user;
+  const { id } = request.params as { id: string };
+  const parsed = businessSchema.partial().safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'Invalid business payload', details: parsed.error.issues });
+  }
+
+  const existing = await prisma.business.findFirst({
+    where: { id, ownerId: user.sub },
+  });
+  if (!existing) {
+    return reply.code(404).send({ error: 'Business not found or access denied' });
+  }
+
+  const updated = await prisma.business.update({
+    where: { id },
+    data: parsed.data,
+  });
+  return reply.code(200).send(updated);
+});
+
+app.put('/api/v1/businesses/:id', async (request, reply) => {
+  const user = (request as any).user;
+  const { id } = request.params as { id: string };
+  const parsed = businessSchema.partial().safeParse(request.body);
+  if (!parsed.success) {
+    return reply.code(400).send({ error: 'Invalid business payload', details: parsed.error.issues });
+  }
+
+  const existing = await prisma.business.findFirst({
+    where: { id, ownerId: user.sub },
+  });
+  if (!existing) {
+    return reply.code(404).send({ error: 'Business not found or access denied' });
+  }
+
+  const updated = await prisma.business.update({
+    where: { id },
+    data: parsed.data,
+  });
+  return reply.code(200).send(updated);
 });
 
 // Customers

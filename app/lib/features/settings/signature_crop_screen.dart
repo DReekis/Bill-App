@@ -19,7 +19,12 @@ Future<String?> pickAndCropSignature(BuildContext context) async {
   );
 
   if (source == null) return null;
+  if (!context.mounted) return null;
+  return pickAndCropSignatureDirect(context, source);
+}
 
+/// Directly picks from specified source (Camera or Gallery) and opens interactive image cropper.
+Future<String?> pickAndCropSignatureDirect(BuildContext context, ImageSource source) async {
   try {
     final picker = ImagePicker();
     final XFile? picked = await picker.pickImage(
@@ -41,7 +46,11 @@ Future<String?> pickAndCropSignature(BuildContext context) async {
     return result;
   } catch (e) {
     if (context.mounted) {
-      showAppMessage(context, 'Could not access ${source == ImageSource.camera ? 'camera' : 'gallery'}: $e', error: true);
+      showAppMessage(
+        context,
+        'Could not access ${source == ImageSource.camera ? 'camera' : 'gallery'}: $e',
+        error: true,
+      );
     }
     return null;
   }

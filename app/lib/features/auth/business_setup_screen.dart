@@ -165,10 +165,16 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
           final cloudBiz = await BusinessService(client).createBusiness(
             name: business.name,
             ownerName: business.ownerName,
+            phone: widget.phone.isNotEmpty ? widget.phone : business.phone,
             gstin: business.gstin,
+            pan: business.pan,
             city: business.city,
             state: business.state,
             address: business.address,
+            pinCode: business.pinCode,
+            industry: business.industry,
+            taxRegistered: business.taxRegistered,
+            invoicePrefix: business.invoicePrefix,
           ).timeout(const Duration(seconds: 4));
           await session.setCloudBusinessId(cloudBiz.id);
         } catch (_) {

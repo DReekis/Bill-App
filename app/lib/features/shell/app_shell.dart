@@ -27,6 +27,7 @@ import '../auth/login_screen.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/stitch_theme.dart';
 import '../../core/restock_notification_service.dart';
+import '../subscription/free_tier_paywall_dialog.dart';
 import '../inventory/restock_price_update_sheet.dart';
 
 class AppShell extends StatefulWidget {
@@ -57,6 +58,7 @@ class _AppShellState extends State<AppShell> {
         SyncEngine.instance.startAutoSync();
         SyncEngine.instance.syncNow();
       }
+      FreeTierPaywallDialog.showIfFree(context);
     });
   }
 

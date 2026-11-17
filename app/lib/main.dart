@@ -112,21 +112,64 @@ class _AppGateState extends State<AppGate> {
         final existing = await Repository.instance.allBusinesses();
         for (final dto in businesses) {
           final normalized = dto.name.trim();
-          final duplicate = existing.any(
-            (business) =>
-                business.name.toLowerCase() == normalized.toLowerCase(),
+          final existingBiz = existing.cast<Business?>().firstWhere(
+            (b) =>
+                (b != null && b.name.toLowerCase() == normalized.toLowerCase()) ||
+                (b != null && dto.gstin != null && b.gstin == dto.gstin) ||
+                (b != null && (b.name.contains("'s Business") || b.name.startsWith('User '))),
+            orElse: () => null,
           );
-          if (!duplicate && normalized.isNotEmpty) {
+
+          if (existingBiz != null) {
+            final updated = existingBiz.copyWith(
+              name: dto.name.isNotEmpty ? dto.name : existingBiz.name,
+              ownerName: dto.ownerName ?? existingBiz.ownerName,
+              phone: dto.phone ?? existingBiz.phone,
+              email: dto.email ?? existingBiz.email,
+              gstin: dto.gstin ?? existingBiz.gstin,
+              pan: dto.pan ?? existingBiz.pan,
+              address: dto.address ?? existingBiz.address,
+              city: dto.city ?? existingBiz.city,
+              state: dto.state ?? existingBiz.state,
+              pinCode: dto.pinCode ?? existingBiz.pinCode,
+              country: dto.country,
+              industry: dto.industry ?? existingBiz.industry,
+              taxRegistered: dto.taxRegistered,
+              invoicePrefix: dto.invoicePrefix,
+              currency: dto.currency,
+              subscriptionTier: dto.subscriptionTier,
+              subscriptionStatus: dto.subscriptionStatus,
+            );
+            await Repository.instance.updateBusiness(updated, businessIdOverride: existingBiz.id);
+            if (session.businessId == null && existingBiz.id != null) {
+              await session.completeOnboarding(existingBiz.id!);
+            }
+            await session.setCloudBusinessId(dto.id);
+          } else if (normalized.isNotEmpty) {
             final created = Business(
               name: dto.name,
               ownerName: dto.ownerName,
+              phone: dto.phone,
+              email: dto.email,
+              gstin: dto.gstin,
+              pan: dto.pan,
+              address: dto.address,
+              city: dto.city,
+              state: dto.state,
+              pinCode: dto.pinCode,
+              country: dto.country,
+              industry: dto.industry,
+              taxRegistered: dto.taxRegistered,
+              invoicePrefix: dto.invoicePrefix,
               currency: dto.currency,
+              subscriptionTier: dto.subscriptionTier,
+              subscriptionStatus: dto.subscriptionStatus,
             );
-            final businessId =
-                await Repository.instance.createBusiness(created);
+            final businessId = await Repository.instance.createBusiness(created);
             if (session.businessId == null) {
               await session.completeOnboarding(businessId);
             }
+            await session.setCloudBusinessId(dto.id);
             existing.add(created);
           }
         }

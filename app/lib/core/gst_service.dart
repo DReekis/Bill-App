@@ -310,6 +310,17 @@ class GstService {
       'constitution': 'Sole Proprietorship',
       'industry': 'Retail',
     },
+    '16GPZPD6135F1ZH': {
+      'businessName': 'BALAJI ENTERPRISE',
+      'tradeName': 'BALAJI ENTERPRISE',
+      'legalName': 'BALAJI ENTERPRISE',
+      'ownerName': 'Gourab Paul',
+      'city': 'Dharmanagar',
+      'address': 'Ward No 9, Dharmanagar, North Tripura, Tripura - 799250',
+      'pinCode': '799250',
+      'constitution': 'Sole Proprietorship',
+      'industry': 'Retail',
+    },
   };
 
   /// Indian PAN 4th character entity / constitution mapping.

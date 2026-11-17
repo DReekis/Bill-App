@@ -274,9 +274,9 @@ class SubscriptionService extends ChangeNotifier {
   bool get isBusinessPro =>
       !isExpired && _currentTier == SubscriptionTier.businessPro;
 
-  bool get canAccessEInvoice => isBusinessPro;
+  bool get canAccessEInvoice => canAccessSalesOrders;
 
-  bool get canAccessEWayBill => isBusinessPro;
+  bool get canAccessEWayBill => canAccessSalesOrders;
 
   bool get canAccessBankManagement => canAccessSalesOrders;
 

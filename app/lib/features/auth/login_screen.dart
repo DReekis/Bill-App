@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_service.dart';
+import '../../core/business_service.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
 import '../../core/subscription_service.dart';
@@ -255,8 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
     widget.onSuccess?.call();
 
     final cleanPhone = (result.user.phone ?? _phoneController.text).trim();
-    final isPlayStoreTest = cleanPhone.endsWith('9999999999') ||
-        cleanPhone.endsWith('9876543210') ||
+    final isPlayStoreTest = cleanPhone == '9999999999' ||
         result.user.email == 'playstore.test@billapp.in';
 
     if (isPlayStoreTest) {
@@ -320,16 +320,122 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    // Check if the business needs first-time setup or is a newly registered account
-    final bizList = await Repository.instance.allBusinesses();
-    final bool isUnconfigured = bizList.isEmpty ||
-        (bizList.length == 1 &&
-            (bizList.first.name.contains("'s Business") ||
-                bizList.first.name.startsWith('User ') ||
-                bizList.first.name == 'Demo Mart' ||
-                (bizList.first.gstin == null && bizList.first.address == null)));
+    // For standard registered users: Hydrate cloud business & GST details into local SQLite
+    int? activeBusinessId;
+    final apiClient = SyncEngine.instance.apiClient;
+    try {
+      if (result.token.isNotEmpty) {
+        apiClient.setToken(result.token);
+        final businesses = await BusinessService(apiClient)
+            .fetchBusinesses()
+            .timeout(const Duration(seconds: 4));
+        if (businesses.isNotEmpty) {
+          final existing = await Repository.instance.allBusinesses();
+          for (final dto in businesses) {
+            Business? matched = existing.cast<Business?>().firstWhere(
+              (b) =>
+                  (b != null && dto.gstin != null && dto.gstin!.isNotEmpty && b.gstin == dto.gstin) ||
+                  (b != null && dto.phone != null && dto.phone!.isNotEmpty && b.phone == dto.phone) ||
+                  (b != null && b.name.toLowerCase() == dto.name.toLowerCase().trim()),
+              orElse: () => null,
+            );
 
-    if (isUnconfigured || result.isNewUser) {
+            matched ??= existing.cast<Business?>().firstWhere(
+              (b) =>
+                  b != null &&
+                  (b.gstin == null || b.gstin!.isEmpty) &&
+                  (b.name.contains("'s Business") || b.name.startsWith('User ')),
+              orElse: () => null,
+            );
+
+            if (matched != null) {
+              final updated = matched.copyWith(
+                name: dto.name.isNotEmpty ? dto.name : matched.name,
+                ownerName: dto.ownerName ?? matched.ownerName,
+                phone: dto.phone ?? matched.phone,
+                email: dto.email ?? matched.email,
+                gstin: dto.gstin ?? matched.gstin,
+                pan: dto.pan ?? matched.pan,
+                address: dto.address ?? matched.address,
+                city: dto.city ?? matched.city,
+                state: dto.state ?? matched.state,
+                pinCode: dto.pinCode ?? matched.pinCode,
+                country: dto.country,
+                industry: dto.industry ?? matched.industry,
+                taxRegistered: dto.taxRegistered,
+                invoicePrefix: dto.invoicePrefix,
+                currency: dto.currency,
+                subscriptionTier: dto.subscriptionTier,
+                subscriptionStatus: dto.subscriptionStatus,
+                upiId: dto.upiId ?? matched.upiId,
+              );
+              await Repository.instance.updateBusiness(updated, businessIdOverride: matched.id);
+              activeBusinessId ??= matched.id;
+              await session.setCloudBusinessId(dto.id);
+            } else {
+              final created = Business(
+                name: dto.name,
+                ownerName: dto.ownerName,
+                phone: dto.phone ?? cleanPhone,
+                email: dto.email,
+                gstin: dto.gstin,
+                pan: dto.pan,
+                address: dto.address,
+                city: dto.city,
+                state: dto.state,
+                pinCode: dto.pinCode,
+                country: dto.country,
+                industry: dto.industry,
+                taxRegistered: dto.taxRegistered,
+                invoicePrefix: dto.invoicePrefix,
+                currency: dto.currency,
+                subscriptionTier: dto.subscriptionTier,
+                subscriptionStatus: dto.subscriptionStatus,
+                upiId: dto.upiId,
+              );
+              final newId = await Repository.instance.createBusiness(created);
+              activeBusinessId ??= newId;
+              await session.setCloudBusinessId(dto.id);
+              existing.add(created);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Cloud business profile restore notice: $e');
+    }
+
+    if (activeBusinessId == null) {
+      final bizList = await Repository.instance.allBusinesses();
+      final configured = bizList.cast<Business?>().firstWhere(
+        (b) => b != null && b.gstin != null && b.gstin!.isNotEmpty,
+        orElse: () => null,
+      );
+      if (configured != null) {
+        activeBusinessId = configured.id;
+      } else if (bizList.isNotEmpty) {
+        activeBusinessId = bizList.first.id;
+      }
+    }
+
+    if (activeBusinessId != null) {
+      await session.completeOnboarding(activeBusinessId);
+      await session.switchBusiness(activeBusinessId);
+    }
+
+    // Pull remote changes from cloud
+    await SyncEngine.instance.syncNow(force: true);
+
+    final activeBiz = activeBusinessId != null
+        ? await Repository.instance.getBusiness(activeBusinessId)
+        : null;
+
+    final bool isUnconfigured = activeBiz == null ||
+        ((activeBiz.gstin == null || activeBiz.gstin!.isEmpty) &&
+            (activeBiz.address == null || activeBiz.address!.isEmpty) &&
+            (activeBiz.name.contains("'s Business") || activeBiz.name.startsWith('User ')));
+
+    if (isUnconfigured && result.isNewUser) {
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(

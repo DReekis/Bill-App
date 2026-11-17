@@ -32,6 +32,8 @@ export async function registerUser(input: {
       ownerName: user.name,
       email: cleanEmail,
       ownerId: user.id,
+      subscriptionTier: 'free',
+      subscriptionStatus: 'active',
     },
   });
 
@@ -302,6 +304,17 @@ export async function phoneAuth(input: {
     include: { businesses: true },
   });
 
+  // If user wasn't found by dummy email, check if any existing business was registered with this phone number
+  if (!user) {
+    const existingBiz = await prisma.business.findFirst({
+      where: { phone: cleanPhone },
+      include: { owner: { include: { businesses: true } } },
+    });
+    if (existingBiz?.owner) {
+      user = existingBiz.owner;
+    }
+  }
+
   if (!user) {
     user = await prisma.user.create({
       data: {
@@ -314,7 +327,8 @@ export async function phoneAuth(input: {
     });
   }
 
-  let business = user.businesses[0];
+  // Prioritize a business that already has GST details configured
+  let business = user.businesses.find((b) => b.gstin != null && b.gstin.trim() !== '') || user.businesses[0];
   if (!business) {
     business = await prisma.business.create({
       data: {
@@ -330,7 +344,7 @@ export async function phoneAuth(input: {
         country: 'India',
         taxRegistered: true,
         invoicePrefix: 'INV',
-        subscriptionTier: 'pro',
+        subscriptionTier: isPlayStoreTest ? 'pro' : 'free',
         subscriptionStatus: 'active',
         subscriptionExpiresAt: null,
         maxDevices: 10,

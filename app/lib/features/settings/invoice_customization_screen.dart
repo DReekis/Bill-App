@@ -253,13 +253,35 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
     });
   }
 
-  Future<void> _pickSignatureImage() async {
-    final croppedPath = await pickAndCropSignature(context);
+  Future<void> _pickSignatureFromCamera() async {
+    final croppedPath = await pickAndCropSignatureDirect(context, ImageSource.camera);
     if (croppedPath != null && mounted) {
       setState(() {
         _settings = _settings?.copyWith(signatureImagePath: croppedPath);
       });
-      showAppMessage(context, 'Signature image updated ✓');
+      showAppMessage(context, 'Signature captured and cropped ✓');
+    }
+  }
+
+  Future<void> _pickSignatureFromGallery() async {
+    final croppedPath = await pickAndCropSignatureDirect(context, ImageSource.gallery);
+    if (croppedPath != null && mounted) {
+      setState(() {
+        _settings = _settings?.copyWith(signatureImagePath: croppedPath);
+      });
+      showAppMessage(context, 'Signature uploaded and cropped ✓');
+    }
+  }
+
+  Future<void> _reCropSignature() async {
+    final path = _settings?.signatureImagePath;
+    if (path == null) return;
+    final croppedPath = await cropExistingSignature(context, path);
+    if (croppedPath != null && mounted) {
+      setState(() {
+        _settings = _settings?.copyWith(signatureImagePath: croppedPath);
+      });
+      showAppMessage(context, 'Signature re-cropped ✓');
     }
   }
 
@@ -1157,35 +1179,96 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
               _buildCompactToggle('Show Signatory Container', settings.showSignatureBox, (v) => setState(() => _settings = _settings?.copyWith(showSignatureBox: v))),
               const SizedBox(height: 10),
               // Signature image upload
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 70,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: StitchColors.outline),
-                      borderRadius: BorderRadius.circular(6),
-                      color: StitchColors.surfaceVariant,
-                    ),
-                    child: settings.signatureImagePath != null && File(settings.signatureImagePath!).existsSync()
-                        ? Image.file(File(settings.signatureImagePath!), fit: BoxFit.contain)
-                        : const Center(child: Icon(Icons.draw_rounded, size: 20, color: StitchColors.textSecondary)),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Digital Signature Stamp', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                        Text('Upload transparent PNG of stamp or signature.', style: TextStyle(fontSize: 11, color: StitchColors.textSecondary)),
+                  Row(
+                    children: [
+                      Container(
+                        width: 70,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: StitchColors.outline),
+                          borderRadius: BorderRadius.circular(8),
+                          color: StitchColors.surfaceVariant,
+                        ),
+                        child: settings.signatureImagePath != null && File(settings.signatureImagePath!).existsSync()
+                            ? Image.file(File(settings.signatureImagePath!), fit: BoxFit.contain)
+                            : const Center(child: Icon(Icons.draw_rounded, size: 22, color: StitchColors.textSecondary)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Digital Signature Stamp', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                            const SizedBox(height: 2),
+                            Text(
+                              settings.signatureImagePath != null
+                                  ? 'Signature loaded ✓'
+                                  : 'Take photo or upload image (with crop tool)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: settings.signatureImagePath != null ? StitchColors.success : StitchColors.textSecondary,
+                                fontWeight: settings.signatureImagePath != null ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (settings.signatureImagePath != null) ...[
+                        IconButton(
+                          tooltip: 'Remove Signature',
+                          onPressed: () {
+                            setState(() {
+                              _settings = _settings?.copyWith(signatureImagePath: null);
+                            });
+                            showAppMessage(context, 'Signature removed');
+                          },
+                          icon: const Icon(Icons.delete_outline_rounded, size: 20, color: StitchColors.error),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
-                  OutlinedButton.icon(
-                    onPressed: _pickSignatureImage,
-                    icon: const Icon(Icons.upload_rounded, size: 15),
-                    label: Text(settings.signatureImagePath != null ? 'Replace' : 'Upload'),
-                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickSignatureFromCamera,
+                          icon: const Icon(Icons.camera_alt_rounded, size: 16),
+                          label: const Text('Camera', style: TextStyle(fontSize: 12.5)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickSignatureFromGallery,
+                          icon: const Icon(Icons.upload_file_rounded, size: 16),
+                          label: const Text('Upload', style: TextStyle(fontSize: 12.5)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                      if (settings.signatureImagePath != null) ...[
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: _reCropSignature,
+                          icon: const Icon(Icons.crop_rounded, size: 16),
+                          label: const Text('Crop', style: TextStyle(fontSize: 12.5)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),

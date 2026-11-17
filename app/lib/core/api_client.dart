@@ -211,6 +211,64 @@ class ApiClient {
     return response;
   }
 
+  Future<http.Response> patch(
+    String path,
+    Map<String, dynamic> body, {
+    String? token,
+    Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    await ensureReady();
+    final effectiveHeaders = _headers(extra: headers);
+    if (token != null && token.isNotEmpty) {
+      effectiveHeaders['Authorization'] = 'Bearer $token';
+    }
+    final uri = Uri.parse('$_baseUrl$path');
+    var response = await _client
+        .patch(uri, headers: effectiveHeaders, body: jsonEncode(body))
+        .timeout(timeout);
+
+    if (response.statusCode == 401 && _token != null && _token!.isNotEmpty && !path.startsWith('/api/v1/auth/')) {
+      final newToken = await refreshToken();
+      if (newToken != null) {
+        effectiveHeaders['Authorization'] = 'Bearer $newToken';
+        response = await _client
+            .patch(uri, headers: effectiveHeaders, body: jsonEncode(body))
+            .timeout(timeout);
+      }
+    }
+    return response;
+  }
+
+  Future<http.Response> put(
+    String path,
+    Map<String, dynamic> body, {
+    String? token,
+    Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    await ensureReady();
+    final effectiveHeaders = _headers(extra: headers);
+    if (token != null && token.isNotEmpty) {
+      effectiveHeaders['Authorization'] = 'Bearer $token';
+    }
+    final uri = Uri.parse('$_baseUrl$path');
+    var response = await _client
+        .put(uri, headers: effectiveHeaders, body: jsonEncode(body))
+        .timeout(timeout);
+
+    if (response.statusCode == 401 && _token != null && _token!.isNotEmpty && !path.startsWith('/api/v1/auth/')) {
+      final newToken = await refreshToken();
+      if (newToken != null) {
+        effectiveHeaders['Authorization'] = 'Bearer $newToken';
+        response = await _client
+            .put(uri, headers: effectiveHeaders, body: jsonEncode(body))
+            .timeout(timeout);
+      }
+    }
+    return response;
+  }
+
   Future<http.Response> get(
     String path, {
     String? token,
