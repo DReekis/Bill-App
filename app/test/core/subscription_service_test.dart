@@ -128,9 +128,9 @@ void main() {
       expect(sub.canAccessPurchaseOrders, true);
       expect(sub.canAccessDeliveryChallans, true);
 
-      // Bank Hub & E-Invoice unlocked
+      // Bank Hub unlocked, E-Invoice requires Business Pro
       expect(sub.canAccessBankManagement, true);
-      expect(sub.canAccessEInvoice, true);
+      expect(sub.canAccessEInvoice, false);
       expect(sub.canAccessBarcode, true);
       expect(sub.canAccessLowStockAlert, true);
       expect(sub.canAccessStockTransfer, true);
@@ -189,6 +189,8 @@ void main() {
       expect(sub.currentTier, SubscriptionTier.businessPro);
 
       expect(sub.canAccessCustomerLoyalty, true);
+      expect(sub.canAccessEInvoice, true);
+      expect(sub.canAccessEWayBill, true);
       expect(sub.canAddCustomer(100000), true);
       expect(sub.canAddSupplier(100000), true);
       expect(sub.canAddItem(500000), true);
@@ -215,6 +217,27 @@ void main() {
       expect(sub.canAccessBankManagement, false);
       expect(sub.canAccessAccountingModule, false);
       expect(sub.canAccessDesktop, false);
+    });
+
+    test('Fresh user signup & reset enforces strictly Free tier and does not leak Pro plan', () async {
+      // 1. Simulate prior session that had Pro
+      await sub.setSubscription(
+        tier: SubscriptionTier.businessPro,
+        expiresAt: DateTime.now().add(const Duration(days: 365)),
+      );
+      expect(sub.currentTier, SubscriptionTier.businessPro);
+
+      // 2. User logs out
+      await sub.reset();
+      expect(sub.currentTier, SubscriptionTier.free);
+      expect(sub.isBusinessPro, false);
+
+      // 3. New user registers or starts fresh session
+      await sub.init(businessId: null);
+      expect(sub.currentTier, SubscriptionTier.free);
+      expect(sub.canAccessEInvoice, false);
+      expect(sub.canAccessEWayBill, false);
+      expect(sub.canCreateSalesInvoice(10), false); // 10 invoice limit enforced
     });
   });
 }

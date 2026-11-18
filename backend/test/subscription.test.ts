@@ -68,6 +68,8 @@ test('Subscription & Razorpay Engine Suite', async (t) => {
     assert.equal(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.businessId, businessId);
+    assert.equal(body.tier, 'free');
+    assert.equal(body.plan.tier, 'free');
     assert.ok(body.plan);
     assert.ok(body.usage);
     assert.equal(typeof body.usage.invoices.used, 'number');

@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <uses-sdk tools:overrideLibrary="io.flutter.plugins.imagepicker,io.flutter.plugins.googlesignin,io.flutter.plugins.flutter_plugin_android_lifecycle,io.flutter.plugins.localauth,androidx.credentials,androidx.credentials.play.services.auth,com.google.android.libraries.identity.googleid,com.google.android.gms.auth.api,com.google.android.gms.common,androidx.activity,androidx.activity.ktx,androidx.core,androidx.core.ktx,androidx.navigationevent" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />

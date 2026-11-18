@@ -274,9 +274,9 @@ class SubscriptionService extends ChangeNotifier {
   bool get isBusinessPro =>
       !isExpired && _currentTier == SubscriptionTier.businessPro;
 
-  bool get canAccessEInvoice => canAccessSalesOrders;
+  bool get canAccessEInvoice => isBusinessPro;
 
-  bool get canAccessEWayBill => canAccessSalesOrders;
+  bool get canAccessEWayBill => isBusinessPro;
 
   bool get canAccessBankManagement => canAccessSalesOrders;
 
@@ -316,23 +316,30 @@ class SubscriptionService extends ChangeNotifier {
   static const _kPrefExpiresAt = 'subscription.expires_at';
   static const _kPrefStatus = 'subscription.status';
 
-  /// Initializes subscription state from local SharedPreferences and SQLite
+  /// Resets in-memory and persisted subscription state back to the Free plan.
+  /// Called upon user logout or store deletion so no pro status leaks to new accounts.
+  Future<void> reset() async {
+    _currentTier = SubscriptionTier.free;
+    _expiresAt = null;
+    _status = 'active';
+    _initialized = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kPrefTier);
+      await prefs.remove(_kPrefExpiresAt);
+      await prefs.remove(_kPrefStatus);
+    } catch (e) {
+      debugPrint('[SubscriptionService] reset error: $e');
+    }
+    notifyListeners();
+  }
+
+  /// Initializes subscription state strictly for the given business.
+  /// If businessId is null or the business record is on 'free', resets cleanly to SubscriptionTier.free.
   Future<void> init({int? businessId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final tierStr = prefs.getString(_kPrefTier);
-      final expiresStr = prefs.getString(_kPrefExpiresAt);
-      final statusStr = prefs.getString(_kPrefStatus) ?? 'active';
 
-      if (tierStr != null) {
-        _currentTier = SubscriptionTier.fromString(tierStr);
-      }
-      if (expiresStr != null) {
-        _expiresAt = DateTime.tryParse(expiresStr);
-      }
-      _status = statusStr;
-
-      // Also check SQLite database if businessId is available
       if (businessId != null) {
         final db = await AppDatabase.instance.database;
         final rows = await db.query(
@@ -347,17 +354,36 @@ class SubscriptionService extends ChangeNotifier {
           final dbExpires = r['subscription_expires_at'] as String?;
           final dbStatus = r['subscription_status'] as String?;
 
-          if (dbTier != null && dbTier.isNotEmpty) {
-            _currentTier = SubscriptionTier.fromString(dbTier);
+          _currentTier = (dbTier != null && dbTier.isNotEmpty)
+              ? SubscriptionTier.fromString(dbTier)
+              : SubscriptionTier.free;
+          _expiresAt = (dbExpires != null && dbExpires.isNotEmpty)
+              ? DateTime.tryParse(dbExpires)
+              : null;
+          _status = (dbStatus != null && dbStatus.isNotEmpty) ? dbStatus : 'active';
+
+          // Sync prefs with the active business
+          await prefs.setString(_kPrefTier, _currentTier.key);
+          if (_expiresAt != null) {
+            await prefs.setString(_kPrefExpiresAt, _expiresAt!.toIso8601String());
+          } else {
+            await prefs.remove(_kPrefExpiresAt);
           }
-          if (dbExpires != null && dbExpires.isNotEmpty) {
-            _expiresAt = DateTime.tryParse(dbExpires);
-          }
-          if (dbStatus != null && dbStatus.isNotEmpty) {
-            _status = dbStatus;
-          }
+          await prefs.setString(_kPrefStatus, _status);
+
+          _initialized = true;
+          notifyListeners();
+          return;
         }
       }
+
+      // Default strictly to Free tier for new self-registered users and unconfigured states
+      _currentTier = SubscriptionTier.free;
+      _expiresAt = null;
+      _status = 'active';
+      await prefs.remove(_kPrefTier);
+      await prefs.remove(_kPrefExpiresAt);
+      await prefs.remove(_kPrefStatus);
 
       _initialized = true;
       notifyListeners();

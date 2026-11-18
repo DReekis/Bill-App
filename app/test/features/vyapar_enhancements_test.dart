@@ -202,11 +202,21 @@ void main() {
 
   group('Task 3: Vyapar-Style Cash Flow Statement', () {
     testWidgets('CashflowReportScreen renders 4 summary cards, account filter, tabs, and rows', (tester) async {
+      final now = DateTime.now();
+      final startOfMonth = DateTime(now.year, now.month, 1);
+      final endOfMonth = DateTime(now.year, now.month + 1, 0);
+      final prevMonthDate = startOfMonth.subtract(const Duration(days: 15));
+      final inDate = DateTime(now.year, now.month, 5);
+      final outDate = DateTime(now.year, now.month, 6);
+      final prevMonthIso = '${prevMonthDate.year}-${prevMonthDate.month.toString().padLeft(2, '0')}-${prevMonthDate.day.toString().padLeft(2, '0')}';
+      final inIso = '${inDate.year}-${inDate.month.toString().padLeft(2, '0')}-${inDate.day.toString().padLeft(2, '0')}';
+      final outIso = '${outDate.year}-${outDate.month.toString().padLeft(2, '0')}-${outDate.day.toString().padLeft(2, '0')}';
+
       await tester.runAsync(() async {
-        // 1. Transaction strictly preceding active filter (Preceding date: 2026-09-15) -> Opening Cash
+        // 1. Transaction strictly preceding active filter -> Opening Cash
         await db.insert('ledger', {
           'business_id': businessId,
-          'date': '2026-09-15',
+          'date': prevMonthIso,
           'account': 'cash',
           'debit': 50000, // +Rs 500
           'credit': 0,
@@ -214,7 +224,7 @@ void main() {
           'note': 'Initial Cash Reserve',
         });
 
-        // 2. Transaction within period (Money In: 2026-10-05)
+        // 2. Transaction within period (Money In)
         final pInId = await db.insert('payments', {
           'business_id': businessId,
           'party_type': 'customer',
@@ -222,12 +232,12 @@ void main() {
           'party_name': 'Sharma Traders',
           'amount': 30000, // +Rs 300
           'mode': 'Cash',
-          'date': '2026-10-05',
+          'date': inIso,
           'type': 'in',
         });
         await db.insert('ledger', {
           'business_id': businessId,
-          'date': '2026-10-05',
+          'date': inIso,
           'account': 'cash',
           'debit': 30000,
           'credit': 0,
@@ -236,18 +246,18 @@ void main() {
           'note': 'Receipt from Sharma Traders',
         });
 
-        // 3. Transaction within period (Money Out: 2026-10-06)
+        // 3. Transaction within period (Money Out)
         final expId = await db.insert('expenses', {
           'business_id': businessId,
           'category': 'Transport',
           'amount': 10000, // -Rs 100
           'mode': 'Cash',
-          'date': '2026-10-06',
+          'date': outIso,
           'vendor': 'City Cargo',
         });
         await db.insert('ledger', {
           'business_id': businessId,
-          'date': '2026-10-06',
+          'date': outIso,
           'account': 'cash',
           'debit': 0,
           'credit': 10000,
@@ -262,8 +272,8 @@ void main() {
         final data = await repo.getCashflowReport(
           businessId,
           accountType: 'all',
-          startDate: DateTime(2026, 10, 1),
-          endDate: DateTime(2026, 10, 31),
+          startDate: startOfMonth,
+          endDate: endOfMonth,
         );
 
         // Opening cash = 50,000 paise (Rs 500)

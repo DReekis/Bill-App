@@ -217,7 +217,7 @@ test('GET /api/v1/gst/lookup/:gstin resolves business profile and deterministic 
   assert.equal(balajiBody.businessName, 'BALAJI ENTERPRISE');
   assert.equal(balajiBody.pan, 'GPZPD6335F');
   assert.equal(balajiBody.city, 'Dharmanagar');
-  assert.equal(balajiBody.address, '09, Dharmanagar, Dharmanagar, North Tripura, Tripura');
+  assert.equal(balajiBody.address, 'Ward No 9, Dharmanagar, North Tripura, Tripura - 799250');
   assert.equal(balajiBody.constitution, 'Sole Proprietorship');
 });
 

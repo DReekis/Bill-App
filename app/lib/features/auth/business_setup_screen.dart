@@ -197,6 +197,7 @@ class _BusinessSetupScreenState extends State<BusinessSetupScreen> {
       }
 
       await session.completeOnboarding(businessId);
+      await session.switchBusiness(businessId);
 
       if (session.isCloudLinked) {
         SyncEngine.instance.startAutoSync();

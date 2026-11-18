@@ -216,6 +216,14 @@ void main() {
 
   group('GSTR-2 Reporting Protocol (Purchases / Inward Supplies)', () {
     setUp(() async {
+      await repo.upsertSupplier(
+        Supplier(
+          name: 'Supreme Materials Ltd',
+          gstin: '27AABCU1234F1Z5',
+          state: 'Maharashtra',
+        ),
+        businessIdOverride: businessId,
+      );
       await db.insert('expenses', {
         'business_id': businessId,
         'category': 'Purchase',

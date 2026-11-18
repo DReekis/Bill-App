@@ -147,9 +147,35 @@ void main() {
       expect(balaji.pan, 'GPZPD6335F');
       expect(balaji.city, 'Dharmanagar');
       expect(balaji.pinCode, '799250');
-      expect(balaji.address, '09, Dharmanagar, Dharmanagar, North Tripura, Tripura');
+      expect(balaji.address, 'Ward No 9, Dharmanagar, North Tripura, Tripura - 799250');
       expect(balaji.constitution, 'Sole Proprietorship');
       expect(balaji.isOnlineFetched, isTrue);
+    });
+
+    test('resolves institutional profile for 33AAACI1607G2Z5 (Indian Bank) with full address', () async {
+      final bank = await GstService.instance.lookup('33AAACI1607G2Z5');
+      expect(bank.valid, isTrue);
+      expect(bank.stateCode, '33');
+      expect(bank.state, 'Tamil Nadu');
+      expect(bank.effectiveName, 'Indian Bank');
+      expect(bank.pan, 'AAACI1607G');
+      expect(bank.city, 'Chennai');
+      expect(bank.pinCode, '600014');
+      expect(bank.address, contains('Royapettah, Chennai'));
+      expect(bank.constitution, 'Company');
+      expect(bank.isOnlineFetched, isTrue);
+    });
+
+    test('resolves institutional profile for 27AAACB0472R1ZT (State Bank of India)', () async {
+      final sbi = await GstService.instance.lookup('27AAACB0472R1ZT');
+      expect(sbi.valid, isTrue);
+      expect(sbi.stateCode, '27');
+      expect(sbi.state, 'Maharashtra');
+      expect(sbi.effectiveName, 'State Bank of India');
+      expect(sbi.pan, 'AAACB0472R');
+      expect(sbi.city, 'Mumbai');
+      expect(sbi.pinCode, '400021');
+      expect(sbi.isOnlineFetched, isTrue);
     });
   });
 

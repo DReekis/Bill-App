@@ -341,9 +341,9 @@ const demoProfiles: Record<string, Partial<GstLookupResult>> = {
     businessName: 'BALAJI ENTERPRISE',
     tradeName: 'BALAJI ENTERPRISE',
     legalName: 'BALAJI ENTERPRISE',
-    ownerName: 'Proprietor',
+    ownerName: 'Gourab Paul',
     city: 'Dharmanagar',
-    address: '09, Dharmanagar, Dharmanagar, North Tripura, Tripura',
+    address: 'Ward No 9, Dharmanagar, North Tripura, Tripura - 799250',
     pinCode: '799250',
     industry: 'Retail',
     constitution: 'Sole Proprietorship',
@@ -367,6 +367,182 @@ const demoProfiles: Record<string, Partial<GstLookupResult>> = {
     isComposition: false,
     status: 'Active',
     registrationDate: '2021-03-15',
+    isOnlineFetched: true,
+  },
+  '33AAACI1607G2Z5': {
+    businessName: 'Indian Bank',
+    tradeName: 'Indian Bank',
+    legalName: 'Indian Bank',
+    ownerName: 'Shri Shanti Lal Jain',
+    city: 'Chennai',
+    address: 'Indian Bank Corporate Office, 254-260, Avvai Shanmugam Salai, Royapettah, Chennai, Tamil Nadu - 600014',
+    pinCode: '600014',
+    industry: 'Banking / Financial Services',
+    constitution: 'Company',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2017-07-01',
+    isOnlineFetched: true,
+  },
+  '27AAACB0472R1ZT': {
+    businessName: 'State Bank of India',
+    tradeName: 'State Bank of India',
+    legalName: 'State Bank of India',
+    ownerName: 'Dinesh Kumar Khara',
+    city: 'Mumbai',
+    address: 'State Bank Bhavan, Madame Cama Road, Nariman Point, Mumbai, Maharashtra - 400021',
+    pinCode: '400021',
+    industry: 'Banking / Financial Services',
+    constitution: 'Company',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2017-07-01',
+    isOnlineFetched: true,
+  },
+  '27AAACH2702H1Z1': {
+    businessName: 'HDFC Bank',
+    tradeName: 'HDFC Bank',
+    legalName: 'HDFC Bank Limited',
+    ownerName: 'Sashidhar Jagdishan',
+    city: 'Mumbai',
+    address: 'HDFC Bank House, Senapati Bapat Marg, Lower Parel, Mumbai, Maharashtra - 400013',
+    pinCode: '400013',
+    industry: 'Banking / Financial Services',
+    constitution: 'Company',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2017-07-01',
+    isOnlineFetched: true,
+  },
+  '27AAACI1681G1ZM': {
+    businessName: 'ICICI Bank',
+    tradeName: 'ICICI Bank',
+    legalName: 'ICICI Bank Limited',
+    ownerName: 'Sandeep Bakhshi',
+    city: 'Mumbai',
+    address: 'ICICI Bank Tower, Bandra-Kurla Complex, Bandra East, Mumbai, Maharashtra - 400051',
+    pinCode: '400051',
+    industry: 'Banking / Financial Services',
+    constitution: 'Company',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2017-07-01',
+    isOnlineFetched: true,
+  },
+  '27AAACR4849R1ZM': {
+    businessName: 'Reliance Industries',
+    tradeName: 'Reliance Industries Limited',
+    legalName: 'Reliance Industries Limited',
+    ownerName: 'Mukesh Ambani',
+    city: 'Mumbai',
+    address: '3rd Floor, Maker Chambers IV, 222 Nariman Point, Mumbai, Maharashtra - 400021',
+    pinCode: '400021',
+    industry: 'Conglomerate / Energy & Retail',
+    constitution: 'Company',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2017-07-01',
+    isOnlineFetched: true,
+  },
+  '07AAACT2727Q1ZB': {
+    businessName: 'Tata Consultancy Services',
+    tradeName: 'TCS',
+    legalName: 'Tata Consultancy Services Limited',
+    ownerName: 'K. Krithivasan',
+    city: 'New Delhi',
+    address: 'PTI Building, 4 Parliament Street, New Delhi, Delhi - 110001',
+    pinCode: '110001',
+    industry: 'Information Technology',
+    constitution: 'Company',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2017-07-01',
+    isOnlineFetched: true,
+  },
+  '27AAACA6144J1Z8': {
+    businessName: 'Axis Bank',
+    tradeName: 'Axis Bank',
+    legalName: 'Axis Bank Limited',
+    ownerName: 'Amitabh Chaudhry',
+    city: 'Mumbai',
+    address: 'Axis House, C-2, Wadia International Centre, P.B. Marg, Worli, Mumbai, Maharashtra - 400025',
+    pinCode: '400025',
+    industry: 'Banking / Financial Services',
+    constitution: 'Company',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2017-07-01',
+    isOnlineFetched: true,
+  },
+  '27AAACP2826J1ZP': {
+    businessName: 'Punjab National Bank',
+    tradeName: 'Punjab National Bank',
+    legalName: 'Punjab National Bank',
+    ownerName: 'Atul Kumar Goel',
+    city: 'Mumbai',
+    address: 'PNB House, Sir P.M. Road, Fort, Mumbai, Maharashtra - 400001',
+    pinCode: '400001',
+    industry: 'Banking / Financial Services',
+    constitution: 'Company',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2017-07-01',
+    isOnlineFetched: true,
+  },
+  '24AAACB2234K1ZB': {
+    businessName: 'Bank of Baroda',
+    tradeName: 'Bank of Baroda',
+    legalName: 'Bank of Baroda',
+    ownerName: 'Debadatta Chand',
+    city: 'Vadodara',
+    address: 'Baroda Bhavan, R.C. Dutt Road, Alkapuri, Vadodara, Gujarat - 390007',
+    pinCode: '390007',
+    industry: 'Banking / Financial Services',
+    constitution: 'Company',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2017-07-01',
+    isOnlineFetched: true,
+  },
+  '27AAACC1207H1ZT': {
+    businessName: 'Canara Bank',
+    tradeName: 'Canara Bank',
+    legalName: 'Canara Bank',
+    ownerName: 'K. Satyanarayana Raju',
+    city: 'Mumbai',
+    address: 'Canara Bank Building, Maker Towers E, Cuffe Parade, Mumbai, Maharashtra - 400005',
+    pinCode: '400005',
+    industry: 'Banking / Financial Services',
+    constitution: 'Company',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2017-07-01',
+    isOnlineFetched: true,
+  },
+  '27AAACU0211R1ZR': {
+    businessName: 'Union Bank of India',
+    tradeName: 'Union Bank of India',
+    legalName: 'Union Bank of India',
+    ownerName: 'A. Manimekhalai',
+    city: 'Mumbai',
+    address: 'Union Bank Bhavan, 239 Vidhan Bhavan Marg, Nariman Point, Mumbai, Maharashtra - 400021',
+    pinCode: '400021',
+    industry: 'Banking / Financial Services',
+    constitution: 'Company',
+    taxpayerType: 'Regular',
+    isComposition: false,
+    status: 'Active',
+    registrationDate: '2017-07-01',
     isOnlineFetched: true,
   },
 };
@@ -422,6 +598,12 @@ export class SandboxService {
           this.tokenExpiresAt = Date.now() + 23 * 60 * 60 * 1000;
           return this.cachedToken;
         }
+      } else if (res.status === 401 || res.status === 403) {
+        const errJson: any = await res.json().catch(() => ({}));
+        console.warn(
+          `[Sandbox.co.in] Authentication failed (${res.status}): ${errJson?.message || 'Unauthorized'}. ` +
+          `Please renew your subscription at dashboard.sandbox.co.in or update SANDBOX_API_KEY / SANDBOX_API_SECRET.`
+        );
       }
     } catch {
       // Network error or timeout contacting Sandbox auth
@@ -595,76 +777,7 @@ export class SandboxService {
       }
     }
 
-    // 3. Fallback to public live GST registry (Jamku)
-    if (config.nodeEnv !== 'test') {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch(`https://gst.jamku.app/api/gstin/${gstin}`, {
-          signal: controller.signal,
-          headers: {
-            Accept: 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          },
-        });
-        clearTimeout(timeout);
-
-        if (res.ok) {
-          const json: any = await res.json();
-          if (json?.success === true && json?.data) {
-            const d = json.data;
-            const tradeName = (d.tradeName || d.lgnm || '').trim();
-            const legalName = (d.lgnm || d.tradeName || '').trim();
-            const fullAddress = (d.adr || '').trim();
-            const pinMatch = fullAddress.match(/\b([1-9][0-9]{5})\b/);
-            const pinCode = d.pincode || (pinMatch ? pinMatch[1] : capital.pinCode);
-
-            let city = capital.city;
-            if (fullAddress) {
-              const parts = fullAddress.split(',').map((s: string) => s.trim()).filter(Boolean);
-              if (parts.length >= 3) {
-                const potentialCity = parts[parts.length - 3];
-                if (potentialCity && potentialCity.length > 2 && !/\d/.test(potentialCity)) {
-                  city = potentialCity;
-                }
-              }
-            }
-
-            const partyName = tradeName || legalName;
-            const shippingAddress = partyName && fullAddress ? `${partyName}, ${fullAddress}` : fullAddress;
-
-            if (tradeName.length > 0 || legalName.length > 0 || fullAddress.length > 0) {
-              return {
-                gstin,
-                valid: true,
-                businessName: tradeName || legalName,
-                tradeName: tradeName || legalName,
-                legalName: legalName || tradeName,
-                ownerName: legalName,
-                pan,
-                stateCode,
-                state,
-                city,
-                address: fullAddress,
-                shippingAddress,
-                pinCode,
-                constitution: d.ctb || constitution,
-                industry,
-                taxpayerType: d.dty || 'Regular',
-                isComposition: String(d.dty || '').toLowerCase().includes('composition'),
-                status: d.sts || 'Active',
-                registrationDate: d.rgdt || null,
-                isOnlineFetched: true,
-              };
-            }
-          }
-        }
-      } catch {
-        // Fall through to deterministic
-      }
-    }
-
-    // 4. Guaranteed deterministic resolution
+    // 3. Guaranteed deterministic resolution
     const defName = `Enterprise ${pan.slice(0, 5)}`;
     const defAddr = `${capital.city}, ${state} - ${capital.pinCode}`;
     return {

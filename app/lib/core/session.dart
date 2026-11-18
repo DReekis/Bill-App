@@ -5,6 +5,7 @@ import '../data/app_database.dart';
 import 'api_client.dart';
 import 'auth_service.dart';
 import 'security_service.dart';
+import 'subscription_service.dart';
 
 enum UserRole {
   owner,
@@ -397,6 +398,7 @@ class Session extends ChangeNotifier {
     await _prefs!.remove(_kCurrentUser);
     await _prefs!.remove(_kCurrentRole);
     await _prefs!.remove(_kStaffId);
+    await SubscriptionService.instance.reset();
     mobile = null;
     token = null;
     businessId = null;
@@ -447,6 +449,7 @@ class Session extends ChangeNotifier {
     _prefs ??= await SharedPreferences.getInstance();
     businessId = newBusinessId;
     await _prefs!.setInt(_kBusinessId, newBusinessId);
+    await SubscriptionService.instance.init(businessId: newBusinessId);
     notifyListeners();
   }
 

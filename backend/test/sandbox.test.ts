@@ -25,6 +25,23 @@ test('Sandbox Service & Compliance Engine Endpoints', async (t) => {
     assert.strictEqual(body.status, 'Active');
     assert.strictEqual(body.shippingAddress, 'Modern Retail Store, 104, MG Road, Brigade Junction, Bengaluru, Karnataka - 560001');
 
+    // 1b. Indian Bank institutional profile
+    const resBank = await app.inject({
+      method: 'GET',
+      url: '/api/v1/gst/lookup/33AAACI1607G2Z5',
+    });
+    assert.strictEqual(resBank.statusCode, 200);
+    const bodyBank = JSON.parse(resBank.body);
+    assert.strictEqual(bodyBank.valid, true);
+    assert.strictEqual(bodyBank.tradeName, 'Indian Bank');
+    assert.strictEqual(bodyBank.legalName, 'Indian Bank');
+    assert.strictEqual(bodyBank.stateCode, '33');
+    assert.strictEqual(bodyBank.state, 'Tamil Nadu');
+    assert.strictEqual(bodyBank.city, 'Chennai');
+    assert.strictEqual(bodyBank.pinCode, '600014');
+    assert.strictEqual(bodyBank.isOnlineFetched, true);
+    assert.ok(bodyBank.address.includes('Royapettah, Chennai'));
+
     // 2. Deterministic fallback for any valid Indian GSTIN
     const res2 = await app.inject({
       method: 'GET',

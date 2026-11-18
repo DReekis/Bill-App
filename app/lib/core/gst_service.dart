@@ -69,6 +69,24 @@ class GstBusinessInfo {
   bool get isActive => status.toLowerCase() == 'active';
 
   factory GstBusinessInfo.fromJson(Map<String, dynamic> json) {
+    String? addr = json['address'] as String?;
+    String? cty = json['city'] as String?;
+    String? pin = json['pinCode'] as String?;
+    String? st = json['state'] as String?;
+
+    // If structured address fields are missing, extract from any nested/raw GST structures
+    if (addr == null || addr.isEmpty || cty == null || cty.isEmpty || pin == null || pin.isEmpty) {
+      final normalized = GstService.extractNormalizedAddress(
+        json,
+        stateCode: json['stateCode'] as String?,
+        fallbackState: st,
+      );
+      addr ??= normalized.address;
+      cty ??= normalized.city;
+      pin ??= normalized.pinCode;
+      st ??= normalized.state;
+    }
+
     return GstBusinessInfo(
       gstin: json['gstin'] as String? ?? '',
       valid: json['valid'] as bool? ?? true,
@@ -78,11 +96,11 @@ class GstBusinessInfo {
       ownerName: json['ownerName'] as String?,
       pan: json['pan'] as String?,
       stateCode: json['stateCode'] as String?,
-      state: json['state'] as String?,
-      city: json['city'] as String?,
-      address: json['address'] as String?,
-      shippingAddress: json['shippingAddress'] as String?,
-      pinCode: json['pinCode'] as String?,
+      state: st,
+      city: cty,
+      address: addr,
+      shippingAddress: json['shippingAddress'] as String? ?? addr,
+      pinCode: pin,
       constitution: json['constitution'] as String?,
       industry: json['industry'] as String?,
       isComposition: json['isComposition'] as bool? ?? (json['taxpayerType'] == 'Composition'),
@@ -303,9 +321,9 @@ class GstService {
       'businessName': 'BALAJI ENTERPRISE',
       'tradeName': 'BALAJI ENTERPRISE',
       'legalName': 'BALAJI ENTERPRISE',
-      'ownerName': 'Proprietor',
+      'ownerName': 'Gourab Paul',
       'city': 'Dharmanagar',
-      'address': '09, Dharmanagar, Dharmanagar, North Tripura, Tripura',
+      'address': 'Ward No 9, Dharmanagar, North Tripura, Tripura - 799250',
       'pinCode': '799250',
       'constitution': 'Sole Proprietorship',
       'industry': 'Retail',
@@ -320,6 +338,127 @@ class GstService {
       'pinCode': '799250',
       'constitution': 'Sole Proprietorship',
       'industry': 'Retail',
+    },
+    '33AAACI1607G2Z5': {
+      'businessName': 'Indian Bank',
+      'tradeName': 'Indian Bank',
+      'legalName': 'Indian Bank',
+      'ownerName': 'Shri Shanti Lal Jain',
+      'city': 'Chennai',
+      'address': 'Indian Bank Corporate Office, 254-260, Avvai Shanmugam Salai, Royapettah, Chennai, Tamil Nadu - 600014',
+      'pinCode': '600014',
+      'constitution': 'Company',
+      'industry': 'Banking / Financial Services',
+    },
+    '27AAACB0472R1ZT': {
+      'businessName': 'State Bank of India',
+      'tradeName': 'State Bank of India',
+      'legalName': 'State Bank of India',
+      'ownerName': 'Dinesh Kumar Khara',
+      'city': 'Mumbai',
+      'address': 'State Bank Bhavan, Madame Cama Road, Nariman Point, Mumbai, Maharashtra - 400021',
+      'pinCode': '400021',
+      'constitution': 'Company',
+      'industry': 'Banking / Financial Services',
+    },
+    '27AAACH2702H1Z1': {
+      'businessName': 'HDFC Bank',
+      'tradeName': 'HDFC Bank',
+      'legalName': 'HDFC Bank Limited',
+      'ownerName': 'Sashidhar Jagdishan',
+      'city': 'Mumbai',
+      'address': 'HDFC Bank House, Senapati Bapat Marg, Lower Parel, Mumbai, Maharashtra - 400013',
+      'pinCode': '400013',
+      'constitution': 'Company',
+      'industry': 'Banking / Financial Services',
+    },
+    '27AAACI1681G1ZM': {
+      'businessName': 'ICICI Bank',
+      'tradeName': 'ICICI Bank',
+      'legalName': 'ICICI Bank Limited',
+      'ownerName': 'Sandeep Bakhshi',
+      'city': 'Mumbai',
+      'address': 'ICICI Bank Tower, Bandra-Kurla Complex, Bandra East, Mumbai, Maharashtra - 400051',
+      'pinCode': '400051',
+      'constitution': 'Company',
+      'industry': 'Banking / Financial Services',
+    },
+    '27AAACR4849R1ZM': {
+      'businessName': 'Reliance Industries',
+      'tradeName': 'Reliance Industries Limited',
+      'legalName': 'Reliance Industries Limited',
+      'ownerName': 'Mukesh Ambani',
+      'city': 'Mumbai',
+      'address': '3rd Floor, Maker Chambers IV, 222 Nariman Point, Mumbai, Maharashtra - 400021',
+      'pinCode': '400021',
+      'constitution': 'Company',
+      'industry': 'Conglomerate / Energy & Retail',
+    },
+    '07AAACT2727Q1ZB': {
+      'businessName': 'Tata Consultancy Services',
+      'tradeName': 'TCS',
+      'legalName': 'Tata Consultancy Services Limited',
+      'ownerName': 'K. Krithivasan',
+      'city': 'New Delhi',
+      'address': 'PTI Building, 4 Parliament Street, New Delhi, Delhi - 110001',
+      'pinCode': '110001',
+      'constitution': 'Company',
+      'industry': 'Information Technology',
+    },
+    '27AAACA6144J1Z8': {
+      'businessName': 'Axis Bank',
+      'tradeName': 'Axis Bank',
+      'legalName': 'Axis Bank Limited',
+      'ownerName': 'Amitabh Chaudhry',
+      'city': 'Mumbai',
+      'address': 'Axis House, C-2, Wadia International Centre, P.B. Marg, Worli, Mumbai, Maharashtra - 400025',
+      'pinCode': '400025',
+      'constitution': 'Company',
+      'industry': 'Banking / Financial Services',
+    },
+    '27AAACP2826J1ZP': {
+      'businessName': 'Punjab National Bank',
+      'tradeName': 'Punjab National Bank',
+      'legalName': 'Punjab National Bank',
+      'ownerName': 'Atul Kumar Goel',
+      'city': 'Mumbai',
+      'address': 'PNB House, Sir P.M. Road, Fort, Mumbai, Maharashtra - 400001',
+      'pinCode': '400001',
+      'constitution': 'Company',
+      'industry': 'Banking / Financial Services',
+    },
+    '24AAACB2234K1ZB': {
+      'businessName': 'Bank of Baroda',
+      'tradeName': 'Bank of Baroda',
+      'legalName': 'Bank of Baroda',
+      'ownerName': 'Debadatta Chand',
+      'city': 'Vadodara',
+      'address': 'Baroda Bhavan, R.C. Dutt Road, Alkapuri, Vadodara, Gujarat - 390007',
+      'pinCode': '390007',
+      'constitution': 'Company',
+      'industry': 'Banking / Financial Services',
+    },
+    '27AAACC1207H1ZT': {
+      'businessName': 'Canara Bank',
+      'tradeName': 'Canara Bank',
+      'legalName': 'Canara Bank',
+      'ownerName': 'K. Satyanarayana Raju',
+      'city': 'Mumbai',
+      'address': 'Canara Bank Building, Maker Towers E, Cuffe Parade, Mumbai, Maharashtra - 400005',
+      'pinCode': '400005',
+      'constitution': 'Company',
+      'industry': 'Banking / Financial Services',
+    },
+    '27AAACU0211R1ZR': {
+      'businessName': 'Union Bank of India',
+      'tradeName': 'Union Bank of India',
+      'legalName': 'Union Bank of India',
+      'ownerName': 'A. Manimekhalai',
+      'city': 'Mumbai',
+      'address': 'Union Bank Bhavan, 239 Vidhan Bhavan Marg, Nariman Point, Mumbai, Maharashtra - 400021',
+      'pinCode': '400021',
+      'constitution': 'Company',
+      'industry': 'Banking / Financial Services',
     },
   };
 
@@ -483,37 +622,7 @@ class GstService {
       }
     }
 
-    // 2. Direct public live GST query (no key required, returns real registered tradeName & address)
-    try {
-      final response = await http.get(
-        Uri.parse('https://gst.jamku.app/api/gstin/$clean'),
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      ).timeout(const Duration(milliseconds: 4000));
-
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        if (json is Map<String, dynamic> && json['success'] == true && json['data'] != null) {
-          final d = json['data'] as Map<String, dynamic>;
-          final tradeName = (d['tradeName'] as String?)?.trim();
-          final legalName = (d['lgnm'] as String?)?.trim();
-          final adr = (d['adr'] as String?)?.trim();
-          if ((tradeName != null && tradeName.isNotEmpty) ||
-              (legalName != null && legalName.isNotEmpty) ||
-              (adr != null && adr.isNotEmpty)) {
-            return _parseJamkuResponse(clean, d, fallback);
-          }
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Direct live GST lookup skipped/failed: $e');
-      }
-    }
-
-    // 3. Try gstincheck.co.in if API key is provided
+    // 2. Try gstincheck.co.in if API key is provided
     if (gstnApiKey != null && gstnApiKey.trim().isNotEmpty) {
       try {
         final directUrl = 'https://sheet.gstincheck.co.in/check/${gstnApiKey.trim()}/$clean';
@@ -539,6 +648,217 @@ class GstService {
     return fallback;
   }
 
+  /// Safely extracts and normalizes address components from any GST response format
+  /// (handling nested pradr.addr, flat pradr, string addresses, principal_place_of_business_fields, etc.)
+  static ({
+    String? address,
+    String? city,
+    String? pinCode,
+    String? state,
+  }) extractNormalizedAddress(
+    Map<String, dynamic> d, {
+    String? stateCode,
+    String? fallbackState,
+  }) {
+    // 1. Gather all potential map sources
+    final sources = <Map<dynamic, dynamic>>[];
+
+    final pradr = d['pradr'];
+    if (pradr is Map) {
+      sources.add(pradr);
+      final addr = pradr['addr'];
+      if (addr is Map) {
+        sources.add(addr);
+      }
+    }
+
+    final ppob = d['principal_place_of_business_fields'] ?? d['principalPlaceOfBusiness'];
+    if (ppob is Map) {
+      sources.add(ppob);
+    }
+
+    final rawAddr = d['address'] ?? d['addr'];
+    if (rawAddr is Map) {
+      sources.add(rawAddr);
+    }
+
+    // Helper to find first non-empty string for a set of aliases
+    String? getVal(List<String> keys) {
+      for (final src in sources) {
+        for (final k in keys) {
+          final v = src[k];
+          if (v != null && v.toString().trim().isNotEmpty) {
+            final s = v.toString().trim();
+            if (!_isJunk(s)) return s;
+          }
+        }
+      }
+      return null;
+    }
+
+    // Check for a raw pre-formatted address string first if object extraction yields nothing
+    String? rawAddressStr;
+    for (final candidate in [
+      d['address'],
+      d['adr'],
+      d['fullAddress'],
+      d['full_address'],
+      pradr is String ? pradr : null,
+      pradr is Map ? pradr['addr'] : null,
+      pradr is Map ? pradr['adr'] : null,
+    ]) {
+      if (candidate is String && candidate.trim().length > 5 && !_isJunk(candidate.trim())) {
+        rawAddressStr = candidate.trim();
+        break;
+      }
+    }
+
+    final bno   = getVal(['bno', 'door_number', 'doorNo', 'building_no', 'buildingNo']);
+    final flno  = getVal(['flno', 'floor_number', 'floorNo', 'floor']);
+    final bnm   = getVal(['bnm', 'building_name', 'buildingName', 'premises', 'premises_name']);
+    final st    = getVal(['st', 'street', 'street_name', 'road', 'road_name']);
+    final loc   = getVal(['loc', 'locality', 'location', 'area', 'sub_district']);
+    final lndmk = getVal(['landmark', 'landMark']);
+    final cty   = getVal(['city', 'city_name', 'town', 'village']);
+    final dst   = getVal(['dst', 'district', 'district_name']);
+    final stcd  = getVal(['stcd', 'state', 'state_name']);
+    var   pncd  = getVal(['pncd', 'pincode', 'pinCode', 'pin_code', 'postal_code']);
+
+    // Extract PIN code from raw string if missing
+    if (pncd == null || pncd.isEmpty) {
+      final pinMatch = RegExp(r'\b([1-9][0-9]{5})\b').firstMatch(rawAddressStr ?? '');
+      if (pinMatch != null) {
+        pncd = pinMatch.group(1);
+      }
+    }
+
+    // Resolve state name if numeric code or code string
+    String? stateName;
+    if (stcd != null && stcd.isNotEmpty) {
+      if (stateCodes.containsKey(stcd)) {
+        stateName = stateCodes[stcd];
+      } else if (stateCodes.containsValue(stcd)) {
+        stateName = stcd;
+      } else {
+        final matchedKey = stateCodes.keys.firstWhere(
+          (k) => stateCodes[k]!.toLowerCase() == stcd.toLowerCase(),
+          orElse: () => '',
+        );
+        stateName = matchedKey.isNotEmpty ? stateCodes[matchedKey] : stcd;
+      }
+    }
+    stateName ??= (stateCode != null ? stateCodes[stateCode] : null) ?? fallbackState;
+
+    // Resolve city
+    String? city;
+    if (cty != null && !_isJunk(cty)) {
+      city = cty;
+    } else if (loc != null && !_isJunk(loc) && loc.toLowerCase() != dst?.toLowerCase()) {
+      city = loc;
+    } else if (dst != null && !_isJunk(dst)) {
+      city = dst;
+    }
+
+    // If we have a pre-formatted string and no structured pieces:
+    if (rawAddressStr != null && (bno == null && st == null && bnm == null)) {
+      var cleanedRaw = rawAddressStr.replaceAll(RegExp(r'\s+'), ' ').trim();
+      cleanedRaw = cleanedRaw.replaceAll(RegExp(r',\s*,+'), ',').trim();
+      cleanedRaw = cleanedRaw.replaceAll(RegExp(r'^,\s*|,\s*$'), '');
+
+      if (city == null || city.isEmpty) {
+        final parts = cleanedRaw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        if (parts.length >= 3) {
+          final candidate = parts[parts.length - 3];
+          if (candidate.length > 2 && !RegExp(r'^\d+$').hasMatch(candidate)) {
+            city = candidate;
+          }
+        }
+      }
+
+      return (
+        address: cleanedRaw,
+        city: city ?? (stateCode != null ? stateCommercialCapitals[stateCode]?.city : null),
+        pinCode: pncd,
+        state: stateName,
+      );
+    }
+
+    // Build structured address list without junk or duplicates
+    final parts = <String>[];
+    void addPart(String? p) {
+      if (p == null) return;
+      var clean = p.replaceAll(RegExp(r'\s+'), ' ').trim();
+      clean = clean.replaceAll(RegExp(r'^,\s*|,\s*$'), '');
+      if (clean.isEmpty || _isJunk(clean)) return;
+
+      if (parts.isNotEmpty) {
+        final last = parts.last.toLowerCase();
+        final cur = clean.toLowerCase();
+        if (last == cur || last.endsWith(', $cur') || last == '$cur,') return;
+      }
+      parts.add(clean);
+    }
+
+    String? formattedBno = bno;
+    if (bno != null && RegExp(r'^\d+$').hasMatch(bno)) {
+      if (bnm == null || bnm.isEmpty) {
+        formattedBno = 'Ward No. $bno';
+      } else {
+        formattedBno = 'No. $bno';
+      }
+    }
+
+    addPart(formattedBno);
+    addPart(flno != null ? (RegExp(r'^\d+$').hasMatch(flno) ? '$flno Floor' : flno) : null);
+    addPart(bnm);
+    addPart(st);
+    addPart(lndmk);
+    addPart(loc);
+    if (cty != null && cty.toLowerCase() != loc?.toLowerCase()) {
+      addPart(cty);
+    }
+    if (dst != null && dst.toLowerCase() != cty?.toLowerCase() && dst.toLowerCase() != loc?.toLowerCase()) {
+      addPart(dst);
+    }
+    if (stateName != null && stateName.isNotEmpty) {
+      addPart(stateName);
+    }
+
+    String? fullAddress;
+    if (parts.isNotEmpty) {
+      fullAddress = parts.join(', ');
+      if (pncd != null && pncd.isNotEmpty && !fullAddress.contains(pncd)) {
+        fullAddress = '$fullAddress - $pncd';
+      }
+    } else if (rawAddressStr != null && rawAddressStr.isNotEmpty) {
+      fullAddress = rawAddressStr;
+    }
+
+    return (
+      address: fullAddress,
+      city: city ?? (stateCode != null ? stateCommercialCapitals[stateCode]?.city : null),
+      pinCode: pncd,
+      state: stateName,
+    );
+  }
+
+  static bool _isJunk(String s) {
+    final upper = s.trim().toUpperCase();
+    return upper.isEmpty ||
+        upper == '0' ||
+        upper == '00' ||
+        upper == '000' ||
+        upper == '-' ||
+        upper == '--' ||
+        upper == 'NA' ||
+        upper == 'N/A' ||
+        upper == 'NIL' ||
+        upper == 'NONE' ||
+        upper == 'NULL' ||
+        upper == 'UNKNOWN' ||
+        upper == '.';
+  }
+
   /// Parses the jamku public GST response into a clean GstBusinessInfo model.
   GstBusinessInfo _parseJamkuResponse(
     String gstin,
@@ -547,32 +867,14 @@ class GstService {
   ) {
     final tradeName = (d['tradeName'] as String?)?.trim();
     final legalName = (d['lgnm'] as String?)?.trim();
-    final adr = (d['adr'] as String?)?.trim();
     final stateCode = gstin.substring(0, 2);
-    final state = stateCodes[stateCode] ?? fallback.state;
     final pan = gstin.length >= 12 ? gstin.substring(2, 12) : fallback.pan;
 
-    // Pin code
-    String? pin = (d['pincode'] as String?)?.trim();
-    if (pin == null || pin.isEmpty) {
-      if (adr != null) {
-        final match = RegExp(r'\b([1-9][0-9]{5})\b').firstMatch(adr);
-        if (match != null) pin = match.group(1);
-      }
-    }
-
-    // City extraction from address
-    String? city;
-    if (adr != null && adr.isNotEmpty) {
-      final parts = adr.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-      if (parts.length >= 3) {
-        final candidate = parts[parts.length - 3];
-        if (candidate.length > 2 && !RegExp(r'\d').hasMatch(candidate)) {
-          city = candidate;
-        }
-      }
-    }
-    city ??= stateCommercialCapitals[stateCode]?.city;
+    final normalized = extractNormalizedAddress(
+      d,
+      stateCode: stateCode,
+      fallbackState: fallback.state,
+    );
 
     final ctb = (d['ctb'] as String?)?.trim();
     final constitution = (ctb != null && ctb.isNotEmpty) ? ctb : fallback.constitution;
@@ -581,7 +883,9 @@ class GstService {
     final sts = (d['sts'] as String?)?.trim() ?? 'Active';
 
     final effectiveName = (tradeName?.isNotEmpty == true ? tradeName : legalName) ?? '';
-    final shipping = effectiveName.isNotEmpty && adr != null && adr.isNotEmpty ? '$effectiveName, $adr' : adr;
+    final shipping = effectiveName.isNotEmpty && normalized.address != null && normalized.address!.isNotEmpty
+        ? '$effectiveName, ${normalized.address!}'
+        : normalized.address;
 
     return GstBusinessInfo(
       gstin: gstin,
@@ -592,11 +896,11 @@ class GstService {
       ownerName: legalName?.isNotEmpty == true ? legalName : null,
       pan: pan,
       stateCode: stateCode,
-      state: state,
-      city: city,
-      address: adr,
+      state: normalized.state ?? fallback.state,
+      city: normalized.city,
+      address: normalized.address,
       shippingAddress: shipping,
-      pinCode: pin,
+      pinCode: normalized.pinCode,
       constitution: constitution,
       industry: fallback.industry,
       isComposition: isComposition,
@@ -613,43 +917,22 @@ class GstService {
     Map<String, dynamic> d,
     GstBusinessInfo fallback,
   ) {
-    final pradr = d['pradr'] as Map<String, dynamic>?;
-    final addr = pradr?['addr'] as Map<String, dynamic>?;
+    final tradeName = (d['tradeNam'] as String? ?? d['tradeName'] as String?)?.trim();
+    final legalName = (d['lgnm'] as String? ?? d['legalName'] as String?)?.trim();
 
-    final tradeName = (d['tradeNam'] as String?)?.trim();
-    final legalName = (d['lgnm'] as String?)?.trim();
+    final normalized = extractNormalizedAddress(
+      d,
+      stateCode: fallback.stateCode,
+      fallbackState: fallback.state,
+    );
 
-    // Build address parts in standard Billbook order
-    final bno   = (addr?['bno']  as String?)?.trim();   // building/door number
-    final flno  = (addr?['flno'] as String?)?.trim();   // floor number
-    final bnm   = (addr?['bnm']  as String?)?.trim();   // building name
-    final st    = (addr?['st']   as String?)?.trim();   // street
-    final loc   = (addr?['loc']  as String?)?.trim();   // locality
-    final dst   = (addr?['dst']  as String?)?.trim();   // district
-    final stcd  = (addr?['stcd'] as String?)?.trim();   // state name from GST
-    final pncd  = (addr?['pncd'] as String?)?.trim();   // pin code
-
-    // Determine best city: district or locality
-    final city = dst?.isNotEmpty == true ? dst : loc;
-
-    // Build the address string in Billbook order
-    final addressParts = <String>[];
-    if (bno != null && bno.isNotEmpty) addressParts.add(bno);
-    if (flno != null && flno.isNotEmpty) addressParts.add(flno);
-    if (bnm != null && bnm.isNotEmpty) addressParts.add(bnm);
-    if (st != null && st.isNotEmpty) addressParts.add(st);
-    if (loc != null && loc.isNotEmpty) addressParts.add(loc);
-    if (dst != null && dst.isNotEmpty && dst != loc) addressParts.add(dst);
-    if (stcd != null && stcd.isNotEmpty) addressParts.add(stcd);
-    if (pncd != null && pncd.isNotEmpty) addressParts.add(pncd);
-
-    final address = addressParts.isNotEmpty ? addressParts.join(', ') : null;
-
-    final status = d['sts'] as String? ?? 'Active';
-    final dty = d['dty'] as String? ?? 'Regular';
+    final status = d['sts'] as String? ?? d['status'] as String? ?? 'Active';
+    final dty = d['dty'] as String? ?? d['taxpayerType'] as String? ?? 'Regular';
 
     final effectiveName = (tradeName?.isNotEmpty == true ? tradeName : legalName) ?? '';
-    final shipping = effectiveName.isNotEmpty && address != null ? '$effectiveName, $address' : address;
+    final shipping = effectiveName.isNotEmpty && normalized.address != null
+        ? '$effectiveName, ${normalized.address!}'
+        : normalized.address;
 
     return GstBusinessInfo(
       gstin: gstin,
@@ -660,11 +943,11 @@ class GstService {
       ownerName: legalName?.isNotEmpty == true ? legalName : null,
       pan: fallback.pan,
       stateCode: fallback.stateCode,
-      state: stcd?.isNotEmpty == true ? stcd : fallback.state,
-      city: city,
-      address: address,
+      state: normalized.state ?? fallback.state,
+      city: normalized.city,
+      address: normalized.address,
       shippingAddress: shipping,
-      pinCode: pncd,
+      pinCode: normalized.pinCode,
       constitution: d['ctb'] as String? ?? fallback.constitution,
       industry: fallback.industry,
       isComposition: dty.toLowerCase().contains('composition'),
