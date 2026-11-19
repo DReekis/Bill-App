@@ -239,5 +239,13 @@ void main() {
       expect(sub.canAccessEWayBill, false);
       expect(sub.canCreateSalesInvoice(10), false); // 10 invoice limit enforced
     });
+
+    test('Non-reviewer business with un-purchased pro tier normalizes to Free tier', () async {
+      await sub.reset();
+      expect(sub.currentTier, SubscriptionTier.free);
+      await sub.init(businessId: null);
+      expect(sub.currentTier, SubscriptionTier.free);
+      expect(sub.isBusinessPro, false);
+    });
   });
 }

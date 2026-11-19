@@ -297,6 +297,34 @@ class ApiClient {
     return response;
   }
 
+  Future<http.Response> delete(
+    String path, {
+    String? token,
+    Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    await ensureReady();
+    final effectiveHeaders = _headers(extra: headers);
+    if (token != null && token.isNotEmpty) {
+      effectiveHeaders['Authorization'] = 'Bearer $token';
+    }
+    final uri = Uri.parse('$_baseUrl$path');
+    var response = await _client
+        .delete(uri, headers: effectiveHeaders)
+        .timeout(timeout);
+
+    if (response.statusCode == 401 && _token != null && _token!.isNotEmpty && !path.startsWith('/api/v1/auth/')) {
+      final newToken = await refreshToken();
+      if (newToken != null) {
+        effectiveHeaders['Authorization'] = 'Bearer $newToken';
+        response = await _client
+            .delete(uri, headers: effectiveHeaders)
+            .timeout(timeout);
+      }
+    }
+    return response;
+  }
+
   Future<AuthSessionResult> loginWithGoogle({
     required String email,
     required String name,
@@ -412,6 +440,21 @@ class ApiClient {
     await ensureReady();
     final uri = Uri.parse('$_baseUrl/api/v1/backup/$backupId');
     await http.delete(uri, headers: _headers());
+  }
+
+  Future<void> deleteAccount() async {
+    final res = await delete('/api/v1/auth/account');
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      return;
+    }
+    String error = 'Failed to delete account (Status ${res.statusCode})';
+    try {
+      final data = jsonDecode(res.body);
+      if (data is Map && data['error'] != null) {
+        error = data['error'].toString();
+      }
+    } catch (_) {}
+    throw Exception(error);
   }
 }
 

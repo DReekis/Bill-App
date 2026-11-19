@@ -22,6 +22,7 @@ import '../shell/business_edit_screen.dart';
 import '../shell/business_switcher_sheet.dart';
 import '../staff/staff_list_screen.dart';
 import '../auth/login_screen.dart';
+import '../auth/auth_flow.dart';
 import '../backup/cloud_backup_sheet.dart';
 import 'import_screen.dart';
 import '../subscription/subscription_plans_screen.dart';
@@ -38,6 +39,7 @@ class _SettingsItem {
   final VoidCallback onTap;
   final Widget? trailing;
   final bool visible;
+  final bool isDestructive;
 
   const _SettingsItem({
     required this.icon,
@@ -46,6 +48,7 @@ class _SettingsItem {
     required this.onTap,
     this.trailing,
     this.visible = true,
+    this.isDestructive = false,
   });
 }
 
@@ -327,6 +330,16 @@ class _MoreTabState extends State<MoreTab> {
           ),
         ),
       ),
+      _SettingsItem(
+        icon: Icons.delete_forever_rounded,
+        title: t('Delete Account & Data', 'खाता और डेटा हटाएं', 'অ্যাকাউন্ট ও ডাটা মুছুন'),
+        searchKeywords: const [
+          'delete', 'account', 'remove', 'erase', 'wipe', 'cancel', 'destroy',
+          'हटाएं', 'खाता', 'डेटा', 'অ্যাকাউন্ট', 'মুছুন', 'ডাটা'
+        ],
+        isDestructive: true,
+        onTap: () => _confirmDeleteAccount(context, session),
+      ),
     ];
 
     final isSearching = _searchQuery.trim().isNotEmpty;
@@ -459,6 +472,7 @@ class _MoreTabState extends State<MoreTab> {
           item.title,
           item.onTap,
           trailing: item.trailing,
+          isDestructive: item.isDestructive,
         ),
       const SizedBox(height: 18),
       const Padding(
@@ -792,7 +806,14 @@ class _MoreTabState extends State<MoreTab> {
     );
   }
 
-  Widget _menuTile(BuildContext context, IconData icon, String title, VoidCallback onTap, {Widget? trailing}) => Padding(
+  Widget _menuTile(
+    BuildContext context,
+    IconData icon,
+    String title,
+    VoidCallback onTap, {
+    Widget? trailing,
+    bool isDestructive = false,
+  }) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Material(
           color: StitchColors.background,
@@ -804,19 +825,46 @@ class _MoreTabState extends State<MoreTab> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: StitchColors.outline),
+                border: Border.all(
+                  color: isDestructive
+                      ? StitchColors.error.withValues(alpha: 0.3)
+                      : StitchColors.outline,
+                ),
               ),
               child: Row(children: [
                 Container(
                   width: 38,
                   height: 38,
-                  decoration: BoxDecoration(color: StitchColors.primaryContainer, borderRadius: BorderRadius.circular(11)),
-                  child: Icon(icon, size: 20, color: StitchColors.primary),
+                  decoration: BoxDecoration(
+                    color: isDestructive
+                        ? StitchColors.error.withValues(alpha: 0.1)
+                        : StitchColors.primaryContainer,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: isDestructive ? StitchColors.error : StitchColors.primary,
+                  ),
                 ),
                 const SizedBox(width: 12),
-                Expanded(child: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDestructive ? StitchColors.error : null,
+                    ),
+                  ),
+                ),
                 if (trailing != null) trailing,
-                const Icon(Icons.chevron_right_rounded, color: StitchColors.textTertiary),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: isDestructive
+                      ? StitchColors.error.withValues(alpha: 0.6)
+                      : StitchColors.textTertiary,
+                ),
               ]),
             ),
           ),
@@ -1040,10 +1088,152 @@ class _MoreTabState extends State<MoreTab> {
                     }
                   },
                 ),
+                const Divider(height: 1),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.delete_forever_rounded, color: StitchColors.error),
+                  title: const Text('Delete Account & Data', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: StitchColors.error)),
+                  subtitle: const Text('Permanently erase account, cloud database, and local records'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _confirmDeleteAccount(context, session);
+                  },
+                ),
               ],
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _confirmDeleteAccount(BuildContext context, Session session) {
+    final isBn = session.localeCode == 'bn';
+    final isHi = session.localeCode == 'hi';
+    String t(String en, String hi, String bn) {
+      if (isBn) return bn;
+      if (isHi) return hi;
+      return en;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        icon: Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            color: StitchColors.error.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.warning_amber_rounded, color: StitchColors.error, size: 30),
+        ),
+        title: Text(
+          t('Delete Account & All Data?', 'क्या आप खाता व समस्त डेटा हटाना चाहते हैं?', 'অ্যাকাউন্ট এবং সমস্ত ডাটা মুছবেন?'),
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+          textAlign: TextAlign.center,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              t(
+                'This action is permanent and cannot be undone. All your business records, invoices, customer and supplier lists, inventory items, and cloud backups will be permanently deleted from both this device and our servers.',
+                'यह कार्रवाई स्थायी है और इसे वापस नहीं लिया जा सकता। आपके सभी बिल, ग्राहक व सप्लायर सूची, उत्पाद स्टॉक और क्लाउड बैकअप इस डिवाइस और सर्वर दोनों से हमेशा के लिए हटा दिए जाएंगे।',
+                'এই ক্রিয়াটি স্থায়ী এবং পূর্বাবস্থায় ফিরিয়ে আনা যাবে না। আপনার সমস্ত ইনভয়েস, কাস্টমার ও সাপ্লায়ার তালিকা, পণ্য এবং ক্লাউড ব্যাকআপ এই ডিভাইস ও সার্ভার উভয় থেকেই চিরতরে মুছে ফেলা হবে।',
+              ),
+              style: const TextStyle(fontSize: 13, color: StitchColors.textSecondary, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: StitchColors.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: StitchColors.error.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, size: 18, color: StitchColors.error),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      t('Complies with Google Account Deletion Policy.', 'गूगल खाता हटाने की नीति के अनुरूप।', 'গুগল অ্যাকাউন্ট মোছার নীতি মেনে চলে।'),
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: StitchColors.error),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(t('Cancel', 'रद्द करें', 'বাতিল করুন')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: StitchColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+
+              // Show loading overlay
+              showDialog<void>(
+                context: context,
+                barrierDismissible: false,
+                builder: (_) => PopScope(
+                  canPop: false,
+                  child: Center(
+                    child: Card(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(color: StitchColors.error),
+                            const SizedBox(height: 16),
+                            Text(
+                              t('Deleting account and data...', 'खाता और डेटा हटाया जा रहा है...', 'অ্যাকাউন্ট ও ডাটা মোছা হচ্ছে...'),
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+
+              try {
+                await session.deleteEntireAccount();
+              } catch (e) {
+                debugPrint('Account deletion error: $e');
+              }
+
+              if (!context.mounted) return;
+              Navigator.of(context, rootNavigator: true).pop();
+
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const AuthFlow()),
+                (route) => false,
+              );
+
+              showAppMessage(
+                context,
+                t('Your account and all associated data have been permanently deleted.', 'आपका खाता और समस्त डेटा सफलतापूर्वक हटा दिया गया है।', 'আপনার অ্যাকাউন্ট এবং সমস্ত ডাটা সফলভাবে মুছে ফেলা হয়েছে।'),
+              );
+            },
+            child: Text(t('Delete Permanently', 'स्थायी रूप से हटाएं', 'চিরতরে মুছুন')),
+          ),
+        ],
       ),
     );
   }

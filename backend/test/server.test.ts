@@ -655,6 +655,93 @@ test('Sync Engine: Quotations, Orders, Challans, Returns, Purchases with items a
   assert.equal(deletedQuoteChange.op, 'delete');
 });
 
+test('Newly registered user strictly receives Free Tier subscription', async () => {
+  const email = `new.freetier.${Date.now()}@example.com`;
+  const regRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/register',
+    payload: {
+      name: 'Free Tier User',
+      email,
+      password: 'SecurePassword123!',
+    },
+  });
+  assert.equal(regRes.statusCode, 201);
+  const { token, business } = regRes.json() as any;
+
+  // 1. Check GET /api/v1/businesses
+  const bizRes = await app.inject({
+    method: 'GET',
+    url: '/api/v1/businesses',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(bizRes.statusCode, 200);
+  const businesses = bizRes.json() as any[];
+  assert.equal(businesses[0].subscriptionTier, 'free');
+  assert.equal(businesses[0].subscriptionStatus, 'active');
+
+  // 2. Check GET /api/v1/subscription/status/:businessId
+  const subRes = await app.inject({
+    method: 'GET',
+    url: `/api/v1/subscription/status/${business.id}`,
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(subRes.statusCode, 200);
+  const subStatus = subRes.json() as any;
+  assert.equal(subStatus.tier, 'free');
+  assert.equal(subStatus.planName, 'Free Plan');
+});
+
+test('DELETE /api/v1/auth/account permanently wipes user and business data', async () => {
+  const email = `account.delete.${Date.now()}@example.com`;
+  const regRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/register',
+    payload: {
+      name: 'Deletion User',
+      email,
+      password: 'SecurePassword123!',
+    },
+  });
+  assert.equal(regRes.statusCode, 201);
+  const { token, business } = regRes.json() as any;
+
+  // Add a customer to the business
+  const custRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/customers',
+    headers: { authorization: `Bearer ${token}` },
+    payload: {
+      businessId: business.id,
+      name: 'Customer To Delete',
+      phone: '9876543210',
+    },
+  });
+  assert.equal(custRes.statusCode, 201);
+
+  // Call DELETE /api/v1/auth/account
+  const delRes = await app.inject({
+    method: 'DELETE',
+    url: '/api/v1/auth/account',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(delRes.statusCode, 200);
+  const delBody = delRes.json() as any;
+  assert.equal(delBody.success, true);
+
+  // Attempt login with old credentials -> must fail with INVALID_CREDENTIALS
+  const loginRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: {
+      email,
+      password: 'SecurePassword123!',
+    },
+  });
+  assert.equal(loginRes.statusCode, 401);
+});
+
+
 
 
 

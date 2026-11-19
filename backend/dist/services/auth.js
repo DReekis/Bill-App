@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { hashPassword, verifyPassword } from '../lib/crypto.js';
 import { signAccessToken } from '../lib/jwt.js';
 import { prisma } from './db.js';
@@ -72,6 +74,8 @@ export async function loginUser(input) {
                 ownerName: user.name,
                 email: user.email,
                 ownerId: user.id,
+                subscriptionTier: 'free',
+                subscriptionStatus: 'active',
             },
         });
     }
@@ -184,6 +188,8 @@ export async function googleAuth(input) {
                 ownerName: name,
                 email,
                 ownerId: user.id,
+                subscriptionTier: 'free',
+                subscriptionStatus: 'active',
             },
         });
     }
@@ -312,4 +318,136 @@ export async function phoneAuth(input) {
             name: business.name,
         },
     };
+}
+/**
+ * Permanently deletes a user, all businesses owned by the user, and all child
+ * relational data (invoices, customers, suppliers, inventory, backups) from the system.
+ */
+export async function deleteUserAccount(userId) {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { businesses: true },
+    });
+    if (!user) {
+        throw new Error('USER_NOT_FOUND');
+    }
+    const businessIds = user.businesses.map((b) => b.id);
+    await prisma.$transaction(async (tx) => {
+        if (businessIds.length > 0) {
+            // 1. Delete invoice items & invoices
+            await tx.invoiceItem.deleteMany({
+                where: { invoice: { businessId: { in: businessIds } } },
+            });
+            await tx.invoice.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            // 2. Delete quotations & items
+            await tx.quotationItem.deleteMany({
+                where: { quotation: { businessId: { in: businessIds } } },
+            });
+            await tx.quotation.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            // 3. Delete sales orders & items
+            await tx.salesOrderItem.deleteMany({
+                where: { order: { businessId: { in: businessIds } } },
+            });
+            await tx.salesOrder.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            // 4. Delete purchase orders & items
+            await tx.purchaseOrderItem.deleteMany({
+                where: { order: { businessId: { in: businessIds } } },
+            });
+            await tx.purchaseOrder.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            // 5. Delete delivery challans & items
+            await tx.deliveryChallanItem.deleteMany({
+                where: { challan: { businessId: { in: businessIds } } },
+            });
+            await tx.deliveryChallan.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            // 6. Delete returns & items
+            await tx.returnItem.deleteMany({
+                where: { return: { businessId: { in: businessIds } } },
+            });
+            await tx.return.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            // 7. Delete stock moves, serial numbers, batches
+            await tx.stockMove.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            await tx.serialNumber.deleteMany({
+                where: { product: { businessId: { in: businessIds } } },
+            });
+            await tx.batch.deleteMany({
+                where: { product: { businessId: { in: businessIds } } },
+            });
+            // 8. Delete financial transactions & operational records
+            await tx.payment.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            await tx.expense.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            await tx.cheque.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            await tx.bankAccount.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            await tx.ledgerEntry.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            await tx.syncQueueItem.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            await tx.subscriptionOrder.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            await tx.unitConversion.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            // 9. Delete master records
+            await tx.customer.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            await tx.supplier.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            await tx.product.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            // 10. Delete business audit logs
+            await tx.auditLog.deleteMany({
+                where: { businessId: { in: businessIds } },
+            });
+            // 11. Delete the businesses
+            await tx.business.deleteMany({
+                where: { id: { in: businessIds } },
+            });
+        }
+        // 12. Delete user audit logs
+        await tx.auditLog.deleteMany({
+            where: { actorId: userId },
+        });
+        // 13. Delete user record
+        await tx.user.delete({
+            where: { id: userId },
+        });
+    });
+    // 14. Purge tenant filesystem backups if any
+    try {
+        const backupsBaseDir = path.resolve(process.cwd(), 'backups', 'tenants');
+        for (const bId of businessIds) {
+            const bDir = path.join(backupsBaseDir, bId);
+            if (fs.existsSync(bDir)) {
+                fs.rmSync(bDir, { recursive: true, force: true });
+            }
+        }
+    }
+    catch (_) { }
 }

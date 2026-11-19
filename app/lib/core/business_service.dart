@@ -22,6 +22,7 @@ class BusinessDto {
     this.currency = 'INR',
     this.subscriptionTier = 'free',
     this.subscriptionStatus = 'active',
+    this.subscriptionExpiresAt,
     this.upiId,
   });
 
@@ -43,6 +44,7 @@ class BusinessDto {
   final String currency;
   final String subscriptionTier;
   final String subscriptionStatus;
+  final String? subscriptionExpiresAt;
   final String? upiId;
 
   factory BusinessDto.fromJson(Map<String, dynamic> json) {
@@ -65,6 +67,7 @@ class BusinessDto {
       currency: json['currency'] as String? ?? 'INR',
       subscriptionTier: json['subscriptionTier'] as String? ?? 'free',
       subscriptionStatus: json['subscriptionStatus'] as String? ?? 'active',
+      subscriptionExpiresAt: json['subscriptionExpiresAt'] as String?,
       upiId: json['upiId'] as String?,
     );
   }

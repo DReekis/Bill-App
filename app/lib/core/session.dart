@@ -533,5 +533,80 @@ class Session extends ChangeNotifier {
     await logout();
   }
 
+  /// Permanently deletes the user account, calling the cloud API to purge cloud tenant data,
+  /// completely wiping all local SQLite business records, and resetting the session.
+  Future<void> deleteEntireAccount() async {
+    // 1. Delete on cloud server if token exists
+    final effectiveToken = token ?? _prefs?.getString(_kToken);
+    if (effectiveToken != null && effectiveToken.isNotEmpty && effectiveToken != 'null') {
+      try {
+        final c = ApiClient.instance;
+        c.setToken(effectiveToken);
+        await c.deleteAccount();
+      } catch (e) {
+        debugPrint('[Session] Cloud account deletion notice: $e');
+      }
+    }
+
+    // 2. Wipe all local SQLite tables
+    final db = await AppDatabase.instance.database;
+    await db.transaction((txn) async {
+      final tables = [
+        'invoice_items',
+        'invoices',
+        'quotation_items',
+        'quotations',
+        'return_items',
+        'returns',
+        'sales_order_items',
+        'sales_orders',
+        'purchase_order_items',
+        'purchase_orders',
+        'delivery_challan_items',
+        'delivery_challans',
+        'stock_moves',
+        'customers',
+        'suppliers',
+        'products',
+        'payments',
+        'expenses',
+        'bank_accounts',
+        'cheques',
+        'ledger',
+        'sync_queue',
+        'audit_log',
+        'staff_members',
+        'invoice_customization_settings',
+        'businesses',
+      ];
+      for (final table in tables) {
+        try {
+          await txn.delete(table);
+        } catch (_) {}
+      }
+    });
+
+    // 3. Clear all session preferences, PIN, and subscription
+    _prefs ??= await SharedPreferences.getInstance();
+    await _prefs!.clear();
+    await SubscriptionService.instance.reset();
+
+    mobile = null;
+    token = null;
+    businessId = null;
+    currentUser = 'Owner';
+    currentRole = 'Owner';
+    staffMemberId = null;
+    cloudUserId = null;
+    cloudEmail = null;
+    cloudName = null;
+    cloudAvatarUrl = null;
+    cloudProvider = null;
+    cloudBusinessId = null;
+    _locked = false;
+
+    notifyListeners();
+  }
+
   void refresh() => notifyListeners();
 }

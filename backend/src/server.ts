@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { config } from './config.js';
 import { signAccessToken, verifyAccessToken, verifyExpiredToken } from './lib/jwt.js';
 import { hashPassword, verifyPassword } from './lib/crypto.js';
-import { registerUser, loginUser, googleAuth, phoneAuth } from './services/auth.js';
+import { registerUser, loginUser, googleAuth, phoneAuth, deleteUserAccount } from './services/auth.js';
 import { calculateInvoiceTotals } from './services/ledger.js';
 import { enqueueSync, pullSyncChanges } from './services/sync.js';
 import { prisma } from './services/db.js';
@@ -506,6 +506,24 @@ app.post('/api/v1/auth/refresh', async (request, reply) => {
   }
 });
 
+app.delete('/api/v1/auth/account', async (request, reply) => {
+  const user = (request as any).user;
+  if (!user?.sub) {
+    return reply.code(401).send({ error: 'Authentication required to delete account', code: 'UNAUTHORIZED' });
+  }
+
+  try {
+    await deleteUserAccount(user.sub);
+    return reply.send({
+      success: true,
+      message: 'Account and all associated tenant data permanently deleted',
+    });
+  } catch (error: any) {
+    app.log.error({ error }, 'Failed to delete user account');
+    return reply.code(500).send({ error: error?.message || 'Failed to delete account' });
+  }
+});
+
 const gstStateCodes: Record<string, string> = {
   '01': 'Jammu and Kashmir',
   '02': 'Himachal Pradesh',
@@ -701,19 +719,21 @@ app.post('/api/v1/ewaybill/verify', async (request, reply) => {
 app.addHook('preHandler', async (request, reply) => {
   const authHeader = request.headers.authorization;
   const url = request.url.split('?')[0];
+  const isAccountDeleteRoute = url === '/api/v1/auth/account' && request.method === 'DELETE';
   const isPublicRoute =
-    url === '/health' ||
-    url === '/api/v1/health' ||
-    url.startsWith('/api/v1/auth/') ||
-    url.startsWith('/api/v1/gst/') ||
-    url.startsWith('/api/v1/ewaybill/verify') ||
-    url === '/api/v1/admin/login' ||
-    url.startsWith('/admin') ||
-    url === '/' ||
-    url.startsWith('/public') ||
-    url === '/api/v1/subscription/plans' ||
-    (url === '/api/v1/subscription/webhook' && request.method === 'POST') ||
-    url.startsWith('/api/v1/subscription/status/');
+    !isAccountDeleteRoute &&
+    (url === '/health' ||
+      url === '/api/v1/health' ||
+      url.startsWith('/api/v1/auth/') ||
+      url.startsWith('/api/v1/gst/') ||
+      url.startsWith('/api/v1/ewaybill/verify') ||
+      url === '/api/v1/admin/login' ||
+      url.startsWith('/admin') ||
+      url === '/' ||
+      url.startsWith('/public') ||
+      url === '/api/v1/subscription/plans' ||
+      (url === '/api/v1/subscription/webhook' && request.method === 'POST') ||
+      url.startsWith('/api/v1/subscription/status/'));
 
   if (isPublicRoute) {
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -780,6 +800,9 @@ app.post('/api/v1/businesses', async (request, reply) => {
     data: {
       ...parsed.data,
       ownerId: user.sub,
+      subscriptionTier: 'free',
+      subscriptionStatus: 'active',
+      subscriptionExpiresAt: null,
     },
   });
   return reply.code(201).send(business);
@@ -1306,6 +1329,9 @@ async function resolveBusinessIdForSync(request: any, rawBusinessId?: string | n
           ownerName: dbUser.name,
           email: dbUser.email,
           ownerId: dbUser.id,
+          subscriptionTier: 'free',
+          subscriptionStatus: 'active',
+          subscriptionExpiresAt: null,
         },
       });
       return created.id;
@@ -1875,6 +1901,24 @@ const start = async () => {
   try {
     await bootstrapAdminUser();
     await seedPlayStoreTestAccount();
+
+    // Normalize any legacy un-purchased Pro records to Free tier
+    try {
+      await prisma.business.updateMany({
+        where: {
+          subscriptionTier: 'pro',
+          subscriptionExpiresAt: null,
+          phone: { notIn: ['9999999999', '9876543210'] },
+          email: { notIn: ['playstore.test@billapp.in'] },
+        },
+        data: {
+          subscriptionTier: 'free',
+        },
+      });
+    } catch (normErr) {
+      app.log.warn({ normErr }, 'Subscription normalization notice');
+    }
+
     await app.listen({ port: config.port, host: '0.0.0.0' });
     app.log.info(`Server listening at http://localhost:${config.port}`);
   } catch (error) {

@@ -344,7 +344,7 @@ class SubscriptionService extends ChangeNotifier {
         final db = await AppDatabase.instance.database;
         final rows = await db.query(
           'businesses',
-          columns: ['subscription_tier', 'subscription_status', 'subscription_expires_at'],
+          columns: ['subscription_tier', 'subscription_status', 'subscription_expires_at', 'phone', 'email'],
           where: 'id = ?',
           whereArgs: [businessId],
         );
@@ -353,13 +353,37 @@ class SubscriptionService extends ChangeNotifier {
           final dbTier = r['subscription_tier'] as String?;
           final dbExpires = r['subscription_expires_at'] as String?;
           final dbStatus = r['subscription_status'] as String?;
+          final phone = r['phone'] as String?;
+          final email = r['email'] as String?;
 
-          _currentTier = (dbTier != null && dbTier.isNotEmpty)
+          final isReviewer = phone == '9999999999' ||
+              phone == '9876543210' ||
+              email == 'playstore.test@billapp.in';
+
+          var parsedTier = (dbTier != null && dbTier.isNotEmpty)
               ? SubscriptionTier.fromString(dbTier)
               : SubscriptionTier.free;
-          _expiresAt = (dbExpires != null && dbExpires.isNotEmpty)
+          var parsedExpires = (dbExpires != null && dbExpires.isNotEmpty)
               ? DateTime.tryParse(dbExpires)
               : null;
+
+          // Non-reviewer accounts with no valid expiry date strictly normalize to Free tier
+          if (parsedTier != SubscriptionTier.free && !isReviewer && parsedExpires == null) {
+            parsedTier = SubscriptionTier.free;
+            try {
+              await db.update(
+                'businesses',
+                {'subscription_tier': 'free'},
+                where: 'id = ?',
+                whereArgs: [businessId],
+              );
+            } catch (_) {}
+          } else if (parsedExpires != null && parsedExpires.isBefore(DateTime.now()) && !isReviewer) {
+            parsedTier = SubscriptionTier.free;
+          }
+
+          _currentTier = parsedTier;
+          _expiresAt = parsedExpires;
           _status = (dbStatus != null && dbStatus.isNotEmpty) ? dbStatus : 'active';
 
           // Sync prefs with the active business

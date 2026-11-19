@@ -765,13 +765,28 @@ export async function getBusinessSubscriptionStatus(businessId: string) {
   const rawTier = (business.subscriptionTier || 'free').toLowerCase();
   const currentPlan = SUBSCRIPTION_PLANS[rawTier] || SUBSCRIPTION_PLANS['free'];
 
-  // Check if expired
-  const now = new Date();
-  const isExpired = business.subscriptionExpiresAt
-    ? new Date(business.subscriptionExpiresAt).getTime() < now.getTime()
-    : false;
+  // Check reviewer vs paid subscription validity
+  const isPlayStoreReviewer =
+    business.phone === '9999999999' ||
+    business.phone === '9876543210' ||
+    business.email === 'playstore.test@billapp.in';
 
-  const effectiveTier = isExpired ? 'free' : currentPlan.tier;
+  const now = new Date();
+  let effectiveTier: 'free' | 'starter' | 'silver' | 'gold' | 'business_pro' = 'free';
+  let isExpired = false;
+
+  if (isPlayStoreReviewer) {
+    effectiveTier = 'business_pro';
+  } else if (business.subscriptionExpiresAt) {
+    isExpired = new Date(business.subscriptionExpiresAt).getTime() < now.getTime();
+    effectiveTier = isExpired ? 'free' : currentPlan.tier;
+  } else if (currentPlan.tier === 'free') {
+    effectiveTier = 'free';
+  } else {
+    // Un-purchased non-free tier without expiry date strictly defaults to free
+    effectiveTier = 'free';
+  }
+
   const effectivePlan = SUBSCRIPTION_PLANS[effectiveTier] || SUBSCRIPTION_PLANS['free'];
 
   // Calculate current usage counts

@@ -120,6 +120,7 @@ abstract class AuthService {
     required String password,
     ApiClient? apiClient,
   });
+  Future<void> deleteAccount({ApiClient? apiClient});
   Future<void> signOut();
 }
 
@@ -331,6 +332,15 @@ class CloudAuthService implements AuthService {
         provider: AuthProviderType.emailPassword,
       ),
     );
+  }
+
+  @override
+  Future<void> deleteAccount({ApiClient? apiClient}) async {
+    if (apiClient != null) {
+      await apiClient.ensureReady();
+      await apiClient.deleteAccount();
+    }
+    await signOut();
   }
 
   @override
