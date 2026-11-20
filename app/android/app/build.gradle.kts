@@ -35,7 +35,7 @@ android {
         }
     }
 
-    val customMinSdk: Int = 21
+    val customMinSdk: Int = 24
 
     defaultConfig {
         applicationId = "com.billket.app"
