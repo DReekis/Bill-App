@@ -29,6 +29,8 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
         cloudBusinessId: session.cloudBusinessId!,
         token: session.token!,
         localBusinessId: session.businessId,
+        phone: session.phone,
+        email: session.email,
       );
       if (mounted) setState(() {});
     }

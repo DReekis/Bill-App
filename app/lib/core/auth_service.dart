@@ -260,7 +260,7 @@ class CloudAuthService implements AuthService {
     }
 
     final cleanPhone = phone.trim();
-    final isPlayStore = cleanPhone.endsWith('9999999999') || cleanPhone.endsWith('9876543210');
+    final isPlayStore = cleanPhone.endsWith('9999999999');
     return AuthSessionResult(
       token: 'local_phone_token_${DateTime.now().millisecondsSinceEpoch}',
       user: AuthUser(

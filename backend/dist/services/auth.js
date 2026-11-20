@@ -296,6 +296,15 @@ export async function phoneAuth(input) {
             },
         });
     }
+    else if (!isPlayStoreTest && business.subscriptionTier !== 'free' && (!business.subscriptionExpiresAt || new Date(business.subscriptionExpiresAt).getTime() < Date.now())) {
+        business = await prisma.business.update({
+            where: { id: business.id },
+            data: {
+                subscriptionTier: 'free',
+                subscriptionExpiresAt: null,
+            },
+        });
+    }
     const token = signAccessToken({
         sub: user.id,
         email: user.email,

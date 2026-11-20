@@ -331,11 +331,13 @@ class _LoginScreenState extends State<LoginScreen> {
             .timeout(const Duration(seconds: 4));
         if (businesses.isNotEmpty) {
           final existing = await Repository.instance.allBusinesses();
-          final isReviewer = cleanPhone.endsWith('9999999999') || cleanPhone.endsWith('9876543210');
+          final isReviewer = cleanPhone.endsWith('9999999999');
           for (final dto in businesses) {
+            final parsedExp = dto.subscriptionExpiresAt != null ? DateTime.tryParse(dto.subscriptionExpiresAt!) : null;
+            final isUnexpiredPaid = parsedExp != null && parsedExp.isAfter(DateTime.now());
             final effectiveTier = isReviewer
-                ? (dto.subscriptionTier.isNotEmpty ? dto.subscriptionTier : 'pro')
-                : (dto.subscriptionExpiresAt != null ? dto.subscriptionTier : 'free');
+                ? 'pro'
+                : (isUnexpiredPaid ? dto.subscriptionTier : 'free');
 
             Business? matched = existing.cast<Business?>().firstWhere(
               (b) =>

@@ -110,6 +110,50 @@ class GstBusinessInfo {
     );
   }
 
+  GstBusinessInfo copyWith({
+    String? gstin,
+    bool? valid,
+    String? businessName,
+    String? tradeName,
+    String? legalName,
+    String? ownerName,
+    String? pan,
+    String? stateCode,
+    String? state,
+    String? city,
+    String? address,
+    String? shippingAddress,
+    String? pinCode,
+    String? constitution,
+    String? industry,
+    bool? isComposition,
+    String? status,
+    String? registrationDate,
+    bool? isOnlineFetched,
+  }) {
+    return GstBusinessInfo(
+      gstin: gstin ?? this.gstin,
+      valid: valid ?? this.valid,
+      businessName: businessName ?? this.businessName,
+      tradeName: tradeName ?? this.tradeName,
+      legalName: legalName ?? this.legalName,
+      ownerName: ownerName ?? this.ownerName,
+      pan: pan ?? this.pan,
+      stateCode: stateCode ?? this.stateCode,
+      state: state ?? this.state,
+      city: city ?? this.city,
+      address: address ?? this.address,
+      shippingAddress: shippingAddress ?? this.shippingAddress,
+      pinCode: pinCode ?? this.pinCode,
+      constitution: constitution ?? this.constitution,
+      industry: industry ?? this.industry,
+      isComposition: isComposition ?? this.isComposition,
+      status: status ?? this.status,
+      registrationDate: registrationDate ?? this.registrationDate,
+      isOnlineFetched: isOnlineFetched ?? this.isOnlineFetched,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'gstin': gstin,
         'valid': valid,
@@ -606,14 +650,14 @@ class GstService {
       final client = apiClient ?? ApiClient.instance;
       final response = await client.get(
         '/api/v1/gst/lookup/$clean',
-        timeout: const Duration(milliseconds: 3500),
+        timeout: const Duration(seconds: 12),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final info = GstBusinessInfo.fromJson(data);
-        if (info.isOnlineFetched && info.effectiveName.isNotEmpty) {
-          return info;
+        if (info.effectiveName.isNotEmpty || (info.address != null && info.address!.isNotEmpty)) {
+          return info.copyWith(isOnlineFetched: true);
         }
       }
     } catch (e) {

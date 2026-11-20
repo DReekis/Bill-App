@@ -357,7 +357,6 @@ class SubscriptionService extends ChangeNotifier {
           final email = r['email'] as String?;
 
           final isReviewer = phone == '9999999999' ||
-              phone == '9876543210' ||
               email == 'playstore.test@billapp.in';
 
           var parsedTier = (dbTier != null && dbTier.isNotEmpty)
@@ -367,19 +366,23 @@ class SubscriptionService extends ChangeNotifier {
               ? DateTime.tryParse(dbExpires)
               : null;
 
-          // Non-reviewer accounts with no valid expiry date strictly normalize to Free tier
-          if (parsedTier != SubscriptionTier.free && !isReviewer && parsedExpires == null) {
-            parsedTier = SubscriptionTier.free;
-            try {
-              await db.update(
-                'businesses',
-                {'subscription_tier': 'free'},
-                where: 'id = ?',
-                whereArgs: [businessId],
-              );
-            } catch (_) {}
-          } else if (parsedExpires != null && parsedExpires.isBefore(DateTime.now()) && !isReviewer) {
-            parsedTier = SubscriptionTier.free;
+          // Non-reviewer accounts with no valid future expiry date strictly normalize to Free tier
+          if (parsedTier != SubscriptionTier.free && !isReviewer) {
+            if (parsedExpires == null || parsedExpires.isBefore(DateTime.now())) {
+              parsedTier = SubscriptionTier.free;
+              parsedExpires = null;
+              try {
+                await db.update(
+                  'businesses',
+                  {
+                    'subscription_tier': 'free',
+                    'subscription_expires_at': null,
+                  },
+                  where: 'id = ?',
+                  whereArgs: [businessId],
+                );
+              } catch (_) {}
+            }
           }
 
           _currentTier = parsedTier;
@@ -458,6 +461,8 @@ class SubscriptionService extends ChangeNotifier {
     required String cloudBusinessId,
     required String token,
     int? localBusinessId,
+    String? phone,
+    String? email,
   }) async {
     try {
       final res = await ApiClient.instance.get(
@@ -472,14 +477,30 @@ class SubscriptionService extends ChangeNotifier {
         final statusStr = data['status'] as String? ?? 'active';
 
         if (tierStr != null) {
-          final tier = SubscriptionTier.fromString(tierStr);
-          final expires = expiresStr != null
-              ? (DateTime.tryParse(expiresStr) ?? DateTime.now().add(const Duration(days: 365)))
-              : DateTime.now().add(const Duration(days: 365));
+          var tier = SubscriptionTier.fromString(tierStr);
+          final isReviewer = phone == '9999999999' || email == 'playstore.test@billapp.in';
+
+          DateTime? expires = (expiresStr != null && expiresStr.isNotEmpty)
+              ? DateTime.tryParse(expiresStr)
+              : null;
+
+          // CRITICAL SECURITY ENFORCEMENT:
+          // A paid tier is ONLY valid if there is an explicit future expiration date from a verified purchase,
+          // OR if the account is the designated Google Play Store reviewer.
+          if (tier != SubscriptionTier.free && !isReviewer) {
+            if (expires == null || expires.isBefore(DateTime.now())) {
+              tier = SubscriptionTier.free;
+              expires = null;
+            }
+          }
+
+          if (isReviewer && tier != SubscriptionTier.free && expires == null) {
+            expires = DateTime.now().add(const Duration(days: 365));
+          }
 
           await setSubscription(
             tier: tier,
-            expiresAt: expires,
+            expiresAt: expires ?? DateTime.now().add(const Duration(days: 3650)),
             status: statusStr,
             businessId: localBusinessId,
           );

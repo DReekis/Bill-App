@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/api_client.dart';
 import '../../core/gst_service.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
@@ -137,7 +136,7 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
       setState(() => _isGstLoading = true);
       try {
         final session = context.read<Session>();
-        final client = session.token != null ? (ApiClient()..setToken(session.token!)) : ApiClient();
+        final client = session.apiClient;
         final info = await GstService.instance.lookup(
           clean,
           apiClient: client,
@@ -153,41 +152,39 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
             _pan.text = info.pan ?? extractedPan;
           }
 
-          if (info.isOnlineFetched && info.effectiveName.isNotEmpty) {
+          if (info.effectiveName.isNotEmpty) {
             if (_name.text.trim().isEmpty || force || _name.text == prevAutoName) {
               _name.text = info.effectiveName;
             }
-            if ((_city.text.trim().isEmpty || force || _city.text == prevAutoCity) &&
-                info.city != null && info.city!.isNotEmpty) {
-              _city.text = info.city!;
-            }
-            if (info.address != null && info.address!.isNotEmpty) {
-              if (_billingAddress.text.trim().isEmpty || force || _billingAddress.text == prevAutoAddress) {
-                _billingAddress.text = info.address!;
-              }
-            }
-
-            final effectiveShipping = (info.shippingAddress != null && info.shippingAddress!.isNotEmpty)
-                ? info.shippingAddress!
-                : (info.effectiveName.isNotEmpty && info.address != null && info.address!.isNotEmpty
-                    ? '${info.effectiveName}, ${info.address!}'
-                    : (info.address ?? ''));
-
-            if (effectiveShipping.isNotEmpty) {
-              if (_sameAsBilling || _shippingAddress.text.trim().isEmpty || force || _shippingAddress.text == prevAutoAddress) {
-                _shippingAddress.text = effectiveShipping;
-              }
-              // In Billbook, shipping address starts with party name.
-              // When shipping address has the prepended party name, uncheck _sameAsBilling
-              // so both fields are clearly visible and saved properly.
-              if (_shippingAddress.text.isNotEmpty && _shippingAddress.text != _billingAddress.text) {
-                _sameAsBilling = false;
-              }
-            }
-            _showAutofillSuccessBanner = true;
-          } else {
-            _showAutofillSuccessBanner = false;
           }
+          if ((_city.text.trim().isEmpty || force || _city.text == prevAutoCity) &&
+              info.city != null && info.city!.isNotEmpty) {
+            _city.text = info.city!;
+          }
+          if (info.address != null && info.address!.isNotEmpty) {
+            if (_billingAddress.text.trim().isEmpty || force || _billingAddress.text == prevAutoAddress) {
+              _billingAddress.text = info.address!;
+            }
+          }
+
+          final effectiveShipping = (info.shippingAddress != null && info.shippingAddress!.isNotEmpty)
+              ? info.shippingAddress!
+              : (info.effectiveName.isNotEmpty && info.address != null && info.address!.isNotEmpty
+                  ? '${info.effectiveName}, ${info.address!}'
+                  : (info.address ?? ''));
+
+          if (effectiveShipping.isNotEmpty) {
+            if (_sameAsBilling || _shippingAddress.text.trim().isEmpty || force || _shippingAddress.text == prevAutoAddress) {
+              _shippingAddress.text = effectiveShipping;
+            }
+            // In Billbook, shipping address starts with party name.
+            // When shipping address has the prepended party name, uncheck _sameAsBilling
+            // so both fields are clearly visible and saved properly.
+            if (_shippingAddress.text.isNotEmpty && _shippingAddress.text != _billingAddress.text) {
+              _sameAsBilling = false;
+            }
+          }
+          _showAutofillSuccessBanner = info.effectiveName.isNotEmpty;
         });
 
         if (info.isOnlineFetched && info.effectiveName.isNotEmpty) {
@@ -571,102 +568,107 @@ class _PartyFormSheetState extends State<PartyFormSheet> {
                       // Verified Taxpayer Info Strip (Billbook Style)
                       if (_gstInfo != null) ...[
                         const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: _gstInfo!.isOnlineFetched
-                                ? StitchColors.successSoft
-                                : StitchColors.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: _gstInfo!.isOnlineFetched
-                                  ? StitchColors.success.withValues(alpha: 0.35)
-                                  : StitchColors.primary.withValues(alpha: 0.25),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                        Builder(
+                          builder: (context) {
+                            final isVerified = _gstInfo!.isOnlineFetched || _gstInfo!.effectiveName.isNotEmpty;
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isVerified
+                                    ? StitchColors.successSoft
+                                    : StitchColors.primary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isVerified
+                                      ? StitchColors.success.withValues(alpha: 0.35)
+                                      : StitchColors.primary.withValues(alpha: 0.25),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(
-                                    _gstInfo!.isOnlineFetched ? Icons.verified_user_rounded : Icons.info_outline_rounded,
-                                    color: _gstInfo!.isOnlineFetched ? StitchColors.success : StitchColors.primary,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      _gstInfo!.isOnlineFetched
-                                          ? '${_gstInfo!.status} • ${_gstInfo!.isComposition ? "Composition" : "Regular"} • ${_gstInfo!.state ?? ""}'
-                                          : 'Format Valid • ${_gstInfo!.state ?? ""}${_gstInfo!.constitution != null ? " • ${_gstInfo!.constitution}" : ""}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w800,
-                                        color: _gstInfo!.isOnlineFetched ? StitchColors.success : StitchColors.primary,
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        isVerified ? Icons.verified_user_rounded : Icons.info_outline_rounded,
+                                        color: isVerified ? StitchColors.success : StitchColors.primary,
+                                        size: 16,
                                       ),
-                                    ),
-                                  ),
-                                  if (isValidGstin)
-                                    GestureDetector(
-                                      onTap: () => _handleGstInput(_gstin.text, force: true),
-                                      child: const Text(
-                                        'Re-fill',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: StitchColors.primary,
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          isVerified
+                                              ? '${_gstInfo!.status} • ${_gstInfo!.isComposition ? "Composition" : "Regular"} • ${_gstInfo!.state ?? ""}'
+                                              : 'Format Valid • ${_gstInfo!.state ?? ""}${_gstInfo!.constitution != null ? " • ${_gstInfo!.constitution}" : ""}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            color: isVerified ? StitchColors.success : StitchColors.primary,
+                                          ),
                                         ),
                                       ),
+                                      if (isValidGstin)
+                                        GestureDetector(
+                                          onTap: () => _handleGstInput(_gstin.text, force: true),
+                                          child: const Text(
+                                            'Re-fill',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: StitchColors.primary,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  if (_gstInfo!.effectiveName.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _gstInfo!.effectiveName,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: StitchColors.textPrimary,
+                                      ),
                                     ),
+                                    if (_gstInfo!.legalName != null &&
+                                        _gstInfo!.legalName != _gstInfo!.effectiveName &&
+                                        _gstInfo!.legalName!.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Legal: ${_gstInfo!.legalName}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: StitchColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                    if (_gstInfo!.address != null && _gstInfo!.address!.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _gstInfo!.address!,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: StitchColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ] else ...[
+                                    const SizedBox(height: 4),
+                                    const Text(
+                                      'State and PAN identified. Please enter Party Name & Address.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: StitchColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
-                              if (_gstInfo!.isOnlineFetched && _gstInfo!.effectiveName.isNotEmpty) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  _gstInfo!.effectiveName,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: StitchColors.textPrimary,
-                                  ),
-                                ),
-                                if (_gstInfo!.legalName != null &&
-                                    _gstInfo!.legalName != _gstInfo!.effectiveName &&
-                                    _gstInfo!.legalName!.isNotEmpty) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Legal: ${_gstInfo!.legalName}',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: StitchColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                                if (_gstInfo!.address != null && _gstInfo!.address!.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _gstInfo!.address!,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: StitchColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ] else if (!_gstInfo!.isOnlineFetched) ...[
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'State and PAN identified. Please enter Party Name & Address.',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: StitchColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
+                            );
+                          },
                         ),
                       ],
                       const SizedBox(height: 14),

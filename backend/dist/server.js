@@ -681,8 +681,18 @@ app.addHook('preHandler', async (request, reply) => {
 // Businesses
 app.get('/api/v1/businesses', async (request) => {
     const user = request.user;
-    return await prisma.business.findMany({
+    const businesses = await prisma.business.findMany({
         where: { ownerId: user.sub },
+    });
+    const isReviewer = user.email === 'playstore.test@billapp.in';
+    const now = Date.now();
+    return businesses.map((b) => {
+        const isRev = isReviewer || b.phone === '9999999999';
+        const isPaid = b.subscriptionExpiresAt && new Date(b.subscriptionExpiresAt).getTime() > now;
+        if (!isRev && !isPaid) {
+            return { ...b, subscriptionTier: 'free' };
+        }
+        return b;
     });
 });
 app.post('/api/v1/businesses', async (request, reply) => {
@@ -1723,9 +1733,9 @@ const start = async () => {
         try {
             await prisma.business.updateMany({
                 where: {
-                    subscriptionTier: 'pro',
+                    subscriptionTier: { in: ['pro', 'business_pro', 'gold', 'silver', 'starter'] },
                     subscriptionExpiresAt: null,
-                    phone: { notIn: ['9999999999', '9876543210'] },
+                    phone: { notIn: ['9999999999'] },
                     email: { notIn: ['playstore.test@billapp.in'] },
                 },
                 data: {

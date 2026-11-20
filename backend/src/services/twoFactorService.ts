@@ -2,7 +2,6 @@ import { config } from '../config.js';
 
 export const PLAYSTORE_TEST_PHONES = new Set([
   '9999999999',
-  '9876543210',
 ]);
 
 export const PLAYSTORE_VALID_OTPS = new Set([

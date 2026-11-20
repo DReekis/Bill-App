@@ -120,7 +120,7 @@ class _AppGateState extends State<AppGate> {
             orElse: () => null,
           );
 
-          final isReviewer = (dto.phone != null && (dto.phone!.endsWith('9999999999') || dto.phone!.endsWith('9876543210'))) ||
+          final isReviewer = (dto.phone != null && dto.phone!.endsWith('9999999999')) ||
               (dto.email != null && dto.email == 'playstore.test@billapp.in');
           final effectiveTier = isReviewer
               ? (dto.subscriptionTier.isNotEmpty ? dto.subscriptionTier : 'pro')

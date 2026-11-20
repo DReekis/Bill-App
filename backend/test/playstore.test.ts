@@ -41,7 +41,7 @@ test('Google Play Console Test Phone also accepts 4-digit OTP 1234', async () =>
   const otpRes = await app.inject({
     method: 'POST',
     url: '/api/v1/auth/phone/otp',
-    payload: { phone: '9876543210' },
+    payload: { phone: '9999999999' },
   });
 
   assert.equal(otpRes.statusCode, 200);
@@ -50,7 +50,7 @@ test('Google Play Console Test Phone also accepts 4-digit OTP 1234', async () =>
     method: 'POST',
     url: '/api/v1/auth/phone/verify',
     payload: {
-      phone: '9876543210',
+      phone: '9999999999',
       otp: '1234',
     },
   });

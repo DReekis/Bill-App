@@ -70,6 +70,8 @@ class Session extends ChangeNotifier {
     return c;
   }
   ApiClient get apiClient => client;
+  String? get phone => mobile;
+  String? get email => cloudEmail;
   String currentUser = 'Owner';
   String currentRole = 'Owner';
   String localeCode = 'en';

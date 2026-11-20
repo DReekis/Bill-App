@@ -768,7 +768,6 @@ export async function getBusinessSubscriptionStatus(businessId: string) {
   // Check reviewer vs paid subscription validity
   const isPlayStoreReviewer =
     business.phone === '9999999999' ||
-    business.phone === '9876543210' ||
     business.email === 'playstore.test@billapp.in';
 
   const now = new Date();
