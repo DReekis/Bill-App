@@ -4472,9 +4472,24 @@ class Repository {
     }, where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<int> resetFailedSyncRecords() async {
+    final db = await _database;
+    return await db.update('sync_queue', {
+      'status': 'pending',
+      'attempts': 0,
+      'last_error': null,
+    }, where: "status != 'synced'");
+  }
+
   Future<String?> resolveSyncPayload(String entity, int entityId) async {
     final db = await _database;
     switch (entity.toLowerCase()) {
+      case 'business':
+      case 'businesses':
+        final rows = await db.query('businesses', where: 'id = ?', whereArgs: [entityId], limit: 1);
+        if (rows.isEmpty) return null;
+        return jsonEncode(rows.first);
+
       case 'invoice':
       case 'invoices':
         final rows = await db.query('invoices', where: 'id = ?', whereArgs: [entityId], limit: 1);

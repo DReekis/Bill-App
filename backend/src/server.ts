@@ -1367,7 +1367,7 @@ app.post('/api/v1/sync/push', async (request, reply) => {
     businessId: z.string(),
     entity: z.string(),
     entityId: z.string(),
-    op: z.enum(['upsert', 'delete', 'create']).default('upsert'),
+    op: z.enum(['upsert', 'delete', 'create', 'update']).default('upsert'),
     payload: z.string().optional().nullable(),
     idempotencyKey: z.string().optional().nullable(),
   });

@@ -56,20 +56,22 @@ class _AppShellState extends State<AppShell> {
       final session = context.read<Session>();
       if (session.isCloudLinked) {
         SyncEngine.instance.startAutoSync();
-        SyncEngine.instance.syncNow();
+        SyncEngine.instance.syncNow(force: true);
       }
       FreeTierPaywallDialog.showIfFree(context);
     });
   }
 
   Future<void> _syncNow() async {
-    await SyncEngine.instance.syncNow();
+    await SyncEngine.instance.syncNow(force: true);
     if (mounted) {
-      showAppMessage(
-          context,
-          SyncEngine.instance.pendingCount == 0
-              ? 'All changes synced'
-              : '${SyncEngine.instance.pendingCount} changes waiting to sync');
+      final sync = SyncEngine.instance;
+      if (sync.lastError != null) {
+        showAppMessage(context, 'Sync error: ${sync.lastError}', error: true);
+      } else {
+        final summary = sync.lastSyncResultSummary ?? 'Up to date';
+        showAppMessage(context, 'Cloud sync complete: $summary');
+      }
     }
   }
 

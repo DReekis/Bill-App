@@ -670,9 +670,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 actionLabel: 'Sync Now',
                 onAction: () async {
                   Navigator.pop(ctx);
-                  await SyncEngine.instance.syncNow();
+                  await SyncEngine.instance.syncNow(force: true);
                   await _load();
-                  if (mounted) showAppMessage(context, 'Sync triggered');
+                  if (mounted) {
+                    final sync = SyncEngine.instance;
+                    if (sync.lastError != null) {
+                      showAppMessage(context, 'Sync error: ${sync.lastError}', error: true);
+                    } else {
+                      final summary = sync.lastSyncResultSummary ?? 'Up to date';
+                      showAppMessage(context, 'Cloud sync complete: $summary');
+                    }
+                  }
                 },
               ),
             if (pendingRestockCount > 0)

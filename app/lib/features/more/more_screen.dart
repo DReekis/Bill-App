@@ -1067,10 +1067,18 @@ class _MoreTabState extends State<MoreTab> {
                 leading: const Icon(Icons.sync_rounded, color: StitchColors.primary),
                 title: const Text('Trigger On-Demand Sync', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 subtitle: const Text('Push local changes and pull remote updates'),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(ctx);
-                  SyncEngine.instance.syncNow();
-                  showAppMessage(context, 'Sync initiated');
+                  await SyncEngine.instance.syncNow(force: true);
+                  if (context.mounted) {
+                    final sync = SyncEngine.instance;
+                    if (sync.lastError != null) {
+                      showAppMessage(context, 'Sync error: ${sync.lastError}', error: true);
+                    } else {
+                      final summary = sync.lastSyncResultSummary ?? 'Up to date';
+                      showAppMessage(context, 'Cloud sync complete: $summary');
+                    }
+                  }
                 },
               ),
               if (session.canManageBusinessSettings) ...[

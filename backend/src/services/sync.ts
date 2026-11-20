@@ -4,10 +4,11 @@ export async function enqueueSync(input: {
   businessId: string;
   entity: string;
   entityId: string;
-  op: 'upsert' | 'delete' | 'create';
+  op: 'upsert' | 'delete' | 'create' | 'update';
   payload?: string | null;
   idempotencyKey?: string | null;
 }) {
+  const normalizedOp: 'upsert' | 'delete' | 'create' = input.op === 'update' ? 'upsert' : input.op;
   // Check if already enqueued with this idempotency key
   if (input.idempotencyKey) {
     const existing = await prisma.syncQueueItem.findUnique({
@@ -19,13 +20,13 @@ export async function enqueueSync(input: {
           where: { id: existing.id },
           data: {
             payload: input.payload ?? existing.payload,
-            op: input.op,
+            op: normalizedOp,
             status: 'pending',
           },
         });
         try {
           await processSyncItem(existing.id);
-        } catch {}
+        } catch { }
       }
       return await prisma.syncQueueItem.findUnique({ where: { id: existing.id } }) ?? existing;
     }
@@ -36,7 +37,7 @@ export async function enqueueSync(input: {
       businessId: input.businessId,
       entity: input.entity,
       entityId: input.entityId,
-      op: input.op,
+      op: normalizedOp,
       payload: input.payload ?? null,
       idempotencyKey: input.idempotencyKey ?? null,
       status: 'pending',
@@ -195,12 +196,55 @@ async function handleDelete(entity: string, entityId: string, businessId: string
         where: { OR: [{ id: scopedId }, { id: entityId, businessId }] },
       });
       break;
+    case 'business':
+    case 'businesses':
+      break;
+    case 'staff':
+    case 'staff_member':
+    case 'staff_members':
+      break;
   }
 }
 
 async function handleUpsert(entity: string, entityId: string, businessId: string, data: Record<string, any>) {
   const scopedId = toScopedId(businessId, entityId);
   switch (entity.toLowerCase()) {
+    case 'business':
+    case 'businesses': {
+      const updateData: Record<string, any> = {};
+      if (data.name) updateData.name = data.name;
+      if (data.owner_name ?? data.ownerName) updateData.ownerName = data.owner_name ?? data.ownerName;
+      if (data.phone) updateData.phone = data.phone;
+      if (data.email) updateData.email = data.email;
+      if (data.address) updateData.address = data.address;
+      if (data.state) updateData.state = data.state;
+      if (data.city) updateData.city = data.city;
+      if (data.pin ?? data.pin_code ?? data.pinCode) updateData.pinCode = data.pin ?? data.pin_code ?? data.pinCode;
+      if (data.gstin) updateData.gstin = data.gstin;
+      if (data.pan) updateData.pan = data.pan;
+      if (data.currency) updateData.currency = data.currency;
+      if (data.invoice_prefix ?? data.invoicePrefix) updateData.invoicePrefix = data.invoice_prefix ?? data.invoicePrefix;
+      if (data.invoice_sequence !== undefined || data.invoiceSequence !== undefined) {
+        updateData.invoiceSequence = Math.round(Number(data.invoice_sequence ?? data.invoiceSequence ?? 0));
+      }
+      if (Object.keys(updateData).length > 0) {
+        try {
+          await prisma.business.updateMany({
+            where: { id: businessId },
+            data: updateData,
+          });
+        } catch (_) {}
+      }
+      break;
+    }
+
+    case 'staff':
+    case 'staff_member':
+    case 'staff_members': {
+      // Local tenant role
+      break;
+    }
+
     case 'customer':
     case 'customers': {
       const name = data.name ?? 'Unknown Customer';
@@ -220,8 +264,8 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
           state: data.state ?? null,
           city: data.city ?? null,
           pin: data.pin ?? data.pin_code ?? null,
-          openingBalance: Number(data.opening_balance ?? data.openingBalance ?? 0),
-          creditLimit: Number(data.credit_limit ?? data.creditLimit ?? 0),
+          openingBalance: Math.round(Number(data.opening_balance ?? data.openingBalance ?? 0)),
+          creditLimit: Math.round(Number(data.credit_limit ?? data.creditLimit ?? 0)),
           customerType: data.customer_type ?? data.customerType ?? 'Retail',
           notes: data.notes ?? null,
         },
@@ -237,7 +281,8 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
           pan: data.pan ?? undefined,
           state: data.state ?? undefined,
           city: data.city ?? undefined,
-          openingBalance: data.opening_balance !== undefined ? Number(data.opening_balance) : undefined,
+          openingBalance: data.opening_balance !== undefined ? Math.round(Number(data.opening_balance)) : undefined,
+          creditLimit: data.credit_limit !== undefined ? Math.round(Number(data.credit_limit)) : undefined,
         },
       });
       break;
@@ -259,8 +304,8 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
           gstin: data.gstin ?? null,
           pan: data.pan ?? null,
           state: data.state ?? null,
-          openingBalance: Number(data.opening_balance ?? data.openingBalance ?? 0),
-          creditPeriod: Number(data.credit_period ?? data.creditPeriod ?? 0),
+          openingBalance: Math.round(Number(data.opening_balance ?? data.openingBalance ?? 0)),
+          creditPeriod: Math.round(Number(data.credit_period ?? data.creditPeriod ?? 0)),
           notes: data.notes ?? null,
         },
         update: {
@@ -272,6 +317,8 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
           address: data.address ?? undefined,
           gstin: data.gstin ?? undefined,
           pan: data.pan ?? undefined,
+          openingBalance: data.opening_balance !== undefined ? Math.round(Number(data.opening_balance)) : undefined,
+          creditPeriod: data.credit_period !== undefined ? Math.round(Number(data.credit_period)) : undefined,
         },
       });
       break;
@@ -293,13 +340,13 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
           hsn: data.hsn ?? null,
           barcode: data.barcode ?? null,
           unit: data.unit ?? 'pc',
-          gstRate: Number(data.gst_rate ?? data.gstRate ?? 0),
-          purchasePrice: Number(data.purchase_price ?? data.purchasePrice ?? 0),
-          salePrice: Number(data.sale_price ?? data.salePrice ?? 0),
-          mrp: Number(data.mrp ?? 0),
+          gstRate: Math.round(Number(data.gst_rate ?? data.gstRate ?? 0)),
+          purchasePrice: Math.round(Number(data.purchase_price ?? data.purchasePrice ?? 0)),
+          salePrice: Math.round(Number(data.sale_price ?? data.salePrice ?? 0)),
+          mrp: Math.round(Number(data.mrp ?? 0)),
           stock: Number(data.stock ?? 0),
-          costAverage: Number(data.cost_average ?? data.costAverage ?? 0),
-          lowStockThreshold: Number(data.low_stock_threshold ?? data.lowStockThreshold ?? 5),
+          costAverage: Math.round(Number(data.cost_average ?? data.costAverage ?? 0)),
+          lowStockThreshold: Math.round(Number(data.low_stock_threshold ?? data.lowStockThreshold ?? 5)),
           description: data.description ?? null,
         },
         update: {
@@ -307,10 +354,10 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
           name,
           sku: data.sku ?? undefined,
           barcode: data.barcode ?? undefined,
-          salePrice: data.sale_price !== undefined ? Number(data.sale_price) : undefined,
-          purchasePrice: data.purchase_price !== undefined ? Number(data.purchase_price) : undefined,
+          salePrice: data.sale_price !== undefined ? Math.round(Number(data.sale_price)) : undefined,
+          purchasePrice: data.purchase_price !== undefined ? Math.round(Number(data.purchase_price)) : undefined,
           stock: data.stock !== undefined ? Number(data.stock) : undefined,
-          costAverage: data.cost_average !== undefined ? Number(data.cost_average) : undefined,
+          costAverage: data.cost_average !== undefined ? Math.round(Number(data.cost_average)) : undefined,
         },
       });
       break;
@@ -341,15 +388,15 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
         date: data.date ? new Date(data.date) : new Date(),
         dueDate: data.due_date ? new Date(data.due_date) : (data.dueDate ? new Date(data.dueDate) : null),
         gstType: data.gst_type ?? data.gstType ?? 'gst',
-        subtotal: Number(data.subtotal ?? 0),
-        discount: Number(data.discount ?? 0),
-        taxable: Number(data.taxable ?? 0),
-        cgst: Number(data.cgst ?? 0),
-        sgst: Number(data.sgst ?? 0),
-        igst: Number(data.igst ?? 0),
-        roundOff: Number(data.round_off ?? data.roundOff ?? 0),
-        total: Number(data.total ?? 0),
-        amountPaid: Number(data.amount_paid ?? data.amountPaid ?? 0),
+        subtotal: Math.round(Number(data.subtotal ?? 0)),
+        discount: Math.round(Number(data.discount ?? 0)),
+        taxable: Math.round(Number(data.taxable ?? 0)),
+        cgst: Math.round(Number(data.cgst ?? 0)),
+        sgst: Math.round(Number(data.sgst ?? 0)),
+        igst: Math.round(Number(data.igst ?? 0)),
+        roundOff: Math.round(Number(data.round_off ?? data.roundOff ?? 0)),
+        total: Math.round(Number(data.total ?? 0)),
+        amountPaid: Math.round(Number(data.amount_paid ?? data.amountPaid ?? 0)),
         paymentMode: data.payment_mode ?? data.paymentMode ?? 'Cash',
         status: data.status ?? 'Finalized',
         notes: data.notes ?? null,
@@ -383,17 +430,17 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
                 invoiceId: invId,
                 name: it.name ?? 'Item',
                 hsn: it.hsn ?? null,
-                gstRate: Number(it.gstRate ?? it.gst_rate ?? 0),
+                gstRate: Math.round(Number(it.gstRate ?? it.gst_rate ?? 0)),
                 quantity: Number(it.quantity ?? 1),
-                price: Number(it.price ?? 0),
-                discount: Number(it.discount ?? 0),
-                taxable: Number(it.taxable ?? 0),
-                tax: Number(it.tax ?? 0),
+                price: Math.round(Number(it.price ?? 0)),
+                discount: Math.round(Number(it.discount ?? 0)),
+                taxable: Math.round(Number(it.taxable ?? 0)),
+                tax: Math.round(Number(it.tax ?? 0)),
                 unit: it.unit ?? null,
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -410,7 +457,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
           partyName: data.party_name ?? data.partyName ?? null,
           invoiceId: data.invoice_id ? String(data.invoice_id) : (data.invoiceId ?? null),
           invoiceNumber: data.invoice_number ?? data.invoiceNumber ?? null,
-          amount: Number(data.amount ?? 0),
+          amount: Math.round(Number(data.amount ?? 0)),
           mode: data.mode ?? 'Cash',
           date: data.date ? new Date(data.date) : new Date(),
           reference: data.reference ?? null,
@@ -419,7 +466,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
         },
         update: {
           businessId,
-          amount: Number(data.amount ?? 0),
+          amount: Math.round(Number(data.amount ?? 0)),
           mode: data.mode ?? undefined,
           date: data.date ? new Date(data.date) : undefined,
           notes: data.notes ?? undefined,
@@ -443,7 +490,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
           id: scopedId,
           businessId,
           category: data.category ?? (entity.toLowerCase().startsWith('purchase') ? 'Purchase' : 'General'),
-          amount: Number(data.amount ?? 0),
+          amount: Math.round(Number(data.amount ?? 0)),
           mode: data.mode ?? (entity.toLowerCase().startsWith('purchase') ? 'Credit' : 'Cash'),
           date: data.date ? new Date(data.date) : new Date(),
           description: desc,
@@ -452,7 +499,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
         update: {
           businessId,
           category: data.category ?? undefined,
-          amount: Number(data.amount ?? 0),
+          amount: Math.round(Number(data.amount ?? 0)),
           mode: data.mode ?? undefined,
           description: desc ?? undefined,
         },
@@ -622,7 +669,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -680,7 +727,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -736,7 +783,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -790,7 +837,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -845,7 +892,7 @@ async function handleUpsert(entity: string, entityId: string, businessId: string
               },
             });
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       break;
     }
@@ -1072,7 +1119,7 @@ export async function pullSyncChanges(businessId: string, since?: string, limit 
         const parts = exp.description.split('<!--ITEMS:');
         payloadObj.description = parts[0].trim() || null;
         payloadObj.items = JSON.parse(parts[1].replace('-->', '').trim());
-      } catch (_) {}
+      } catch (_) { }
     }
     changes.push({
       entity: exp.category === 'Purchase' ? 'purchase' : 'expense',
@@ -1137,7 +1184,7 @@ export async function pullSyncChanges(businessId: string, since?: string, limit 
           currObj.items = prevObj.items;
           c.payload = JSON.stringify(currObj);
         }
-      } catch (_) {}
+      } catch (_) { }
     }
     deduped.set(key, c);
   }

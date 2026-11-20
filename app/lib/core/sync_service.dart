@@ -12,13 +12,18 @@ class SyncService {
     return await _client.ping();
   }
 
+  String _normalizeOp(String raw) {
+    if (raw == 'update' || raw.isEmpty) return 'upsert';
+    return raw;
+  }
+
   Future<void> push(SyncRecord record, {String? cloudBusinessId}) async {
     final businessId = cloudBusinessId ?? record.businessId?.toString() ?? '1';
     final response = await _client.post('/api/v1/sync/push', {
       'businessId': businessId,
       'entity': record.entity,
       'entityId': record.entityId.toString(),
-      'op': record.op.isEmpty ? 'upsert' : record.op,
+      'op': _normalizeOp(record.op),
       'payload': record.payload,
       'idempotencyKey': record.idempotencyKey,
     });
@@ -47,7 +52,7 @@ class SyncService {
                 'businessId': cloudBusinessId ?? r.businessId?.toString() ?? '1',
                 'entity': r.entity,
                 'entityId': r.entityId.toString(),
-                'op': r.op.isEmpty ? 'upsert' : r.op,
+                'op': _normalizeOp(r.op),
                 'payload': r.payload,
                 'idempotencyKey': r.idempotencyKey,
               })

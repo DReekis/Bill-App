@@ -95,6 +95,10 @@ class SyncEngine extends ChangeNotifier {
     var pulledCount = 0;
 
     try {
+      if (force) {
+        await Repository.instance.resetFailedSyncRecords();
+      }
+
       // 1. Verify Reachability
       final online = await checkConnectivity();
       if (!online) {
@@ -191,6 +195,7 @@ class SyncEngine extends ChangeNotifier {
           }
         } catch (batchError) {
           // Fallback to sequential to isolate the failing record
+          var authFailed = false;
           for (final rec in enrichedChunk) {
             try {
               await _service.push(rec, cloudBusinessId: cloudBizId);
@@ -200,14 +205,16 @@ class SyncEngine extends ChangeNotifier {
               final errStr = singleError.toString();
               if (errStr.contains('Invalid token') || errStr.contains('Token expired') || errStr.contains('401')) {
                 lastError = 'Cloud session expired. Tap to reconnect account.';
+                await Repository.instance.markSyncFailed(rec.id!, errStr);
+                authFailed = true;
+                break;
               } else {
                 lastError = errStr;
+                await Repository.instance.markSyncFailed(rec.id!, errStr);
               }
-              await Repository.instance.markSyncFailed(rec.id!, errStr);
-              break;
             }
           }
-          break;
+          if (authFailed) break;
         }
       }
 

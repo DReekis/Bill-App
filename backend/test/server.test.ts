@@ -655,6 +655,77 @@ test('Sync Engine: Quotations, Orders, Challans, Returns, Purchases with items a
   assert.equal(deletedQuoteChange.op, 'delete');
 });
 
+test('Sync Engine: accepts op: update, handles business and staff sync payloads without error', async () => {
+  const email = `sync-biz-${Date.now()}@example.com`;
+  const regRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/register',
+    payload: { name: 'Biz Sync User', email, password: 'password123', businessName: 'Biz Sync Test' },
+  });
+  const { token } = regRes.json() as any;
+
+  const bizRes = await app.inject({
+    method: 'GET',
+    url: '/api/v1/businesses',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const businesses = bizRes.json() as any[];
+  const business = businesses[0];
+  const authHeaders = {
+    authorization: `Bearer ${token}`,
+    'x-business-id': business.id,
+  };
+
+  // Push batch with op: 'update' and entities: 'business' & 'staff'
+  const pushBatchRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/sync/push',
+    headers: authHeaders,
+    payload: {
+      items: [
+        {
+          businessId: business.id,
+          entity: 'business',
+          entityId: '1',
+          op: 'update',
+          payload: JSON.stringify({
+            name: 'Updated Enterprise Name',
+            phone: '9999888877',
+            gstin: '33AAACI1607G2Z5',
+          }),
+        },
+        {
+          businessId: business.id,
+          entity: 'staff',
+          entityId: '1',
+          op: 'create',
+          payload: JSON.stringify({
+            name: 'Staff Manager',
+            role: 'manager',
+          }),
+        },
+      ],
+    },
+  });
+
+  assert.equal(pushBatchRes.statusCode, 202);
+  const pushBody = pushBatchRes.json() as any;
+  assert.equal(pushBody.accepted, true);
+  assert.equal(pushBody.count, 2);
+  assert.equal(pushBody.records[0].status, 'synced');
+  assert.equal(pushBody.records[1].status, 'synced');
+
+  // Verify business table was updated
+  const getBizRes = await app.inject({
+    method: 'GET',
+    url: '/api/v1/businesses',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const updatedBizList = getBizRes.json() as any[];
+  assert.equal(updatedBizList[0].name, 'Updated Enterprise Name');
+  assert.equal(updatedBizList[0].gstin, '33AAACI1607G2Z5');
+});
+
 test('Newly registered user strictly receives Free Tier subscription', async () => {
   const email = `new.freetier.${Date.now()}@example.com`;
   const regRes = await app.inject({
