@@ -36,23 +36,23 @@ void main() {
       expect(sub.canAccessEWayBill, isFalse);
       expect(sub.canAccessEInvoice, isFalse);
 
-      // 3. Silver Tier
+      // 3. Silver Tier (Allowed per official subscription model in billket_subscription-1.pdf)
       await sub.setSubscription(
         tier: SubscriptionTier.silver,
         expiresAt: DateTime.now().add(const Duration(days: 365)),
       );
       expect(sub.isBusinessPro, isFalse);
-      expect(sub.canAccessEWayBill, isFalse);
-      expect(sub.canAccessEInvoice, isFalse);
+      expect(sub.canAccessEWayBill, isTrue);
+      expect(sub.canAccessEInvoice, isTrue);
 
-      // 4. Gold Tier
+      // 4. Gold Tier (Allowed per official subscription model in billket_subscription-1.pdf)
       await sub.setSubscription(
         tier: SubscriptionTier.gold,
         expiresAt: DateTime.now().add(const Duration(days: 365)),
       );
       expect(sub.isBusinessPro, isFalse);
-      expect(sub.canAccessEWayBill, isFalse);
-      expect(sub.canAccessEInvoice, isFalse);
+      expect(sub.canAccessEWayBill, isTrue);
+      expect(sub.canAccessEInvoice, isTrue);
 
       // 5. Business Pro Tier (Active) -> Allowed
       await sub.setSubscription(

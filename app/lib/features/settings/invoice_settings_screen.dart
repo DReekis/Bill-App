@@ -104,6 +104,8 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
     switch (style) {
       case 'tally':
         return 'Tally Standard';
+      case 'a5_landscape':
+        return 'A5 Landscape Billbook';
       case 'billbook_stylish':
       case 'modern_band':
         return 'Billbook Modern';

@@ -306,7 +306,7 @@ void main() {
         accountNumber: '50200012345678',
         ifsc: 'HDFC0001234',
       );
-      final styles = ['billbook_stylish', 'classic_grid', 'modern_minimal', 'gst_tax_pro', 'compact_pos', 'modern_band', 'tally'];
+      final styles = ['billbook_stylish', 'classic_grid', 'a5_landscape', 'modern_minimal', 'gst_tax_pro', 'compact_pos', 'modern_band', 'tally'];
       for (final s in styles) {
         final settings = InvoiceCustomizationSettings(themeStyle: s, primaryColorHex: '#065F46');
         final bytes = await generateCommercialSamplePdf(
@@ -558,6 +558,169 @@ void main() {
       final pdfString = String.fromCharCodes(pdfBytes);
       final pageCount = RegExp(r'/Type\s*/Page\b').allMatches(pdfString).length;
       expect(pageCount, greaterThanOrEqualTo(2));
+    });
+
+    test('buildDocumentPdf renders a5_landscape Balaji Enterprises layout with multi-page support', () async {
+      final balajiBusiness = Business(
+        id: 1,
+        name: 'BALAJI ENTERPRISES',
+        address: 'Dharmanagar, Dharmanagar, Tripura, 799250',
+        phone: '9612686397',
+      );
+
+      final balajiLines = [
+        InvoiceLine(
+          name: 'Computer Maintenance & Network Setup',
+          quantity: 1,
+          price: 4655000,
+          taxable: 4655000,
+          tax: 0,
+          unit: 'SVC',
+        ),
+      ];
+
+      final settings = InvoiceCustomizationSettings(
+        themeStyle: 'a5_landscape',
+        showBankDetails: true,
+      );
+
+      final bank = BankAccount(
+        bankName: 'Axis Bank, DHARMANAGAR',
+        accountName: 'Bishwajit Dhar',
+        accountNumber: '923010060652484',
+        ifsc: 'UTIB0000708',
+      );
+
+      final pdfBytes = await buildDocumentPdf(
+        business: balajiBusiness,
+        title: 'Bill of Supply',
+        number: '99',
+        date: '2026-08-29',
+        dueDate: '2026-09-05',
+        customer: Customer(name: 'MAA TARA STORES', pan: 'ETCPS0180N'),
+        partyName: 'MAA TARA STORES',
+        partyAddress: 'NORTH NAYAPARA, DHARMANAGAR, Tripura, 799250',
+        partyPhone: '9612686397',
+        lines: balajiLines,
+        subtotal: 4655000,
+        discount: 0,
+        taxable: 4655000,
+        igst: 0,
+        cgst: 0,
+        sgst: 0,
+        roundOff: 0,
+        total: 4655000,
+        outstandingPaise: 4655000,
+        settings: settings,
+        bankAccount: bank,
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+    });
+
+    test('buildDocumentPdf renders a5_landscape with multi-page support across 25 items', () async {
+      final balajiBusiness = Business(
+        id: 1,
+        name: 'BALAJI ENTERPRISES',
+        address: 'Dharmanagar, Dharmanagar, Tripura, 799250',
+        phone: '9612686397',
+      );
+
+      final multiLines = List.generate(
+        25,
+        (i) => InvoiceLine(
+          name: 'Hardware Service Item ${(i + 1)}',
+          quantity: 1.0 * (i + 1),
+          price: 100000,
+          taxable: (i + 1) * 100000,
+          tax: 0,
+        ),
+      );
+
+      final totalVal = multiLines.fold(0, (sum, l) => sum + l.taxable);
+
+      final settings = InvoiceCustomizationSettings(
+        themeStyle: 'a5_landscape',
+        showBankDetails: true,
+      );
+
+      final pdfBytes = await buildDocumentPdf(
+        business: balajiBusiness,
+        title: 'Bill of Supply',
+        number: '100',
+        date: '2026-08-29',
+        partyName: 'MAA TARA STORES',
+        lines: multiLines,
+        subtotal: totalVal,
+        discount: 0,
+        taxable: totalVal,
+        igst: 0,
+        cgst: 0,
+        sgst: 0,
+        roundOff: 0,
+        total: totalVal,
+        outstandingPaise: totalVal,
+        settings: settings,
+      );
+
+      expect(pdfBytes, isNotEmpty);
+      expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      final pdfString = String.fromCharCodes(pdfBytes);
+      final pageCount = RegExp(r'/Type\s*/Page\b').allMatches(pdfString).length;
+      expect(pageCount, greaterThanOrEqualTo(2));
+    });
+
+    test('buildDocumentPdf has consistent BILL TO and SHIP TO side-by-side even for Walk-in', () async {
+      final settings = InvoiceCustomizationSettings(
+        themeStyle: 'tally',
+        showShipTo: true,
+      );
+
+      final walkInBytes = await buildDocumentPdf(
+        business: testBusiness,
+        title: 'Tax Invoice',
+        number: 'INV-0001',
+        date: '2026-11-21',
+        partyName: null,
+        lines: testLines,
+        subtotal: 87000,
+        discount: 0,
+        taxable: 87000,
+        igst: 0,
+        cgst: 2175,
+        sgst: 2175,
+        roundOff: 0,
+        total: 91350,
+        outstandingPaise: 91350,
+        settings: settings,
+      );
+
+      expect(walkInBytes, isNotEmpty);
+      expect(String.fromCharCodes(walkInBytes.sublist(0, 5)), '%PDF-');
+
+      final namedBytes = await buildDocumentPdf(
+        business: testBusiness,
+        title: 'Tax Invoice',
+        number: 'INV-0002',
+        date: '2026-11-21',
+        partyName: 'SOUVIK',
+        partyAddress: 'Kolkata, WB',
+        lines: testLines,
+        subtotal: 87000,
+        discount: 0,
+        taxable: 87000,
+        igst: 0,
+        cgst: 2175,
+        sgst: 2175,
+        roundOff: 0,
+        total: 91350,
+        outstandingPaise: 91350,
+        settings: settings,
+      );
+
+      expect(namedBytes, isNotEmpty);
+      expect(String.fromCharCodes(namedBytes.sublist(0, 5)), '%PDF-');
     });
 
     test('buildPurchaseBillPdf generates complete BillBook standard PDF with vendor, buyer card, payment mode, and inward signatory', () async {

@@ -1079,7 +1079,7 @@ class InvoiceCustomizationSettings {
 
   final String id;
   final int businessId;
-  String themeStyle; // 'tally', 'classic_grid', 'billbook_stylish', 'modern_minimal', 'gst_tax_pro', 'compact_pos'
+  String themeStyle; // 'tally', 'classic_grid', 'a5_landscape', 'billbook_stylish', 'modern_minimal', 'gst_tax_pro', 'compact_pos'
   String primaryColorHex;
   bool showHsnColumn;
   bool showUnitColumn;

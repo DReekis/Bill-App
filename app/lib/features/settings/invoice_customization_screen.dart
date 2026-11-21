@@ -56,6 +56,14 @@ class _InvoiceCustomizationScreenState extends State<InvoiceCustomizationScreen>
       accentColor: Color(0xFF0F172A),
     ),
     _InvoiceTemplateOption(
+      id: 'a5_landscape',
+      name: 'A5 Landscape Billbook',
+      tag: 'A5 LANDSCAPE',
+      description: 'Exact Balaji Enterprises A5 landscape layout with lavender accents, metadata grid & multi-page support.',
+      icon: Icons.horizontal_split_rounded,
+      accentColor: Color(0xFF840BB2),
+    ),
+    _InvoiceTemplateOption(
       id: 'billbook_stylish',
       name: 'Billbook Modern',
       tag: 'POPULAR',

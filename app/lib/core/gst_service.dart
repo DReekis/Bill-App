@@ -903,56 +903,6 @@ class GstService {
         upper == '.';
   }
 
-  /// Parses the jamku public GST response into a clean GstBusinessInfo model.
-  GstBusinessInfo _parseJamkuResponse(
-    String gstin,
-    Map<String, dynamic> d,
-    GstBusinessInfo fallback,
-  ) {
-    final tradeName = (d['tradeName'] as String?)?.trim();
-    final legalName = (d['lgnm'] as String?)?.trim();
-    final stateCode = gstin.substring(0, 2);
-    final pan = gstin.length >= 12 ? gstin.substring(2, 12) : fallback.pan;
-
-    final normalized = extractNormalizedAddress(
-      d,
-      stateCode: stateCode,
-      fallbackState: fallback.state,
-    );
-
-    final ctb = (d['ctb'] as String?)?.trim();
-    final constitution = (ctb != null && ctb.isNotEmpty) ? ctb : fallback.constitution;
-    final dty = (d['dty'] as String?)?.trim() ?? '';
-    final isComposition = dty.toLowerCase().contains('composition');
-    final sts = (d['sts'] as String?)?.trim() ?? 'Active';
-
-    final effectiveName = (tradeName?.isNotEmpty == true ? tradeName : legalName) ?? '';
-    final shipping = effectiveName.isNotEmpty && normalized.address != null && normalized.address!.isNotEmpty
-        ? '$effectiveName, ${normalized.address!}'
-        : normalized.address;
-
-    return GstBusinessInfo(
-      gstin: gstin,
-      valid: true,
-      businessName: effectiveName.isNotEmpty ? effectiveName : null,
-      tradeName: tradeName?.isNotEmpty == true ? tradeName : null,
-      legalName: legalName?.isNotEmpty == true ? legalName : null,
-      ownerName: legalName?.isNotEmpty == true ? legalName : null,
-      pan: pan,
-      stateCode: stateCode,
-      state: normalized.state ?? fallback.state,
-      city: normalized.city,
-      address: normalized.address,
-      shippingAddress: shipping,
-      pinCode: normalized.pinCode,
-      constitution: constitution,
-      industry: fallback.industry,
-      isComposition: isComposition,
-      status: sts,
-      registrationDate: (d['rgdt'] as String?)?.trim(),
-      isOnlineFetched: true,
-    );
-  }
 
   /// Parses the gstincheck.co.in / standard GST portal JSON response.
   /// Address format produced: matches Billbook standard field ordering: bno, flno, bnm, st, loc, dst, stcd, pncd
