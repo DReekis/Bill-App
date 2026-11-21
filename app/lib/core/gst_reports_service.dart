@@ -14,7 +14,9 @@ import '../core/dates.dart';
 import '../core/gst_service.dart';
 import '../core/models.dart';
 import '../core/money.dart';
+import '../core/subscription_service.dart';
 import '../data/repositories.dart';
+import '../features/subscription/upgrade_paywall_sheet.dart';
 import '../theme/stitch_theme.dart';
 import 'permission_service.dart';
 
@@ -2048,6 +2050,21 @@ class _GstExportBottomSheetState extends State<_GstExportBottomSheet> {
   }
 
   Future<void> _handleExcelAction({required bool isShare}) async {
+    if (!SubscriptionService.instance.canExportExcel) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'GST Offline Tool Excel Export',
+        description: 'Export Government GST Portal offline tool Excel (.xlsx) workbooks for GSTR-1, GSTR-2, and GSTR-3B.',
+        requiredTier: SubscriptionTier.starter,
+        bulletPoints: const [
+          'Pre-validated government GST offline tool templates',
+          'Formatted B2B, B2CL, B2CS, and HSN summary sheets',
+          'Available on Starter, Silver, Gold, and Business Pro plans',
+        ],
+      );
+      return;
+    }
+
     if (widget.returnType == GstReturnType.gstr1) {
       final canProceed = await GstReportsService.instance.runPreExportAuditGuard(
         context,

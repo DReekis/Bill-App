@@ -5,12 +5,14 @@ import '../../core/dates.dart';
 import '../../core/money.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../customers/customer_form.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import '../inventory/product_form.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import 'barcode_scanner_screen.dart';
 import 'hardware_scanner_dialog.dart';
 import '../../core/physical_barcode_scanner.dart';
@@ -367,6 +369,21 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
   }
 
   Future<void> _scanBarcode() async {
+    if (!SubscriptionService.instance.canAccessBarcode) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Barcode Scanning & Management',
+        description: 'Barcode scanning and inventory management is available on Silver and higher plans.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Scan barcodes with camera & hardware scanner',
+          'Faster billing with auto product detection',
+          'Batch & Expiry date management',
+          'Low stock alerts & Stock transfer',
+        ],
+      );
+      return;
+    }
     final product = await Navigator.push<Product>(
       context,
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
@@ -613,6 +630,21 @@ class _QuotationBuilderScreenState extends State<QuotationBuilderScreen> {
   }
 
   Future<void> _save() async {
+    if (!SubscriptionService.instance.canAccessEstimates) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Estimates & Quotations',
+        description: 'Estimates and Quotations are available on the Starter plan and above.',
+        requiredTier: SubscriptionTier.starter,
+        bulletPoints: const [
+          'Create professional Estimates & Quotations',
+          'Convert estimates to sales invoices with one tap',
+          'Sales & Purchase Returns (Credit/Debit Notes)',
+          'Unlimited Sales & Purchase Bills',
+        ],
+      );
+      return;
+    }
     if (customerId == null) {
       showAppMessage(context, 'Please select or add a customer', error: true);
       return;

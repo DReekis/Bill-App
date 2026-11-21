@@ -128,9 +128,9 @@ void main() {
       expect(sub.canAccessPurchaseOrders, true);
       expect(sub.canAccessDeliveryChallans, true);
 
-      // Bank Hub unlocked, E-Invoice requires Business Pro
+      // Bank Hub & E-Invoice unlocked on Silver
       expect(sub.canAccessBankManagement, true);
-      expect(sub.canAccessEInvoice, false);
+      expect(sub.canAccessEInvoice, true);
       expect(sub.canAccessBarcode, true);
       expect(sub.canAccessLowStockAlert, true);
       expect(sub.canAccessStockTransfer, true);

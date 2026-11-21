@@ -11,6 +11,8 @@ import '../../utils/pdf_invoice.dart';
 import '../../utils/widgets.dart';
 import 'purchase_builder_screen.dart';
 import '../returns/note_builder_screen.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 
 class PurchaseDetailScreen extends StatefulWidget {
   const PurchaseDetailScreen({super.key, required this.purchaseId, this.autoPreview = false});
@@ -163,6 +165,21 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   void _recordDebitNote() {
     final p = purchase;
     if (p == null) return;
+    if (!SubscriptionService.instance.canAccessReturns) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Purchase Return (Debit Note)',
+        description: 'Debit Notes are available on the Starter plan and above.',
+        requiredTier: SubscriptionTier.starter,
+        bulletPoints: const [
+          'Create Debit Notes & Purchase Returns',
+          'Automatic inventory restocking & ledger adjustment',
+          'Estimates & Quotations',
+          'Unlimited Sales & Purchase Bills',
+        ],
+      );
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(

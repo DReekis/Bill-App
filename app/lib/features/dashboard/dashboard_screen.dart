@@ -22,6 +22,8 @@ import '../sales/quotation_builder_screen.dart';
 import '../sales/quotation_detail_screen.dart';
 import '../sales/sales_order_builder_screen.dart';
 import '../returns/note_builder_screen.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import '../sales/delivery_challan_detail_screen.dart';
 import '../sales/invoice_detail_screen.dart';
 import '../sales/invoice_list_tab.dart';
@@ -812,37 +814,142 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .then((_) => onDone());
       case 'Quotation':
       case 'Estimate':
+        if (!SubscriptionService.instance.canAccessEstimates) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Estimates & Quotations',
+            description: 'Create and send professional estimates and quotations. Available on Starter and above.',
+            requiredTier: SubscriptionTier.starter,
+            bulletPoints: const [
+              'Create professional Estimates & Quotations',
+              'Convert estimates to sales bills in 1 tap',
+              'Sales & Purchase Returns (Credit/Debit Notes)',
+              'Unlimited Sales & Purchase Bills',
+            ],
+          );
+          return;
+        }
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const QuotationBuilderScreen()))
             .then((_) => onDone());
       case 'Order':
       case 'Orders':
+        if (!SubscriptionService.instance.canAccessSalesOrders) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Orders Management',
+            description: 'Sales and Purchase orders management is available on Silver and higher plans.',
+            requiredTier: SubscriptionTier.silver,
+            bulletPoints: const [
+              'Sales & Purchase Orders lifecycle',
+              'Delivery Challans & Dispatch slips',
+              'E-Way Bill & E-Invoice integration',
+              'Multi-device sync',
+            ],
+          );
+          return;
+        }
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const OrdersScreen()))
             .then((_) => onDone());
       case 'Sales Order':
+        if (!SubscriptionService.instance.canAccessSalesOrders) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Sales Orders',
+            description: 'Booking Sales Orders is available on Silver and higher plans.',
+            requiredTier: SubscriptionTier.silver,
+            bulletPoints: const [
+              'Sales Orders with auto inventory booking',
+              'Delivery Challan integration',
+              'E-Way Bill & E-Invoice integration',
+              'Multi-device sync',
+            ],
+          );
+          return;
+        }
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const SalesOrderBuilderScreen()))
             .then((_) => onDone());
       case 'Purchase Order':
+        if (!SubscriptionService.instance.canAccessPurchaseOrders) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Purchase Orders',
+            description: 'Purchase Orders are available on Silver and higher plans.',
+            requiredTier: SubscriptionTier.silver,
+            bulletPoints: const [
+              'Issue Purchase Orders to suppliers',
+              'Auto convert PO to purchase bill upon delivery',
+              'Track supplier order fulfillment',
+              'Multi-device sync',
+            ],
+          );
+          return;
+        }
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const PurchaseOrderBuilderScreen()))
             .then((_) => onDone());
       case 'Challan':
+        if (!SubscriptionService.instance.canAccessDeliveryChallans) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Delivery Challans',
+            description: 'Delivery Challans and goods dispatch notes are available on Silver and higher plans.',
+            requiredTier: SubscriptionTier.silver,
+            bulletPoints: const [
+              'Delivery Challans & Dispatch slips',
+              'Convert challan to tax invoice in 1 click',
+              'E-Way Bill integration',
+              'Multi-device sync',
+            ],
+          );
+          return;
+        }
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const DeliveryChallanBuilderScreen()))
             .then((_) => onDone());
       case 'Credit Note':
+        if (!SubscriptionService.instance.canAccessReturns) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Sales Return (Credit Note)',
+            description: 'Credit Notes are available on the Starter plan and above.',
+            requiredTier: SubscriptionTier.starter,
+            bulletPoints: const [
+              'Create Credit Notes & Sales Returns',
+              'Automatic inventory restocking & ledger adjustment',
+              'Estimates & Quotations',
+              'Unlimited Sales & Purchase Bills',
+            ],
+          );
+          return;
+        }
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const NoteBuilderScreen(partyType: 'customer')))
             .then((_) => onDone());
       case 'Debit Note':
+        if (!SubscriptionService.instance.canAccessReturns) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Purchase Return (Debit Note)',
+            description: 'Debit Notes are available on the Starter plan and above.',
+            requiredTier: SubscriptionTier.starter,
+            bulletPoints: const [
+              'Create Debit Notes & Purchase Returns',
+              'Automatic inventory restocking & ledger adjustment',
+              'Estimates & Quotations',
+              'Unlimited Sales & Purchase Bills',
+            ],
+          );
+          return;
+        }
         nav
             .push(MaterialPageRoute(
                 builder: (_) => const NoteBuilderScreen(partyType: 'supplier')))
@@ -852,6 +959,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 'GST Center':
         nav.push(MaterialPageRoute(builder: (_) => const GstCenterScreen()));
       case 'Cash & Bank':
+        if (!SubscriptionService.instance.canAccessBankManagement) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Cash & Bank Management',
+            description: 'Bank account tracking, reconciliation, and cash accounts are available on Silver and higher plans.',
+            requiredTier: SubscriptionTier.silver,
+            bulletPoints: const [
+              'Multiple Bank Accounts & Cash Drawers',
+              'Bank-to-Bank and Cash Contra transfers',
+              'Cheque clearing & reconciliation',
+              'Cash Flow Statement & Daybook',
+            ],
+          );
+          return;
+        }
         nav.push(MaterialPageRoute(builder: (_) => const CashBankHubScreen())).then((_) => onDone());
       case 'Expense':
         showExpenseCategoryPicker(

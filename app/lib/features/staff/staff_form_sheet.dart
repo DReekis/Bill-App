@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../../core/models.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 
 class StaffFormSheet extends StatefulWidget {
   final StaffMember? staff;
@@ -100,6 +102,30 @@ class _StaffFormSheetState extends State<StaffFormSheet> {
 
     setState(() => _isSaving = true);
     try {
+      if (widget.staff == null) {
+        final currentStaff = await Repository.instance.staffMembers(bizId);
+        final currentStaffCount = currentStaff.length + 1; // including owner
+        if (!SubscriptionService.instance.canAddStaffUser(currentStaffCount)) {
+          setState(() => _isSaving = false);
+          if (mounted) {
+            UpgradePaywallSheet.show(
+              context,
+              featureName: 'Multi-User & Staff Access',
+              description:
+                  'Free and Starter plans include 1 user (owner). Upgrade to Silver or higher to invite staff members and set role-based permissions.',
+              requiredTier: SubscriptionTier.silver,
+              bulletPoints: const [
+                'Silver: 2 Users (Owner + 1 Staff)',
+                'Gold: 5 Users with Advanced Permissions',
+                'Business Pro: Unlimited Staff Members',
+                'Role-based permissions (Cashier, Salesman, Accountant, Admin)',
+              ],
+            );
+          }
+          return;
+        }
+      }
+
       final staff = StaffMember(
         id: widget.staff?.id,
         businessId: bizId,

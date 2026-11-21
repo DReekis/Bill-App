@@ -8,6 +8,8 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import '../inventory/product_form.dart';
 import '../inventory/restock_price_update_sheet.dart';
@@ -143,6 +145,21 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
   }
 
   void _scanBarcode() async {
+    if (!SubscriptionService.instance.canAccessBarcode) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Barcode Scanning & Management',
+        description: 'Barcode scanning is available on Silver and higher plans.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Scan barcodes with camera & hardware scanner',
+          'Fast order creation',
+          'Batch & expiry date tracking',
+          'Low stock alerts & Stock transfer',
+        ],
+      );
+      return;
+    }
     final res = await Navigator.push<dynamic>(
       context,
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
@@ -585,6 +602,21 @@ class _PurchaseOrderBuilderScreenState extends State<PurchaseOrderBuilderScreen>
   }
 
   Future<void> _save() async {
+    if (!SubscriptionService.instance.canAccessPurchaseOrders) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Purchase Orders',
+        description: 'Purchase Orders are available on Silver and higher plans.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Issue Purchase Orders to suppliers',
+          'Auto convert PO to purchase bill upon delivery',
+          'Track supplier order fulfillment',
+          'Multi-device sync',
+        ],
+      );
+      return;
+    }
     if (lines.isEmpty) {
       showAppMessage(context, 'Add at least one item to save the order', error: true);
       return;

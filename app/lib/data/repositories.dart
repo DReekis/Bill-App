@@ -2686,6 +2686,15 @@ class Repository {
     return res.isNotEmpty ? (res.first['cnt'] as int? ?? 0) : 0;
   }
 
+  Future<int> getPurchasesCount(int businessId) async {
+    final db = await _database;
+    final res = await db.rawQuery(
+      "SELECT COUNT(*) as cnt FROM expenses WHERE business_id = ? AND category = 'Purchase'",
+      [businessId],
+    );
+    return res.isNotEmpty ? (res.first['cnt'] as int? ?? 0) : 0;
+  }
+
   Future<Invoice?> invoice(int businessId, int id) async {
     final db = await _database;
     final rows = await db.query('invoices',

@@ -5,11 +5,13 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../payments/payment_form.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import '../suppliers/supplier_detail_screen.dart';
 
 class PayablesScreen extends StatefulWidget {
@@ -61,6 +63,21 @@ class _PayablesScreenState extends State<PayablesScreen> {
 
   Future<void> _openWhatsApp(String? phone, String supplierName) async {
     if (phone == null || phone.isEmpty) return;
+    if (!SubscriptionService.instance.canAccessPaymentReminder) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'WhatsApp Payment Reminders',
+        description: 'Automated 1-Tap WhatsApp payment reminders and vendor messaging is available on Silver and higher plans.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          '1-Tap WhatsApp Vendor & Customer Reminders',
+          'Automated balance notifications',
+          'Bank account & UPI payment links',
+          'Unlimited WhatsApp sharing',
+        ],
+      );
+      return;
+    }
     final clean = phone.replaceAll(RegExp(r'[^0-9]'), '');
     final formatted = clean.length == 10 ? '91$clean' : clean;
     final message = 'Hello $supplierName,\nRegarding our pending account balance with you.';

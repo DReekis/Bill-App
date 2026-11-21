@@ -13,8 +13,10 @@ import '../../core/dates.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 
 class StockSummaryReportScreen extends StatefulWidget {
   const StockSummaryReportScreen({super.key});
@@ -95,6 +97,21 @@ class _StockSummaryReportScreenState extends State<StockSummaryReportScreen> {
   int get outOfStockCount => allProducts.where((p) => p.stock <= 0).length;
 
   Future<void> _exportExcel() async {
+    if (!SubscriptionService.instance.canExportExcel) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Excel Export',
+        description: 'Export inventory stock valuation statements directly into Microsoft Excel (.xlsx) format.',
+        requiredTier: SubscriptionTier.starter,
+        bulletPoints: const [
+          'Direct .xlsx spreadsheet download & sharing',
+          'Pre-formatted headers, formulas & totals',
+          'Available on Starter, Silver, Gold, and Business Pro plans',
+        ],
+      );
+      return;
+    }
+
     final biz = await Repository.instance.getBusiness(context.read<Session>().businessId!);
     final bizName = biz?.name ?? 'Business';
     final excel = xl.Excel.createExcel();

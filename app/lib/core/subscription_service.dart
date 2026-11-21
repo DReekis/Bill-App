@@ -274,9 +274,9 @@ class SubscriptionService extends ChangeNotifier {
   bool get isBusinessPro =>
       !isExpired && _currentTier == SubscriptionTier.businessPro;
 
-  bool get canAccessEInvoice => isBusinessPro;
+  bool get canAccessEInvoice => canAccessSalesOrders;
 
-  bool get canAccessEWayBill => isBusinessPro;
+  bool get canAccessEWayBill => canAccessSalesOrders;
 
   bool get canAccessBankManagement => canAccessSalesOrders;
 
@@ -304,6 +304,17 @@ class SubscriptionService extends ChangeNotifier {
           _currentTier == SubscriptionTier.businessPro);
 
   bool get canExportExcel =>
+      !isExpired && _currentTier != SubscriptionTier.free;
+
+  bool get canAccessMultiplePricing =>
+      !isExpired && _currentTier != SubscriptionTier.free;
+
+  bool get canAccessPaymentReminder => canAccessSalesOrders;
+
+  bool get canAccessPLReport =>
+      !isExpired && _currentTier != SubscriptionTier.free;
+
+  bool get canAccessBackup =>
       !isExpired && _currentTier != SubscriptionTier.free;
 
   bool get canAccessAutomaticBackup =>

@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../theme/stitch_theme.dart';
 import '../banking/cash_bank_hub_screen.dart';
 import '../dashboard/payables_screen.dart';
 import '../dashboard/receivables_screen.dart';
 import '../gst/gst_center_screen.dart';
 import '../shell/transaction_history_screen.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import 'balance_sheet_screen.dart';
 import 'bill_wise_profit_screen.dart';
 import 'day_book_screen.dart';
@@ -71,7 +73,23 @@ class ReportsMenuScreen extends StatelessWidget {
               _ReportListItem(
                 icon: Icons.receipt_long_outlined,
                 title: 'Bill wise profit',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillWiseProfitScreen())),
+                onTap: () {
+                  if (!SubscriptionService.instance.canAccessPLReport) {
+                    UpgradePaywallSheet.show(
+                      context,
+                      featureName: 'Bill Wise Profit Analysis',
+                      description: 'Analyze net margin and item-wise profit for every generated sales bill.',
+                      requiredTier: SubscriptionTier.starter,
+                      bulletPoints: const [
+                        'Real-time gross and net profit per bill',
+                        'Cost of goods sold vs sale price breakdown',
+                        'Available on Starter, Silver, Gold, and Business Pro plans',
+                      ],
+                    );
+                    return;
+                  }
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const BillWiseProfitScreen()));
+                },
               ),
             _ReportListItem(
               icon: Icons.currency_rupee_rounded,
@@ -87,7 +105,23 @@ class ReportsMenuScreen extends StatelessWidget {
               _ReportListItem(
                 icon: Icons.trending_up_rounded,
                 title: 'Profit and Loss',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PLReportScreen())),
+                onTap: () {
+                  if (!SubscriptionService.instance.canAccessPLReport) {
+                    UpgradePaywallSheet.show(
+                      context,
+                      featureName: 'Profit & Loss Statement',
+                      description: 'Track business profitability, gross margin, and operating overheads in real time.',
+                      requiredTier: SubscriptionTier.starter,
+                      bulletPoints: const [
+                        'Sales revenue vs cost of goods sold',
+                        'Operating expenses and net profit calculations',
+                        'Available on Starter, Silver, Gold, and Business Pro plans',
+                      ],
+                    );
+                    return;
+                  }
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PLReportScreen()));
+                },
               ),
             _ReportListItem(
               icon: Icons.badge_outlined,
@@ -104,20 +138,68 @@ class ReportsMenuScreen extends StatelessWidget {
               _ReportListItem(
                 icon: Icons.balance_rounded,
                 title: 'Balance Sheet',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BalanceSheetScreen())),
+                onTap: () {
+                  if (!SubscriptionService.instance.canAccessBalanceSheet) {
+                    UpgradePaywallSheet.show(
+                      context,
+                      featureName: 'Balance Sheet Financial Statement',
+                      description: 'Full accounting module balance sheet covering current assets, liabilities, and net equity.',
+                      requiredTier: SubscriptionTier.gold,
+                      bulletPoints: const [
+                        'Real-time balance sheet statement with double-entry reconciliation',
+                        'Assets, liabilities, and capital equity ledger balances',
+                        'Available on Gold and Business Pro plans',
+                      ],
+                    );
+                    return;
+                  }
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const BalanceSheetScreen()));
+                },
               ),
             if (session.canViewBankBalances)
               _ReportListItem(
                 icon: Icons.swap_horiz_rounded,
                 title: 'Cash Flow Statement',
                 subtitle: 'Opening cash, money in, money out, and closing cash balances',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashflowReportScreen())),
+                onTap: () {
+                  if (!SubscriptionService.instance.canAccessBankManagement) {
+                    UpgradePaywallSheet.show(
+                      context,
+                      featureName: 'Cash Flow & Bank Analytics',
+                      description: 'Track cash and bank liquidity, money in vs money out, and closing cash balances.',
+                      requiredTier: SubscriptionTier.silver,
+                      bulletPoints: const [
+                        'Complete cash in vs cash out flow analysis',
+                        'Bank balances and contra transfer tracking',
+                        'Available on Silver, Gold, and Business Pro plans',
+                      ],
+                    );
+                    return;
+                  }
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const CashflowReportScreen()));
+                },
               ),
             if (session.canViewBankBalances)
               _ReportListItem(
                 icon: Icons.account_balance_outlined,
                 title: 'Cash and Bank (All Payments)',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashBankHubScreen())),
+                onTap: () {
+                  if (!SubscriptionService.instance.canAccessBankManagement) {
+                    UpgradePaywallSheet.show(
+                      context,
+                      featureName: 'Cash & Bank Management Hub',
+                      description: 'Manage multiple bank accounts, track cheques, and record bank transfers.',
+                      requiredTier: SubscriptionTier.silver,
+                      bulletPoints: const [
+                        'Multiple bank accounts & real-time balances',
+                        'Cheque deposit, clearance & bounce tracking',
+                        'Available on Silver, Gold, and Business Pro plans',
+                      ],
+                    );
+                    return;
+                  }
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const CashBankHubScreen()));
+                },
               ),
           ]),
           const SizedBox(height: 24),
@@ -159,13 +241,45 @@ class ReportsMenuScreen extends StatelessWidget {
                   icon: Icons.integration_instructions_outlined,
                   title: 'Export to Tally Prime (Direct XML)',
                   subtitle: 'One-click XML import for TallyPrime & Tally.ERP 9 (Sales, Purchases, Ledgers)',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TallyExportScreen())),
+                  onTap: () {
+                    if (!SubscriptionService.instance.canAccessTallyExport) {
+                      UpgradePaywallSheet.show(
+                        context,
+                        featureName: 'Tally XML Export',
+                        description: 'Export all sales, purchases, and party ledgers directly into Tally XML format.',
+                        requiredTier: SubscriptionTier.silver,
+                        bulletPoints: const [
+                          'Direct XML export for TallyPrime & Tally.ERP 9',
+                          'Auto-maps GST ledgers, parties, and voucher numbers',
+                          'Available on Silver, Gold, and Business Pro plans',
+                        ],
+                      );
+                      return;
+                    }
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const TallyExportScreen()));
+                  },
                 ),
               _ReportListItem(
                 icon: Icons.verified_user_outlined,
                 title: 'MCA Audit Trail & Edit Logs',
                 subtitle: 'Continuous tamper-evident activity log, invoice edits & cancellations diffs',
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AuditTrailScreen())),
+                onTap: () {
+                  if (!SubscriptionService.instance.canAccessSalesOrders) {
+                    UpgradePaywallSheet.show(
+                      context,
+                      featureName: 'MCA Audit Trail & Edit Logs',
+                      description: 'Continuous tamper-evident activity log, invoice edits & cancellations diffs.',
+                      requiredTier: SubscriptionTier.silver,
+                      bulletPoints: const [
+                        'Ministry of Corporate Affairs compliant audit trail',
+                        'Immutable logging of all creation, update, and deletion events',
+                        'Available on Silver, Gold, and Business Pro plans',
+                      ],
+                    );
+                    return;
+                  }
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AuditTrailScreen()));
+                },
               ),
             ]),
           ],
@@ -349,6 +463,20 @@ class ReportsMenuScreen extends StatelessWidget {
               subtitle: const Text('Items running below reorder threshold'),
               onTap: () {
                 Navigator.pop(ctx);
+                if (!SubscriptionService.instance.canAccessLowStockAlert) {
+                  UpgradePaywallSheet.show(
+                    context,
+                    featureName: 'Low Stock Alerts',
+                    description: 'Get automated warnings when item inventory falls below your reorder threshold.',
+                    requiredTier: SubscriptionTier.silver,
+                    bulletPoints: const [
+                      'Custom minimum reorder stock thresholds per item',
+                      'Instant alerts on dashboard and stock screens',
+                      'Available on Silver, Gold, and Business Pro plans',
+                    ],
+                  );
+                  return;
+                }
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const StockSummaryReportScreen()));
               },
             ),

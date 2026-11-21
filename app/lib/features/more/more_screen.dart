@@ -26,6 +26,7 @@ import '../auth/auth_flow.dart';
 import '../backup/cloud_backup_sheet.dart';
 import 'import_screen.dart';
 import '../subscription/subscription_plans_screen.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import '../sales/hardware_scanner_dialog.dart';
 import '../../core/subscription_service.dart';
 import '../../l10n/app_localizations.dart';
@@ -213,7 +214,24 @@ class _MoreTabState extends State<MoreTab> {
           'क्लाउड', 'बैकअप', 'रिस्टोर', 'ক্লাউড', 'ব্যাকআপ', 'রিস্টোর'
         ],
         visible: session.canManageBusinessSettings,
-        onTap: () => CloudBackupSheet.show(context),
+        onTap: () {
+          if (!SubscriptionService.instance.canAccessBackup) {
+            UpgradePaywallSheet.show(
+              context,
+              featureName: 'Cloud & Local Data Backup',
+              description: 'Encrypted automatic data backup and device restore is available on Starter and higher plans.',
+              requiredTier: SubscriptionTier.starter,
+              bulletPoints: const [
+                'Encrypted Daily Data Backup',
+                'Export backups to Google Drive or Local Storage',
+                'Seamless device-to-device restore',
+                'Zero data loss guarantee',
+              ],
+            );
+            return;
+          }
+          CloudBackupSheet.show(context);
+        },
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
@@ -287,7 +305,24 @@ class _MoreTabState extends State<MoreTab> {
           'बिल', 'सेटिंग्स', 'प्रिंट', 'ইনভয়েস', 'রশিদ'
         ],
         visible: session.canManageBusinessSettings,
-        onTap: () => nav(const InvoiceSettingsScreen()),
+        onTap: () {
+          if (!SubscriptionService.instance.canAccessInvoiceSettings) {
+            UpgradePaywallSheet.show(
+              context,
+              featureName: 'Invoice Settings & Customization',
+              description: 'Customizing invoice designs, color themes, prefixes, and thermal printer layouts is available on Silver and higher plans.',
+              requiredTier: SubscriptionTier.silver,
+              bulletPoints: const [
+                'Customize invoice color themes & headers',
+                'Thermal printer & bill format customization',
+                'E-Way Bill & E-Invoice integration',
+                'Multi-user RBAC & multi-device sync',
+              ],
+            );
+            return;
+          }
+          nav(const InvoiceSettingsScreen());
+        },
       ),
       _SettingsItem(
         icon: Icons.qr_code_scanner_rounded,
@@ -296,7 +331,24 @@ class _MoreTabState extends State<MoreTab> {
           'pos', 'hardware', 'scanner', 'barcode', 'usb', 'bluetooth', 'gun', 'scan', 'device', 'laser',
           'हार्डवेयर', 'स्कैनर', 'বারকোড', 'স্ক্যানার'
         ],
-        onTap: () => HardwareScannerDialog.show(context),
+        onTap: () {
+          if (!SubscriptionService.instance.canAccessBarcode) {
+            UpgradePaywallSheet.show(
+              context,
+              featureName: 'POS Hardware & Scanners',
+              description: 'USB and Bluetooth barcode scanners are available on Silver and higher plans.',
+              requiredTier: SubscriptionTier.silver,
+              bulletPoints: const [
+                'USB & Bluetooth barcode scanner gun support',
+                'Continuous rapid scanning in billing',
+                'Batch & expiry tracking',
+                'Low stock alerts & Stock transfer',
+              ],
+            );
+            return;
+          }
+          HardwareScannerDialog.show(context);
+        },
       ),
       _SettingsItem(
         icon: Icons.lock_rounded,
@@ -1528,7 +1580,24 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                   ),
                   icon: const Icon(Icons.cloud_upload_rounded, size: 18),
                   label: const Text('Open Cloud Backup Vault'),
-                  onPressed: () => CloudBackupSheet.show(context),
+                  onPressed: () {
+                    if (!SubscriptionService.instance.canAccessBackup) {
+                      UpgradePaywallSheet.show(
+                        context,
+                        featureName: 'Cloud & Local Data Backup',
+                        description: 'Encrypted automatic data backup and device restore is available on Starter and higher plans.',
+                        requiredTier: SubscriptionTier.starter,
+                        bulletPoints: const [
+                          'Encrypted Daily Data Backup',
+                          'Export backups to Google Drive or Local Storage',
+                          'Seamless device-to-device restore',
+                          'Zero data loss guarantee',
+                        ],
+                      );
+                      return;
+                    }
+                    CloudBackupSheet.show(context);
+                  },
                 ),
               ),
             ]),

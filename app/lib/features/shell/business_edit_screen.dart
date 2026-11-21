@@ -6,9 +6,11 @@ import '../../core/business_service.dart';
 import '../../core/gst_service.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 
 class BusinessEditScreen extends StatefulWidget {
   const BusinessEditScreen({super.key, this.businessId, this.isNew = false});
@@ -169,6 +171,26 @@ class _BusinessEditScreenState extends State<BusinessEditScreen> {
     setState(() => saving = true);
     try {
       if (widget.isNew) {
+        final businesses = await Repository.instance.allBusinesses();
+        if (!SubscriptionService.instance.canAddCompany(businesses.length)) {
+          setState(() => saving = false);
+          if (mounted) {
+            UpgradePaywallSheet.show(
+              context,
+              featureName: 'Multi-Company Management',
+              description:
+                  'You have reached the company limit for your plan (${SubscriptionService.instance.limits.companies} company). Upgrade to create and manage multiple businesses.',
+              requiredTier: SubscriptionTier.silver,
+              bulletPoints: const [
+                'Silver: Manage up to 2 Companies',
+                'Gold: Manage up to 5 Companies',
+                'Business Pro: Manage up to 10 Companies',
+                'Independent GSTIN, books & billing per company',
+              ],
+            );
+          }
+          return;
+        }
         final newBiz = Business(
           name: _name.text.trim(),
           ownerName: _owner.text.trim().isEmpty ? null : _owner.text.trim(),

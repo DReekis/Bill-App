@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
 import '../../core/backup_service.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../auth/login_screen.dart';
@@ -63,6 +65,21 @@ class _CloudBackupSheetState extends State<CloudBackupSheet> {
   }
 
   Future<void> _handleBackupNow() async {
+    if (!SubscriptionService.instance.canAccessAutomaticBackup) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Automatic Cloud Backup',
+        description: 'Automatic encrypted AWS cloud backups are available on Silver and higher plans.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Automatic cloud backup vault sync',
+          'Encrypted SQLite snapshot storage',
+          'Cross-device restore',
+          'Zero data loss peace of mind',
+        ],
+      );
+      return;
+    }
     final session = context.read<Session>();
     if (!session.isCloudLinked) {
       final linked = await Navigator.push<bool>(
@@ -159,6 +176,21 @@ class _CloudBackupSheetState extends State<CloudBackupSheet> {
   }
 
   Future<void> _handleExportLocal() async {
+    if (!SubscriptionService.instance.canAccessBackup) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Local Data Backup Export',
+        description: 'Exporting encrypted backups is available on Starter and higher plans.',
+        requiredTier: SubscriptionTier.starter,
+        bulletPoints: const [
+          'Encrypted data backup export',
+          'Share to WhatsApp, Google Drive, or Local Files',
+          'Easy offline migration',
+          'Unlimited Sales & Purchase Bills',
+        ],
+      );
+      return;
+    }
     try {
       await _backupService.exportLocalBackup();
     } catch (e) {

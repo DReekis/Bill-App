@@ -912,6 +912,21 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
                     onPressed: () {
                       final inv = invoice;
                       if (inv == null) return;
+                      if (!SubscriptionService.instance.canAccessReturns) {
+                        UpgradePaywallSheet.show(
+                          context,
+                          featureName: 'Sales Return (Credit Note)',
+                          description: 'Credit Notes are available on the Starter plan and above.',
+                          requiredTier: SubscriptionTier.starter,
+                          bulletPoints: const [
+                            'Create Credit Notes & Sales Returns',
+                            'Automatic inventory restocking & ledger adjustment',
+                            'Estimates & Quotations',
+                            'Unlimited Sales & Purchase Bills',
+                          ],
+                        );
+                        return;
+                      }
                       Navigator.push(
                         context,
                         MaterialPageRoute(

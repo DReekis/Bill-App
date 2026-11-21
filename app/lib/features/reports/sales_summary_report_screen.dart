@@ -13,9 +13,11 @@ import '../../core/dates.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../sales/invoice_detail_screen.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import 'date_filter_bar.dart';
 
 class SalesSummaryReportScreen extends StatefulWidget {
@@ -94,6 +96,21 @@ class _SalesSummaryReportScreenState extends State<SalesSummaryReportScreen> {
   }
 
   Future<void> _exportExcel() async {
+    if (!SubscriptionService.instance.canExportExcel) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Excel Export',
+        description: 'Export sales register and summary statements directly into Microsoft Excel (.xlsx) format.',
+        requiredTier: SubscriptionTier.starter,
+        bulletPoints: const [
+          'Direct .xlsx spreadsheet download & sharing',
+          'Pre-formatted headers, formulas & totals',
+          'Available on Starter, Silver, Gold, and Business Pro plans',
+        ],
+      );
+      return;
+    }
+
     if (data == null) return;
     final biz = await Repository.instance.getBusiness(context.read<Session>().businessId!);
     final bizName = biz?.name ?? 'Business';

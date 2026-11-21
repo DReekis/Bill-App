@@ -8,10 +8,12 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../../core/subscription_service.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import '../inventory/product_form.dart';
 import '../inventory/restock_price_update_sheet.dart';
 import '../../core/restock_notification_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import '../suppliers/supplier_form.dart';
 import 'purchase_detail_screen.dart';
 
@@ -479,6 +481,28 @@ class _PurchaseBuilderScreenState extends State<PurchaseBuilderScreen> {
       showAppMessage(context, 'No active business', error: true);
       return;
     }
+
+    if (widget.existingPurchaseId == null) {
+      final currentCount = await Repository.instance.getPurchasesCount(businessId);
+      if (!SubscriptionService.instance.canCreatePurchase(currentCount)) {
+        if (mounted) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Purchase Bill Limit Reached',
+            description: 'You have reached your free tier limit of $currentCount purchase bills. Upgrade to Starter to record unlimited purchase bills.',
+            requiredTier: SubscriptionTier.starter,
+            bulletPoints: const [
+              'Unlimited Purchase Bills & Sales Invoices',
+              'Sales & Purchase Returns (Credit/Debit Notes)',
+              'Quotations & Estimates',
+              'Excel Export & Daily Data Backup',
+            ],
+          );
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
 
     // Payment Type: 0 = Credit, 1 = Advance / Partial, 2 = Paid in Full
     int paymentType;

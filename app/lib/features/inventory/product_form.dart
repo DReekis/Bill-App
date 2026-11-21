@@ -147,6 +147,49 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
         }
       }
 
+      final hasMultiplePricing = _toPaise(_wholesale.text) > 0 ||
+          _toPaise(_retail.text) > 0 ||
+          _toPaise(_mrp.text) > 0 ||
+          _toPaise(_minSelling.text) > 0;
+      if (hasMultiplePricing && !SubscriptionService.instance.canAccessMultiplePricing) {
+        setState(() => saving = false);
+        if (mounted) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Multiple Pricing (Wholesale / Retail / MRP)',
+            description: 'Custom wholesale, retail, and minimum selling price lists are available on Starter and higher plans.',
+            requiredTier: SubscriptionTier.starter,
+            bulletPoints: const [
+              'Multiple pricing tiers (Wholesale, Retail, MRP)',
+              'Minimum selling price safeguards',
+              'Estimates & Quotations',
+              'Unlimited Sales & Purchase Bills',
+            ],
+          );
+        }
+        return;
+      }
+
+      final hasBarcode = _barcode.text.trim().isNotEmpty;
+      if (hasBarcode && !SubscriptionService.instance.canAccessBarcode) {
+        setState(() => saving = false);
+        if (mounted) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Barcode Management',
+            description: 'Assigning barcodes and SKU tracking is available on Silver and higher plans.',
+            requiredTier: SubscriptionTier.silver,
+            bulletPoints: const [
+              'Assign & scan product barcodes',
+              'Fast POS billing integration',
+              'Low stock alerts & Stock transfer',
+              'E-Way Bill & E-Invoice integration',
+            ],
+          );
+        }
+        return;
+      }
+
       final currentStock = widget.product?.stock ?? 0;
       final addedStock = int.tryParse(_addStock.text.trim()) ?? 0;
       final openingStock = int.tryParse(_openingStock.text.trim()) ?? 0;
@@ -232,6 +275,21 @@ class _ProductFormSheetState extends State<ProductFormSheet> {
                       tooltip: 'Scan Barcode',
                       icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
                       onPressed: () async {
+                        if (!SubscriptionService.instance.canAccessBarcode) {
+                          UpgradePaywallSheet.show(
+                            context,
+                            featureName: 'Barcode Scanning & Management',
+                            description: 'Barcode scanning and inventory management is available on Silver and higher plans.',
+                            requiredTier: SubscriptionTier.silver,
+                            bulletPoints: const [
+                              'Scan barcodes with camera & hardware scanner',
+                              'Faster billing with auto product detection',
+                              'Batch & Expiry date management',
+                              'Low stock alerts & Stock transfer',
+                            ],
+                          );
+                          return;
+                        }
                         final res = await Navigator.push<dynamic>(
                           context,
                           MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),

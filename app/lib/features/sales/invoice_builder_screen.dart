@@ -898,6 +898,21 @@ class _InvoiceBuilderScreenState extends State<InvoiceBuilderScreen> {
   }
 
   Future<void> _scanBarcode() async {
+    if (!SubscriptionService.instance.canAccessBarcode) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Barcode Scanning & Management',
+        description: 'Camera barcode scanning and POS barcode guns are available on the Silver plan and above.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Scan barcodes with camera & hardware scanner',
+          'Fast retail POS billing',
+          'Stock tracking with Barcode/SKU',
+          'Batch & expiry date management',
+        ],
+      );
+      return;
+    }
     final product = await Navigator.push<Product>(
       context,
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),

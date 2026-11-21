@@ -9,6 +9,8 @@ import '../../core/permission_service.dart';
 import '../../core/physical_barcode_scanner.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import '../inventory/product_form.dart';
 import 'hardware_scanner_dialog.dart';
 
@@ -40,6 +42,24 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1800),
     )..repeat(reverse: true);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!SubscriptionService.instance.canAccessBarcode && mounted) {
+        Navigator.pop(context);
+        UpgradePaywallSheet.show(
+          context,
+          featureName: 'Barcode Scanning & Management',
+          description: 'Camera barcode scanning and POS barcode guns are available on Silver and higher plans.',
+          requiredTier: SubscriptionTier.silver,
+          bulletPoints: const [
+            'Scan barcodes with camera & hardware scanner',
+            'Fast retail POS billing',
+            'Stock tracking with Barcode/SKU',
+            'Batch & expiry date management',
+          ],
+        );
+      }
+    });
   }
 
   @override

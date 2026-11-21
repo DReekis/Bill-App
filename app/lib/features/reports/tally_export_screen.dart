@@ -5,9 +5,11 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import 'tally_export_service.dart';
 
 class TallyExportScreen extends StatefulWidget {
@@ -80,6 +82,21 @@ class _TallyExportScreenState extends State<TallyExportScreen> {
   }
 
   Future<void> _generateExport({bool autoShare = false}) async {
+    if (!SubscriptionService.instance.canAccessTallyExport) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Tally XML Export',
+        description: 'Export all sales, purchases, and party ledgers directly into Tally XML format.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Direct XML export for TallyPrime & Tally.ERP 9',
+          'Auto-maps GST ledgers, parties, and voucher numbers',
+          'Available on Silver, Gold, and Business Pro plans',
+        ],
+      );
+      return;
+    }
+
     final bizId = Repository.instance.session.businessId ??
         (context.mounted ? context.read<Session>().businessId : null);
     if (bizId == null) {

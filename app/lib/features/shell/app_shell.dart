@@ -27,7 +27,9 @@ import '../auth/login_screen.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/stitch_theme.dart';
 import '../../core/restock_notification_service.dart';
+import '../../core/subscription_service.dart';
 import '../subscription/free_tier_paywall_dialog.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import '../inventory/restock_price_update_sheet.dart';
 
 class AppShell extends StatefulWidget {
@@ -121,6 +123,21 @@ class _AppShellState extends State<AppShell> {
             .then((_) => _reloadTabs());
       case 'Quotation':
       case 'Estimate':
+        if (!SubscriptionService.instance.canAccessEstimates) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Estimates & Quotations',
+            description: 'Create and send professional estimates and quotations. Available on Starter and above.',
+            requiredTier: SubscriptionTier.starter,
+            bulletPoints: const [
+              'Create professional Estimates & Quotations',
+              'Convert estimates to sales bills in 1 tap',
+              'Sales & Purchase Returns (Credit/Debit Notes)',
+              'Unlimited Sales & Purchase Bills',
+            ],
+          );
+          return;
+        }
         Navigator.of(context)
             .push(MaterialPageRoute(
                 builder: (_) => QuotationBuilderScreen(businessId: session.businessId!)))
@@ -143,31 +160,121 @@ class _AppShellState extends State<AppShell> {
         );
       case 'Order':
       case 'Orders':
+        if (!SubscriptionService.instance.canAccessSalesOrders) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Orders Management',
+            description: 'Sales and Purchase orders management is available on Silver and higher plans.',
+            requiredTier: SubscriptionTier.silver,
+            bulletPoints: const [
+              'Sales & Purchase Orders lifecycle',
+              'Delivery Challans & Dispatch slips',
+              'E-Way Bill & E-Invoice integration',
+              'Multi-device sync',
+            ],
+          );
+          return;
+        }
         Navigator.of(context)
             .push(MaterialPageRoute(
                 builder: (_) => const OrdersScreen()))
             .then((_) => _reloadTabs());
       case 'Sales Order':
+        if (!SubscriptionService.instance.canAccessSalesOrders) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Sales Orders',
+            description: 'Booking Sales Orders is available on Silver and higher plans.',
+            requiredTier: SubscriptionTier.silver,
+            bulletPoints: const [
+              'Sales Orders with auto inventory booking',
+              'Delivery Challan integration',
+              'E-Way Bill & E-Invoice integration',
+              'Multi-device sync',
+            ],
+          );
+          return;
+        }
         Navigator.of(context)
             .push(MaterialPageRoute(
                 builder: (_) => SalesOrderBuilderScreen(businessId: session.businessId!)))
             .then((_) => _reloadTabs());
       case 'Purchase Order':
+        if (!SubscriptionService.instance.canAccessPurchaseOrders) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Purchase Orders',
+            description: 'Purchase Orders are available on Silver and higher plans.',
+            requiredTier: SubscriptionTier.silver,
+            bulletPoints: const [
+              'Issue Purchase Orders to suppliers',
+              'Auto convert PO to purchase bill upon delivery',
+              'Track supplier order fulfillment',
+              'Multi-device sync',
+            ],
+          );
+          return;
+        }
         Navigator.of(context)
             .push(MaterialPageRoute(
                 builder: (_) => PurchaseOrderBuilderScreen(businessId: session.businessId!)))
             .then((_) => _reloadTabs());
       case 'Challan':
+        if (!SubscriptionService.instance.canAccessDeliveryChallans) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Delivery Challans',
+            description: 'Delivery Challans and goods dispatch notes are available on Silver and higher plans.',
+            requiredTier: SubscriptionTier.silver,
+            bulletPoints: const [
+              'Delivery Challans & Dispatch slips',
+              'Convert challan to tax invoice in 1 click',
+              'E-Way Bill integration',
+              'Multi-device sync',
+            ],
+          );
+          return;
+        }
         Navigator.of(context)
             .push(MaterialPageRoute(
                 builder: (_) => const DeliveryChallanBuilderScreen()))
             .then((_) => _reloadTabs());
       case 'Credit Note':
+        if (!SubscriptionService.instance.canAccessReturns) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Sales Return (Credit Note)',
+            description: 'Credit Notes are available on the Starter plan and above.',
+            requiredTier: SubscriptionTier.starter,
+            bulletPoints: const [
+              'Create Credit Notes & Sales Returns',
+              'Automatic inventory restocking & ledger adjustment',
+              'Estimates & Quotations',
+              'Unlimited Sales & Purchase Bills',
+            ],
+          );
+          return;
+        }
         Navigator.of(context)
             .push(MaterialPageRoute(
                 builder: (_) => const NoteBuilderScreen(partyType: 'customer')))
             .then((_) => _reloadTabs());
       case 'Debit Note':
+        if (!SubscriptionService.instance.canAccessReturns) {
+          UpgradePaywallSheet.show(
+            context,
+            featureName: 'Purchase Return (Debit Note)',
+            description: 'Debit Notes are available on the Starter plan and above.',
+            requiredTier: SubscriptionTier.starter,
+            bulletPoints: const [
+              'Create Debit Notes & Purchase Returns',
+              'Automatic inventory restocking & ledger adjustment',
+              'Estimates & Quotations',
+              'Unlimited Sales & Purchase Bills',
+            ],
+          );
+          return;
+        }
         Navigator.of(context)
             .push(MaterialPageRoute(
                 builder: (_) => const NoteBuilderScreen(partyType: 'supplier')))

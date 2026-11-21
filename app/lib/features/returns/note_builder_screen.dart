@@ -5,11 +5,13 @@ import '../../core/dates.dart';
 import '../../core/money.dart';
 import '../../core/models.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../customers/customer_form.dart';
 import '../inventory/multi_product_picker_sheet.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import '../suppliers/supplier_form.dart';
 import 'note_detail_screen.dart';
 
@@ -718,6 +720,21 @@ class _NoteBuilderScreenState extends State<NoteBuilderScreen> {
   }
 
   Future<void> _saveNote() async {
+    if (!SubscriptionService.instance.canAccessReturns) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Sales & Purchase Returns',
+        description: 'Sales returns (Credit Notes) and purchase returns (Debit Notes) are available on the Starter plan and above.',
+        requiredTier: SubscriptionTier.starter,
+        bulletPoints: const [
+          'Create Credit Notes & Debit Notes',
+          'Automatic inventory restocking & ledger adjustment',
+          'Estimates & Quotations',
+          'Unlimited Sales & Purchase Bills',
+        ],
+      );
+      return;
+    }
     final activeLines = _lines.where((l) => l.qty > 0).toList();
     if (activeLines.isEmpty) {
       showAppMessage(context, 'Please add at least one item with quantity > 0', error: true);

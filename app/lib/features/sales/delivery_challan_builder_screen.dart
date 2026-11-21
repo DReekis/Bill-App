@@ -7,6 +7,8 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import '../customers/customer_form.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import 'delivery_challan_detail_screen.dart';
@@ -245,6 +247,21 @@ class _DeliveryChallanBuilderScreenState extends State<DeliveryChallanBuilderScr
   }
 
   Future<void> _save() async {
+    if (!SubscriptionService.instance.canAccessDeliveryChallans) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Delivery Challans',
+        description: 'Delivery Challans and goods dispatch notes are available on Silver and higher plans.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Delivery Challans & Dispatch slips',
+          'Convert challan to tax invoice in 1 click',
+          'E-Way Bill integration',
+          'Multi-device sync',
+        ],
+      );
+      return;
+    }
     final validLines = lines.where((l) => l.included && l.qty > 0).toList();
     if (validLines.isEmpty) {
       showAppMessage(context, 'Please include at least one item to dispatch', error: true);

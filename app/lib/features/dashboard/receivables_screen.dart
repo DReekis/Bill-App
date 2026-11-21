@@ -6,12 +6,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/models.dart';
 import '../../core/money.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
 import '../customers/customer_detail_screen.dart';
 import '../payments/payment_form.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 
 class ReceivablesScreen extends StatefulWidget {
   const ReceivablesScreen({super.key});
@@ -53,6 +55,21 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
   }
 
   Future<void> _sendReminder(PartyReceivable item, {bool forceShare = false}) async {
+    if (!SubscriptionService.instance.canAccessPaymentReminder) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'WhatsApp Payment Reminders',
+        description: 'Automated 1-Tap WhatsApp payment reminders with party balance breakdown is available on Silver and higher plans.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          '1-Tap WhatsApp Payment Reminders',
+          'Automated balance & overdue notifications',
+          'Bank account & UPI payment links in reminders',
+          'Unlimited WhatsApp invoice sharing',
+        ],
+      );
+      return;
+    }
     final businessId = context.read<Session>().businessId;
     if (businessId == null) return;
     final business = await Repository.instance.getBusiness(businessId);

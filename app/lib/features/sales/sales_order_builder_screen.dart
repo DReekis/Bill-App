@@ -8,6 +8,8 @@ import '../../core/session.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../../core/subscription_service.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import '../customers/customer_form.dart';
 import '../inventory/multi_product_picker_sheet.dart';
 import '../inventory/product_form.dart';
@@ -140,6 +142,21 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
   }
 
   void _scanBarcode() async {
+    if (!SubscriptionService.instance.canAccessBarcode) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Barcode Scanning & Management',
+        description: 'Barcode scanning is available on Silver and higher plans.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Scan barcodes with camera & hardware scanner',
+          'Fast order creation',
+          'Batch & expiry date tracking',
+          'Low stock alerts & Stock transfer',
+        ],
+      );
+      return;
+    }
     final res = await Navigator.push<dynamic>(
       context,
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
@@ -581,6 +598,21 @@ class _SalesOrderBuilderScreenState extends State<SalesOrderBuilderScreen> {
   }
 
   Future<void> _save() async {
+    if (!SubscriptionService.instance.canAccessSalesOrders) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Sales Orders',
+        description: 'Sales Orders are available on Silver and higher plans.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Sales Orders with auto inventory booking',
+          'Delivery Challan integration',
+          'E-Way Bill & E-Invoice integration',
+          'Multi-device sync',
+        ],
+      );
+      return;
+    }
     if (lines.isEmpty) {
       showAppMessage(context, 'Add at least one item to save the order', error: true);
       return;

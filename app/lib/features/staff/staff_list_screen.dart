@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../../core/models.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import 'staff_form_sheet.dart';
 
 class StaffListScreen extends StatefulWidget {
@@ -35,6 +37,31 @@ class _StaffListScreenState extends State<StaffListScreen> {
       _staff = items;
       _isLoading = false;
     });
+  }
+
+  void _openAddStaff() {
+    final currentStaffCount = _staff.length + 1; // including owner
+    if (!SubscriptionService.instance.canAddStaffUser(currentStaffCount)) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Multi-User & Staff Access',
+        description:
+            'Free and Starter plans include 1 user (owner). Upgrade to Silver or higher to invite staff members and set role-based permissions.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Silver: 2 Users (Owner + 1 Staff)',
+          'Gold: 5 Users with Advanced Permissions',
+          'Business Pro: Unlimited Staff Members',
+          'Role-based permissions (Cashier, Salesman, Accountant, Admin)',
+        ],
+      );
+      return;
+    }
+    StaffFormSheet.show(
+      context,
+      businessId: context.read<Session>().businessId,
+      onSaved: _loadStaff,
+    );
   }
 
   Color _getRoleColor(UserRole role) {
@@ -109,11 +136,7 @@ class _StaffListScreenState extends State<StaffListScreen> {
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF64748B)),
               ),
               TextButton.icon(
-                onPressed: () => StaffFormSheet.show(
-                  context,
-                  businessId: context.read<Session>().businessId,
-                  onSaved: _loadStaff,
-                ),
+                onPressed: _openAddStaff,
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: const Text('Add Staff', style: TextStyle(fontWeight: FontWeight.w700)),
               ),
@@ -130,11 +153,7 @@ class _StaffListScreenState extends State<StaffListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => StaffFormSheet.show(
-          context,
-          businessId: context.read<Session>().businessId,
-          onSaved: _loadStaff,
-        ),
+        onPressed: _openAddStaff,
         backgroundColor: StitchColors.primary,
         icon: const Icon(Icons.person_add_outlined, color: Colors.white, size: 20),
         label: const Text('Add Staff', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),

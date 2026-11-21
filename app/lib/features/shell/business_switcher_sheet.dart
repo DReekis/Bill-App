@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../../core/models.dart';
 import '../../core/session.dart';
+import '../../core/subscription_service.dart';
 import '../../data/repositories.dart';
 import '../../theme/stitch_theme.dart';
 import '../../utils/widgets.dart';
+import '../subscription/upgrade_paywall_sheet.dart';
 import 'business_edit_screen.dart';
 
 /// Shows a professional bottom sheet enabling multi-business switching and management.
@@ -64,6 +66,23 @@ class _BusinessSwitcherSheetState extends State<BusinessSwitcherSheet> {
   }
 
   void _addNewBusiness() {
+    final count = _businesses?.length ?? 0;
+    if (!SubscriptionService.instance.canAddCompany(count)) {
+      UpgradePaywallSheet.show(
+        context,
+        featureName: 'Multi-Company Management',
+        description:
+            'You have reached the company limit for your plan (${SubscriptionService.instance.limits.companies} company). Upgrade to create and manage multiple businesses.',
+        requiredTier: SubscriptionTier.silver,
+        bulletPoints: const [
+          'Silver: Manage up to 2 Companies',
+          'Gold: Manage up to 5 Companies',
+          'Business Pro: Manage up to 10 Companies',
+          'Independent GSTIN, books & billing per company',
+        ],
+      );
+      return;
+    }
     final nav = Navigator.of(context);
     nav.push(
       MaterialPageRoute(
