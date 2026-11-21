@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:billket/core/models.dart';
 import 'package:billket/utils/pdf_invoice.dart';
@@ -205,6 +206,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
     });
 
     test('buildDocumentPdf renders modern_minimal borderless layout cleanly', () async {
@@ -234,6 +236,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
     });
 
     test('buildDocumentPdf renders gst_tax_pro with explicit CGST and SGST columns', () async {
@@ -268,6 +271,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
     });
 
     test('buildDocumentPdf renders compact_pos single-page layout', () async {
@@ -296,6 +300,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
     });
 
     test('generateCommercialSamplePdf executes across all 5 templates flawlessly', () async {
@@ -382,6 +387,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
     });
 
     test('buildDocumentPdf renders with bankQrPlacement right cleanly', () async {
@@ -425,6 +431,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
     });
 
     test('buildDocumentPdf renders tally template matching exact Tally ERP layout with Chanda Trading sample', () async {
@@ -493,6 +500,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
     });
 
     test('buildDocumentPdf renders tally template with multi-page support across 25 items', () async {
@@ -554,6 +562,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
       expect(pdfBytes.length, greaterThan(8000));
       final pdfString = String.fromCharCodes(pdfBytes);
       final pageCount = RegExp(r'/Type\s*/Page\b').allMatches(pdfString).length;
@@ -617,6 +626,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
     });
 
     test('buildDocumentPdf renders a5_landscape with multi-page support across 25 items', () async {
@@ -666,6 +676,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
       final pdfString = String.fromCharCodes(pdfBytes);
       final pageCount = RegExp(r'/Type\s*/Page\b').allMatches(pdfString).length;
       expect(pageCount, greaterThanOrEqualTo(2));
@@ -770,6 +781,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
     });
 
     test('buildDeliveryChallanPdf generates Rule 55 compliant Delivery Challan PDF with transport details, dual signatures, and declared value', () async {
@@ -813,6 +825,7 @@ void main() {
 
       expect(pdfBytes, isNotEmpty);
       expect(String.fromCharCodes(pdfBytes.sublist(0, 5)), '%PDF-');
+      File('/home/kira/.gemini/antigravity/brain/42842edb-2f5d-441c-81aa-4033e67d434a/scratch/our_tally_sample.pdf').writeAsBytesSync(pdfBytes);
     });
 
     test('buildPurchaseOrderPdf and buildSalesOrderPdf generate valid PDFs with full party and tax handling', () async {
