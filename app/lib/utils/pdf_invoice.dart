@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../core/dates.dart';
+import '../core/gst_service.dart';
 import '../core/models.dart';
 import '../core/money.dart';
 import '../data/repositories.dart';
@@ -669,6 +671,68 @@ Future<Uint8List> buildDocumentPdf({
       hsnBreakupList: hsnBreakupList,
       isInterState: isInterState,
       paymentMode: paymentMode,
+    );
+  }
+
+  if (themeStyle == 'tally') {
+    return _buildTallyDocumentPdf(
+      doc: doc,
+      regular: regular,
+      bold: bold,
+      business: business,
+      title: title,
+      effectiveTitle: effectiveTitle,
+      number: number,
+      date: date,
+      dueDate: dueDate,
+      customer: customer,
+      effectivePartyName: effectivePartyDisplayName,
+      effectivePartyAddress: effectivePartyAddress,
+      effectivePartyGstin: effectivePartyGstin,
+      effectivePartyState: effectivePartyState,
+      effectivePartyPhone: effectivePartyPhone,
+      effectivePartyPan: effectivePartyPan,
+      effectivePartyEmail: effectivePartyEmail,
+      effectiveShipToName: effectiveShipToName,
+      effectiveShipToAddress: effectiveShipToAddress,
+      effectiveShipToState: effectiveShipToState,
+      effectiveShipToPincode: effectiveShipToPincode,
+      productLines: productLines,
+      charges: charges,
+      effectiveCharges: effectiveCharges,
+      subtotal: subtotal,
+      discount: discount,
+      taxable: taxable,
+      igst: igst,
+      cgst: cgst,
+      sgst: sgst,
+      roundOff: roundOff,
+      total: total,
+      outstandingPaise: outstandingPaise,
+      notes: notes,
+      termsText: termsText,
+      bankAccount: bankAccount,
+      pageFormat: pageFormat,
+      customSettings: customSettings,
+      placeOfSupply: placeOfSupply,
+      poNumber: poNumber,
+      poDate: poDate,
+      vehicleNumber: vehicleNumber,
+      ewayBillNumber: ewayBillNumber,
+      lrRrNumber: lrRrNumber,
+      reverseCharge: reverseCharge,
+      customData: customData,
+      paymentMode: paymentMode,
+      hsnBreakupList: hsnBreakupList,
+      isInterState: isInterState,
+      logoImage: logoImage,
+      signatureImage: signatureImage,
+      upiUri: upiUri,
+      hasEinvoice: hasEinvoice,
+      effectiveIrn: effectiveIrn,
+      ackNo: ackNo,
+      ackDate: ackDate,
+      signedQr: signedQr,
     );
   }
 
@@ -4275,3 +4339,1183 @@ Future<Uint8List> _buildA5LandscapeDocumentPdf({
   return doc.save();
 }
 
+String _formatTallyThousands(String digits) {
+  if (digits.length <= 3) return digits;
+  final last = digits.substring(digits.length - 3);
+  var rest = digits.substring(0, digits.length - 3);
+  final groups = <String>[];
+  while (rest.length > 2) {
+    groups.insert(0, rest.substring(rest.length - 2));
+    rest = rest.substring(0, rest.length - 2);
+  }
+  if (rest.isNotEmpty) groups.insert(0, rest);
+  return '${groups.join(',')},$last';
+}
+
+String _formatTallyAmount(int paise) {
+  final negative = paise < 0;
+  final abs = paise.abs();
+  final whole = abs ~/ 100;
+  final fraction = abs % 100;
+  final wholeStr = _formatTallyThousands(whole.toString());
+  final fracStr = fraction.toString().padLeft(2, '0');
+  return '${negative ? '-' : ''}$wholeStr.$fracStr';
+}
+
+String _formatTallyQty(double q) {
+  final isWhole = q == q.roundToDouble();
+  final wholePart = q.truncate().abs();
+  final wholeStr = _formatTallyThousands(wholePart.toString());
+  if (isWhole) {
+    return q < 0 ? '-$wholeStr' : wholeStr;
+  }
+  final fracStr = (q.abs() - wholePart).toStringAsFixed(2).substring(2);
+  final res = '$wholeStr.$fracStr';
+  return q < 0 ? '-$res' : res;
+}
+
+String _formatTallyDate(String? iso) {
+  if (iso == null || iso.trim().isEmpty) return '';
+  final parsed = parseIso(iso);
+  if (parsed == null) return iso;
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  final m = months[parsed.month - 1];
+  final y = (parsed.year % 100).toString().padLeft(2, '0');
+  return '${parsed.day}-$m-$y';
+}
+
+String _formatTallyState(String? state, String? gstin) {
+  String? cleanState = (state != null && state.trim().isNotEmpty) ? state.trim() : null;
+  String? code;
+  if (gstin != null && gstin.length >= 2) {
+    final prefix = gstin.substring(0, 2);
+    if (int.tryParse(prefix) != null && GstService.stateCodes.containsKey(prefix)) {
+      code = prefix;
+      cleanState ??= GstService.stateCodes[prefix];
+    }
+  }
+  if (code == null && cleanState != null) {
+    for (final entry in GstService.stateCodes.entries) {
+      if (entry.value.toLowerCase() == cleanState.toLowerCase()) {
+        code = entry.key;
+        break;
+      }
+    }
+  }
+  cleanState ??= 'Tripura';
+  code ??= '16';
+  return 'State Name : $cleanState, Code : $code';
+}
+
+String _formatTallyWords(int paise) {
+  final absPaise = paise.abs();
+  final rupees = absPaise ~/ 100;
+  final remPaise = absPaise % 100;
+  if (rupees == 0 && remPaise == 0) return 'INR Zero Only';
+
+  const ones = [
+    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+    'Seventeen', 'Eighteen', 'Nineteen'
+  ];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  String two(int n) {
+    if (n < 20) return ones[n];
+    return '${tens[n ~/ 10]}${n % 10 == 0 ? '' : ' ${ones[n % 10]}'}';
+  }
+
+  String three(int n) {
+    final h = n ~/ 100;
+    final rest = n % 100;
+    if (h == 0) return two(rest);
+    return '${ones[h]} Hundred${rest > 0 ? ' ${two(rest)}' : ''}';
+  }
+
+  final words = <String>[];
+  final crore = rupees ~/ 10000000;
+  final lakh = (rupees % 10000000) ~/ 100000;
+  final thousand = (rupees % 100000) ~/ 1000;
+  final hundred = rupees % 1000;
+  if (crore > 0) words.add('${two(crore)} Crore');
+  if (lakh > 0) words.add('${two(lakh)} Lakh');
+  if (thousand > 0) words.add('${two(thousand)} Thousand');
+  if (hundred > 0) words.add(three(hundred));
+
+  var result = words.join(' ');
+  if (remPaise > 0) {
+    result += ' and ${two(remPaise)} Paise';
+  }
+  return 'INR $result Only';
+}
+
+Future<Uint8List> _buildTallyDocumentPdf({
+  required pw.Document doc,
+  required pw.Font regular,
+  required pw.Font bold,
+  required Business business,
+  required String title,
+  required String effectiveTitle,
+  required String number,
+  required String date,
+  String? dueDate,
+  Customer? customer,
+  String? effectivePartyName,
+  String? effectivePartyAddress,
+  String? effectivePartyGstin,
+  String? effectivePartyState,
+  String? effectivePartyPhone,
+  String? effectivePartyPan,
+  String? effectivePartyEmail,
+  required String effectiveShipToName,
+  String? effectiveShipToAddress,
+  String? effectiveShipToState,
+  String? effectiveShipToPincode,
+  required List<InvoiceLine> productLines,
+  List<InvoiceCharge> charges = const [],
+  required List<InvoiceCharge> effectiveCharges,
+  required int subtotal,
+  required int discount,
+  required int taxable,
+  required int igst,
+  required int cgst,
+  required int sgst,
+  required int roundOff,
+  required int total,
+  required int outstandingPaise,
+  String? notes,
+  String? termsText,
+  BankAccount? bankAccount,
+  required PdfPageFormat pageFormat,
+  required InvoiceCustomizationSettings customSettings,
+  String? placeOfSupply,
+  String? poNumber,
+  String? poDate,
+  String? vehicleNumber,
+  String? ewayBillNumber,
+  String? lrRrNumber,
+  bool reverseCharge = false,
+  Map<String, dynamic> customData = const {},
+  String? paymentMode,
+  required List<_GstBreakupItem> hsnBreakupList,
+  required bool isInterState,
+  pw.MemoryImage? logoImage,
+  pw.MemoryImage? signatureImage,
+  String? upiUri,
+  bool hasEinvoice = false,
+  String? effectiveIrn,
+  String? ackNo,
+  String? ackDate,
+  String? signedQr,
+}) async {
+  final tallyFormat = pageFormat == PdfPageFormat.a4
+      ? PdfPageFormat.a4.copyWith(
+          marginLeft: 20.0,
+          marginRight: 20.0,
+          marginTop: 16.0,
+          marginBottom: 16.0,
+        )
+      : pageFormat;
+
+  final docTitle = effectiveTitle.toLowerCase() == 'tax invoice' ? 'Tax Invoice' : effectiveTitle;
+  final bizName = getEffectiveBusinessName(business, customSettings).toUpperCase();
+  final bizAddressLine = [business.address, business.city, business.state, business.pinCode]
+      .whereType<String>()
+      .where((s) => s.isNotEmpty)
+      .join(', ');
+  final bizStateLine = _formatTallyState(business.state, business.gstin);
+
+  final extraBizList = <String>[];
+  if (business.pan != null && business.pan!.isNotEmpty) extraBizList.add('PAN: ${business.pan}');
+  if (business.displayInvoicePhone.isNotEmpty) extraBizList.add('Ph: ${business.displayInvoicePhone}');
+  final extraBizLine = extraBizList.join(' | ');
+
+  final shipName = effectiveShipToName.isNotEmpty
+      ? effectiveShipToName
+      : (effectivePartyName ?? 'Walk-in');
+  final shipAddress = (effectiveShipToAddress != null && effectiveShipToAddress.isNotEmpty)
+      ? effectiveShipToAddress
+      : (effectivePartyAddress ?? '');
+  final shipStateLine = _formatTallyState(effectiveShipToState ?? effectivePartyState, effectivePartyGstin);
+
+  final buyerName = effectivePartyName ?? 'Walk-in';
+  final buyerAddress = effectivePartyAddress ?? '';
+  final buyerStateLine = _formatTallyState(effectivePartyState, effectivePartyGstin);
+
+  pw.Widget metaCell(String label, String value, {bool isBold = false, String? subLabel}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.fromLTRB(4, 2, 4, 2),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(label, style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black)),
+          if (value.isNotEmpty)
+            pw.Text(
+              value,
+              style: pw.TextStyle(font: isBold ? bold : regular, fontSize: 7.5, color: PdfColors.black),
+            ),
+          if (subLabel != null && subLabel.isNotEmpty)
+            pw.Text(
+              subLabel,
+              style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black),
+            ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget itemHeaderCell(String text) {
+    return pw.Container(
+      alignment: pw.Alignment.center,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 3.5),
+      child: pw.Text(
+        text,
+        textAlign: pw.TextAlign.center,
+        style: pw.TextStyle(font: bold, fontSize: 7.5, color: PdfColors.black),
+      ),
+    );
+  }
+
+  pw.Widget itemBodyCell(
+    String text, {
+    pw.Alignment align = pw.Alignment.centerLeft,
+    bool isBold = false,
+    bool isItalic = false,
+    double fontSize = 7.5,
+    pw.EdgeInsets padding = const pw.EdgeInsets.fromLTRB(4, 3.5, 4, 3.5),
+  }) {
+    return pw.Container(
+      alignment: align,
+      padding: padding,
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          font: isBold ? bold : regular,
+          fontStyle: isItalic ? pw.FontStyle.italic : pw.FontStyle.normal,
+          fontSize: fontSize,
+          color: PdfColors.black,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget hsnHeaderCell(String text, {pw.Alignment align = pw.Alignment.center}) {
+    return pw.Container(
+      alignment: align,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+      child: pw.Text(text, style: pw.TextStyle(font: bold, fontSize: 6.8, color: PdfColors.black)),
+    );
+  }
+
+  pw.Widget hsnBodyCell(String text, {pw.Alignment align = pw.Alignment.centerLeft, bool isBold = false}) {
+    return pw.Container(
+      alignment: align,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(font: isBold ? bold : regular, fontSize: 7, color: PdfColors.black),
+      ),
+    );
+  }
+
+  // 1. Line Items Table Rows
+  final List<pw.TableRow> tableRows = [];
+
+  // Table Header
+  tableRows.add(
+    pw.TableRow(
+      repeat: true,
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          bottom: pw.BorderSide(color: PdfColors.black, width: 0.5),
+        ),
+      ),
+      children: [
+        itemHeaderCell('Sl\nNo.'),
+        itemHeaderCell('Description of Goods'),
+        itemHeaderCell('HSN/SAC'),
+        itemHeaderCell('Quantity'),
+        itemHeaderCell('Rate'),
+        itemHeaderCell('per'),
+        itemHeaderCell('Amount'),
+      ],
+    ),
+  );
+
+  // Product Items
+  for (int i = 0; i < productLines.length; i++) {
+    final l = productLines[i];
+    final qtyStr = _formatTallyQty(l.quantity);
+    final unitStr = (l.unit != null && l.unit!.trim().isNotEmpty) ? l.unit!.trim() : 'Kgs';
+    final rateStr = (l.price / 100).toStringAsFixed(2);
+    final amtStr = _formatTallyAmount(l.taxable);
+
+    tableRows.add(
+      pw.TableRow(
+        children: [
+          itemBodyCell('${i + 1}', align: pw.Alignment.center),
+          itemBodyCell(
+            l.name +
+                (l.batchNumber != null && l.batchNumber!.isNotEmpty ? ' (B: ${l.batchNumber})' : '') +
+                (l.serialNumber != null && l.serialNumber!.isNotEmpty ? ' (S: ${l.serialNumber})' : ''),
+            isBold: true,
+          ),
+          itemBodyCell(l.hsn ?? '', align: pw.Alignment.center),
+          itemBodyCell('$qtyStr $unitStr', align: pw.Alignment.centerRight, isBold: true),
+          itemBodyCell(rateStr, align: pw.Alignment.centerRight),
+          itemBodyCell(unitStr, align: pw.Alignment.center),
+          itemBodyCell(amtStr, align: pw.Alignment.centerRight, isBold: true),
+        ],
+      ),
+    );
+  }
+
+  // Tax ledger rows under Description of Goods (Exact Tally Demo Format)
+  if (!isInterState) {
+    if (cgst > 0) {
+      final double halfRate = productLines.isNotEmpty ? (productLines.first.gstRate / 2) : 2.5;
+      final rateStr = halfRate.toStringAsFixed(halfRate % 1 == 0 ? 0 : 2);
+      tableRows.add(
+        pw.TableRow(
+          children: [
+            itemBodyCell(''),
+            itemBodyCell('CGST @$rateStr%', align: pw.Alignment.centerRight, isBold: true, isItalic: true),
+            itemBodyCell(''),
+            itemBodyCell(''),
+            itemBodyCell('${halfRate.toStringAsFixed(2)} %', align: pw.Alignment.centerRight, isItalic: true),
+            itemBodyCell(''),
+            itemBodyCell(_formatTallyAmount(cgst), align: pw.Alignment.centerRight, isBold: true),
+          ],
+        ),
+      );
+    }
+    if (sgst > 0) {
+      final double halfRate = productLines.isNotEmpty ? (productLines.first.gstRate / 2) : 2.5;
+      final rateStr = halfRate.toStringAsFixed(halfRate % 1 == 0 ? 0 : 2);
+      tableRows.add(
+        pw.TableRow(
+          children: [
+            itemBodyCell(''),
+            itemBodyCell('SGST @$rateStr%', align: pw.Alignment.centerRight, isBold: true, isItalic: true),
+            itemBodyCell(''),
+            itemBodyCell(''),
+            itemBodyCell('${halfRate.toStringAsFixed(2)} %', align: pw.Alignment.centerRight, isItalic: true),
+            itemBodyCell(''),
+            itemBodyCell(_formatTallyAmount(sgst), align: pw.Alignment.centerRight, isBold: true),
+          ],
+        ),
+      );
+    }
+  } else {
+    if (igst > 0) {
+      final double igstRate = productLines.isNotEmpty ? productLines.first.gstRate.toDouble() : 5.0;
+      final rateStr = igstRate.toStringAsFixed(igstRate % 1 == 0 ? 0 : 2);
+      tableRows.add(
+        pw.TableRow(
+          children: [
+            itemBodyCell(''),
+            itemBodyCell('IGST @$rateStr%', align: pw.Alignment.centerRight, isBold: true, isItalic: true),
+            itemBodyCell(''),
+            itemBodyCell(''),
+            itemBodyCell('${igstRate.toStringAsFixed(2)} %', align: pw.Alignment.centerRight, isItalic: true),
+            itemBodyCell(''),
+            itemBodyCell(_formatTallyAmount(igst), align: pw.Alignment.centerRight, isBold: true),
+          ],
+        ),
+      );
+    }
+  }
+
+  // Charges, Discount, Round Off
+  if (discount > 0) {
+    tableRows.add(
+      pw.TableRow(
+        children: [
+          itemBodyCell(''),
+          itemBodyCell('Less: Discount', align: pw.Alignment.centerRight),
+          itemBodyCell(''),
+          itemBodyCell(''),
+          itemBodyCell(''),
+          itemBodyCell(''),
+          itemBodyCell('-${_formatTallyAmount(discount)}', align: pw.Alignment.centerRight, isBold: true),
+        ],
+      ),
+    );
+  }
+  for (final c in effectiveCharges) {
+    tableRows.add(
+      pw.TableRow(
+        children: [
+          itemBodyCell(''),
+          itemBodyCell(c.name, align: pw.Alignment.centerRight),
+          itemBodyCell(c.hsn ?? '', align: pw.Alignment.center),
+          itemBodyCell(''),
+          itemBodyCell(''),
+          itemBodyCell(''),
+          itemBodyCell(_formatTallyAmount(c.totalAmount), align: pw.Alignment.centerRight, isBold: true),
+        ],
+      ),
+    );
+  }
+  if (roundOff != 0) {
+    tableRows.add(
+      pw.TableRow(
+        children: [
+          itemBodyCell(''),
+          itemBodyCell('Round Off', align: pw.Alignment.centerRight),
+          itemBodyCell(''),
+          itemBodyCell(''),
+          itemBodyCell(''),
+          itemBodyCell(''),
+          itemBodyCell('${roundOff > 0 ? "+" : ""}${_formatTallyAmount(roundOff)}', align: pw.Alignment.centerRight, isBold: true),
+        ],
+      ),
+    );
+  }
+
+  // Tall blank spacer row: extends vertical column divider lines through empty body to Total row
+  final contentLines = productLines.length + (!isInterState ? 2 : 1) + effectiveCharges.length + (discount > 0 ? 1 : 0) + (roundOff != 0 ? 1 : 0);
+  if (contentLines <= 8) {
+    final double spacerHeight = math.max(30.0, 255.0 - (contentLines * 18.0));
+    tableRows.add(
+      pw.TableRow(
+        children: List.generate(
+          7,
+          (_) => pw.SizedBox(height: spacerHeight),
+        ),
+      ),
+    );
+  }
+
+  // Total row (Matches Demo Invoice: Total sits in HSN/SAC column right-aligned next to Quantity)
+  final totalQty = productLines.fold(0.0, (sum, l) => sum + l.quantity);
+  final firstUnit = productLines.isNotEmpty ? ((productLines.first.unit != null && productLines.first.unit!.trim().isNotEmpty) ? productLines.first.unit!.trim() : 'Kgs') : '';
+  final totalQtyStr = '${_formatTallyQty(totalQty)} $firstUnit'.trim();
+
+  tableRows.add(
+    pw.TableRow(
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          top: pw.BorderSide(color: PdfColors.black, width: 0.5),
+        ),
+      ),
+      children: [
+        itemBodyCell(''),
+        itemBodyCell(''),
+        itemBodyCell('Total', align: pw.Alignment.centerRight),
+        itemBodyCell(totalQtyStr, align: pw.Alignment.centerRight, isBold: true),
+        itemBodyCell(''),
+        itemBodyCell(''),
+        itemBodyCell('Rs. ${_formatTallyAmount(total)}', align: pw.Alignment.centerRight, isBold: true, fontSize: 8.0),
+      ],
+    ),
+  );
+
+  doc.addPage(
+    pw.MultiPage(
+      pageTheme: pw.PageTheme(
+        pageFormat: tallyFormat,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+      ),
+      footer: (context) => (context.pagesCount > 1)
+          ? pw.Container(
+              padding: const pw.EdgeInsets.only(top: 3),
+              alignment: pw.Alignment.centerRight,
+              child: pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.grey700),
+              ),
+            )
+          : pw.SizedBox(),
+      build: (context) => [
+        // 1. Top Centered Document Title
+        pw.Container(
+          alignment: pw.Alignment.center,
+          padding: const pw.EdgeInsets.only(bottom: 4),
+          child: pw.Text(
+            docTitle,
+            style: pw.TextStyle(font: bold, fontSize: 12.0, color: PdfColors.black),
+          ),
+        ),
+
+        // Optional e-Invoice IRN bar
+        if (hasEinvoice && effectiveIrn != null && effectiveIrn.isNotEmpty) ...[
+          pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 3),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.black, width: 0.6),
+            ),
+            child: pw.Row(
+              children: [
+                pw.Text('e-Invoice IRN: ', style: pw.TextStyle(font: bold, fontSize: 7, color: PdfColors.black)),
+                pw.Expanded(
+                  child: pw.Text(effectiveIrn, style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black), maxLines: 1),
+                ),
+                if (ackNo != null) ...[
+                  pw.SizedBox(width: 8),
+                  pw.Text('Ack No: $ackNo', style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black)),
+                ],
+              ],
+            ),
+          ),
+        ],
+
+        // 2. Upper Metadata Grid Box (Parties on left, 8 Dispatch/Voucher rows on right)
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.black, width: 0.8),
+          columnWidths: const {
+            0: pw.FlexColumnWidth(4.8),
+            1: pw.FlexColumnWidth(5.2),
+          },
+          children: [
+            pw.TableRow(
+              children: [
+                // Left Column: Supplier, Consignee (Ship to), Buyer (Bill to)
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    // Company Box
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.fromLTRB(5, 4, 5, 4),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(bizName, style: pw.TextStyle(font: bold, fontSize: 9.5, color: PdfColors.black)),
+                          if (bizAddressLine.isNotEmpty)
+                            pw.Text(bizAddressLine, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          if (extraBizLine.isNotEmpty)
+                            pw.Text(extraBizLine, style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.black)),
+                          if (business.gstin != null && business.gstin!.isNotEmpty)
+                            pw.Text('GSTIN/UIN: ${business.gstin}', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          if (bizStateLine.isNotEmpty)
+                            pw.Text(bizStateLine, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                        ],
+                      ),
+                    ),
+                    pw.Divider(color: PdfColors.black, thickness: 0.5, height: 1),
+                    // Consignee (Ship to) Box
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.fromLTRB(5, 4, 5, 4),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('Consignee (Ship to)', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          pw.Text(shipName, style: pw.TextStyle(font: bold, fontSize: 8.5, color: PdfColors.black)),
+                          if (shipAddress.isNotEmpty)
+                            pw.Text(shipAddress, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          if (effectivePartyGstin != null && effectivePartyGstin.isNotEmpty)
+                            pw.Text('GSTIN/UIN: $effectivePartyGstin', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          if (shipStateLine.isNotEmpty)
+                            pw.Text(shipStateLine, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                        ],
+                      ),
+                    ),
+                    pw.Divider(color: PdfColors.black, thickness: 0.5, height: 1),
+                    // Buyer (Bill to) Box
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.fromLTRB(5, 4, 5, 4),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('Buyer (Bill to)', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          pw.Text(buyerName, style: pw.TextStyle(font: bold, fontSize: 8.5, color: PdfColors.black)),
+                          if (buyerAddress.isNotEmpty)
+                            pw.Text(buyerAddress, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          if (effectivePartyGstin != null && effectivePartyGstin.isNotEmpty)
+                            pw.Text('GSTIN/UIN: $effectivePartyGstin', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                          if (buyerStateLine.isNotEmpty)
+                            pw.Text(buyerStateLine, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Right Column: 8 Dispatch & Metadata Rows
+                pw.Column(
+                  children: [
+                    pw.Table(
+                      border: const pw.TableBorder(
+                        horizontalInside: pw.BorderSide(color: PdfColors.black, width: 0.5),
+                        verticalInside: pw.BorderSide(color: PdfColors.black, width: 0.5),
+                      ),
+                      columnWidths: const {
+                        0: pw.FlexColumnWidth(1),
+                        1: pw.FlexColumnWidth(1),
+                      },
+                      children: [
+                        // Row 1: Invoice No. | Dated
+                        pw.TableRow(
+                          children: [
+                            pw.Container(
+                              padding: const pw.EdgeInsets.fromLTRB(4, 2, 4, 2),
+                              child: pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Row(
+                                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      pw.Text('Invoice No.', style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black)),
+                                      if (ewayBillNumber != null && ewayBillNumber.isNotEmpty)
+                                        pw.Text('e-Way Bill No. $ewayBillNumber', style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black))
+                                      else
+                                        pw.Text('e-Way Bill No.', style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black)),
+                                    ],
+                                  ),
+                                  pw.SizedBox(height: 1),
+                                  pw.Text(number, style: pw.TextStyle(font: bold, fontSize: 8.5, color: PdfColors.black)),
+                                ],
+                              ),
+                            ),
+                            metaCell('Dated', _formatTallyDate(date), isBold: true),
+                          ],
+                        ),
+                        // Row 2: Delivery Note | Mode/Terms of Payment
+                        pw.TableRow(
+                          children: [
+                            metaCell('Delivery Note', customData['delivery_note']?.toString() ?? (vehicleNumber != null && vehicleNumber.isNotEmpty ? 'By Road' : 'By Road'), isBold: true),
+                            metaCell('Mode/Terms of Payment', paymentMode?.toUpperCase() ?? customData['payment_terms']?.toString() ?? (outstandingPaise == 0 ? 'Cash' : '')),
+                          ],
+                        ),
+                        // Row 3: Reference No. & Date. | Other References
+                        pw.TableRow(
+                          children: [
+                            metaCell('Reference No. & Date.', customData['reference_no']?.toString() ?? ''),
+                            metaCell('Other References', customData['other_references']?.toString() ?? ''),
+                          ],
+                        ),
+                        // Row 4: Buyer's Order No. | Dated
+                        pw.TableRow(
+                          children: [
+                            metaCell('Buyer\'s Order No.', poNumber ?? customData['buyers_order_no']?.toString() ?? '', isBold: true),
+                            metaCell('Dated', poDate != null && poDate.isNotEmpty ? _formatTallyDate(poDate) : '', isBold: true),
+                          ],
+                        ),
+                        // Row 5: Dispatch Doc No. | Delivery Note Date
+                        pw.TableRow(
+                          children: [
+                            metaCell('Dispatch Doc No.', customData['dispatch_doc_no']?.toString() ?? ''),
+                            metaCell('Delivery Note Date', _formatTallyDate(date), isBold: true),
+                          ],
+                        ),
+                        // Row 6: Dispatched through | Destination
+                        pw.TableRow(
+                          children: [
+                            metaCell('Dispatched through', customData['dispatched_through']?.toString() ?? (vehicleNumber != null && vehicleNumber.isNotEmpty ? 'By Road' : '')),
+                            metaCell('Destination', placeOfSupply ?? effectivePartyState ?? customData['destination']?.toString() ?? ''),
+                          ],
+                        ),
+                        // Row 7: Bill of Lading/LR-RR No. | Motor Vehicle No.
+                        pw.TableRow(
+                          children: [
+                            metaCell(
+                              'Bill of Lading/LR-RR No.',
+                              lrRrNumber != null && lrRrNumber.isNotEmpty
+                                  ? '$lrRrNumber dt. ${_formatTallyDate(date)}'
+                                  : 'dt. ${_formatTallyDate(date)}',
+                              isBold: true,
+                            ),
+                            metaCell('Motor Vehicle No.', vehicleNumber ?? '', isBold: true),
+                          ],
+                        ),
+                      ],
+                    ),
+                    pw.Divider(color: PdfColors.black, thickness: 0.5, height: 1),
+                    // Row 8: Terms of Delivery
+                    pw.Container(
+                      width: double.infinity,
+                      padding: const pw.EdgeInsets.fromLTRB(4, 2, 4, 3),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('Terms of Delivery', style: pw.TextStyle(font: regular, fontSize: 6.5, color: PdfColors.black)),
+                          if (termsText != null && termsText.isNotEmpty)
+                            pw.Text(termsText, style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+
+        // 3. Line Items Table (Native pw.Table with repeat TableRow header)
+        pw.Table(
+          border: const pw.TableBorder(
+            left: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            right: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            top: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            verticalInside: pw.BorderSide(color: PdfColors.black, width: 0.5),
+          ),
+          columnWidths: const {
+            0: pw.FixedColumnWidth(26), // Sl No.
+            1: pw.FlexColumnWidth(3.2), // Description of Goods
+            2: pw.FixedColumnWidth(54), // HSN/SAC
+            3: pw.FixedColumnWidth(64), // Quantity
+            4: pw.FixedColumnWidth(48), // Rate
+            5: pw.FixedColumnWidth(26), // per
+            6: pw.FixedColumnWidth(76), // Amount
+          },
+          children: tableRows,
+        ),
+
+        // 4. Amount Chargeable in Words & E. & O.E
+        pw.Container(
+          width: double.infinity,
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              left: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              right: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            ),
+          ),
+          padding: const pw.EdgeInsets.fromLTRB(5, 3, 5, 3),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Amount Chargeable (in words)', style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black)),
+                  pw.Text('E. & O.E', style: pw.TextStyle(font: bold, fontSize: 7.5, fontStyle: pw.FontStyle.italic, color: PdfColors.black)),
+                ],
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                _formatTallyWords(total),
+                style: pw.TextStyle(font: bold, fontSize: 8.5, color: PdfColors.black),
+              ),
+            ],
+          ),
+        ),
+
+        // 5. Statutory HSN/SAC Summary Table (2-Tier Header matching Demo Invoice)
+        pw.Container(
+          width: double.infinity,
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              left: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              right: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            ),
+          ),
+          child: isInterState
+              ? pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
+                  columnWidths: const {
+                    0: pw.FlexColumnWidth(2.2),
+                    1: pw.FlexColumnWidth(2.4),
+                    2: pw.FlexColumnWidth(1.2),
+                    3: pw.FlexColumnWidth(2.0),
+                    4: pw.FlexColumnWidth(2.2),
+                  },
+                  children: [
+                    pw.TableRow(
+                      children: [
+                        hsnHeaderCell('HSN/SAC'),
+                        hsnHeaderCell('Taxable Value'),
+                        hsnHeaderCell('IGST Rate'),
+                        hsnHeaderCell('IGST Amount'),
+                        hsnHeaderCell('Total Tax Amount'),
+                      ],
+                    ),
+                    ...hsnBreakupList.map((h) => pw.TableRow(
+                          children: [
+                            hsnBodyCell(h.hsn, align: pw.Alignment.center),
+                            hsnBodyCell(_formatTallyAmount(h.taxable), align: pw.Alignment.centerRight),
+                            hsnBodyCell('${h.gstRate.toStringAsFixed(2)}%', align: pw.Alignment.center),
+                            hsnBodyCell(_formatTallyAmount(h.igst), align: pw.Alignment.centerRight),
+                            hsnBodyCell(_formatTallyAmount(h.totalTax), align: pw.Alignment.centerRight),
+                          ],
+                        )),
+                    pw.TableRow(
+                      children: [
+                        hsnBodyCell('Total', align: pw.Alignment.centerRight, isBold: true),
+                        hsnBodyCell(_formatTallyAmount(hsnBreakupList.fold(0, (sum, i) => sum + i.taxable)), align: pw.Alignment.centerRight, isBold: true),
+                        hsnBodyCell(''),
+                        hsnBodyCell(_formatTallyAmount(hsnBreakupList.fold(0, (sum, i) => sum + i.igst)), align: pw.Alignment.centerRight, isBold: true),
+                        hsnBodyCell(_formatTallyAmount(hsnBreakupList.fold(0, (sum, i) => sum + i.totalTax)), align: pw.Alignment.centerRight, isBold: true),
+                      ],
+                    ),
+                  ],
+                )
+              : pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
+                  columnWidths: const {
+                    0: pw.FlexColumnWidth(2.2),
+                    1: pw.FlexColumnWidth(2.4),
+                    2: pw.FlexColumnWidth(3.2),
+                    3: pw.FlexColumnWidth(3.2),
+                    4: pw.FlexColumnWidth(2.2),
+                  },
+                  children: [
+                    // Header Row with 2-tier CGST & SGST grouping
+                    pw.TableRow(
+                      children: [
+                        pw.Container(
+                          alignment: pw.Alignment.center,
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Text('HSN/SAC', style: pw.TextStyle(font: bold, fontSize: 7, color: PdfColors.black)),
+                        ),
+                        pw.Container(
+                          alignment: pw.Alignment.center,
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Text('Taxable Value', style: pw.TextStyle(font: bold, fontSize: 7, color: PdfColors.black)),
+                        ),
+                        // CGST Group
+                        pw.Column(
+                          children: [
+                            pw.Container(
+                              padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                              alignment: pw.Alignment.center,
+                              child: pw.Text('CGST', style: pw.TextStyle(font: bold, fontSize: 7, color: PdfColors.black)),
+                            ),
+                            pw.Container(
+                              decoration: const pw.BoxDecoration(
+                                border: pw.Border(top: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+                              ),
+                              child: pw.Row(
+                                children: [
+                                  pw.Expanded(
+                                    flex: 1,
+                                    child: pw.Container(
+                                      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                                      alignment: pw.Alignment.center,
+                                      decoration: const pw.BoxDecoration(
+                                        border: pw.Border(right: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+                                      ),
+                                      child: pw.Text('Rate', style: pw.TextStyle(font: bold, fontSize: 6.5, color: PdfColors.black)),
+                                    ),
+                                  ),
+                                  pw.Expanded(
+                                    flex: 1,
+                                    child: pw.Container(
+                                      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                                      alignment: pw.Alignment.center,
+                                      child: pw.Text('Amount', style: pw.TextStyle(font: bold, fontSize: 6.5, color: PdfColors.black)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        // SGST Group
+                        pw.Column(
+                          children: [
+                            pw.Container(
+                              padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                              alignment: pw.Alignment.center,
+                              child: pw.Text('SGST/UTGST', style: pw.TextStyle(font: bold, fontSize: 7, color: PdfColors.black)),
+                            ),
+                            pw.Container(
+                              decoration: const pw.BoxDecoration(
+                                border: pw.Border(top: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+                              ),
+                              child: pw.Row(
+                                children: [
+                                  pw.Expanded(
+                                    flex: 1,
+                                    child: pw.Container(
+                                      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                                      alignment: pw.Alignment.center,
+                                      decoration: const pw.BoxDecoration(
+                                        border: pw.Border(right: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+                                      ),
+                                      child: pw.Text('Rate', style: pw.TextStyle(font: bold, fontSize: 6.5, color: PdfColors.black)),
+                                    ),
+                                  ),
+                                  pw.Expanded(
+                                    flex: 1,
+                                    child: pw.Container(
+                                      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                                      alignment: pw.Alignment.center,
+                                      child: pw.Text('Amount', style: pw.TextStyle(font: bold, fontSize: 6.5, color: PdfColors.black)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        pw.Container(
+                          alignment: pw.Alignment.center,
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Text('Total Tax Amount', style: pw.TextStyle(font: bold, fontSize: 7, color: PdfColors.black)),
+                        ),
+                      ],
+                    ),
+                    // Data Rows per HSN
+                    ...hsnBreakupList.map((h) => pw.TableRow(
+                          children: [
+                            hsnBodyCell(h.hsn, align: pw.Alignment.center),
+                            hsnBodyCell(_formatTallyAmount(h.taxable), align: pw.Alignment.centerRight),
+                            // CGST Rate & Amount
+                            pw.Row(
+                              children: [
+                                pw.Expanded(
+                                  flex: 1,
+                                  child: pw.Container(
+                                    padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                                    alignment: pw.Alignment.center,
+                                    decoration: const pw.BoxDecoration(
+                                      border: pw.Border(right: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+                                    ),
+                                    child: pw.Text('${(h.gstRate / 2).toStringAsFixed(2)}%', style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.black)),
+                                  ),
+                                ),
+                                pw.Expanded(
+                                  flex: 1,
+                                  child: pw.Container(
+                                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                                    alignment: pw.Alignment.centerRight,
+                                    child: pw.Text(_formatTallyAmount(h.cgst), style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.black)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            // SGST Rate & Amount
+                            pw.Row(
+                              children: [
+                                pw.Expanded(
+                                  flex: 1,
+                                  child: pw.Container(
+                                    padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                                    alignment: pw.Alignment.center,
+                                    decoration: const pw.BoxDecoration(
+                                      border: pw.Border(right: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+                                    ),
+                                    child: pw.Text('${(h.gstRate / 2).toStringAsFixed(2)}%', style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.black)),
+                                  ),
+                                ),
+                                pw.Expanded(
+                                  flex: 1,
+                                  child: pw.Container(
+                                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                                    alignment: pw.Alignment.centerRight,
+                                    child: pw.Text(_formatTallyAmount(h.sgst), style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.black)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            hsnBodyCell(_formatTallyAmount(h.totalTax), align: pw.Alignment.centerRight),
+                          ],
+                        )),
+                    // Total Row
+                    pw.TableRow(
+                      children: [
+                        hsnBodyCell('Total', align: pw.Alignment.centerRight, isBold: true),
+                        hsnBodyCell(_formatTallyAmount(hsnBreakupList.fold(0, (sum, i) => sum + i.taxable)), align: pw.Alignment.centerRight, isBold: true),
+                        // Total CGST
+                        pw.Row(
+                          children: [
+                            pw.Expanded(
+                              flex: 1,
+                              child: pw.Container(
+                                padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                                decoration: const pw.BoxDecoration(
+                                  border: pw.Border(right: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+                                ),
+                                child: pw.Text(' ', style: pw.TextStyle(font: regular, fontSize: 7)),
+                              ),
+                            ),
+                            pw.Expanded(
+                              flex: 1,
+                              child: pw.Container(
+                                padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                                alignment: pw.Alignment.centerRight,
+                                child: pw.Text(
+                                  _formatTallyAmount(hsnBreakupList.fold(0, (sum, i) => sum + i.cgst)),
+                                  style: pw.TextStyle(font: bold, fontSize: 7, color: PdfColors.black),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        // Total SGST
+                        pw.Row(
+                          children: [
+                            pw.Expanded(
+                              flex: 1,
+                              child: pw.Container(
+                                padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                                decoration: const pw.BoxDecoration(
+                                  border: pw.Border(right: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+                                ),
+                                child: pw.Text(' ', style: pw.TextStyle(font: regular, fontSize: 7)),
+                              ),
+                            ),
+                            pw.Expanded(
+                              flex: 1,
+                              child: pw.Container(
+                                padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                                alignment: pw.Alignment.centerRight,
+                                child: pw.Text(
+                                  _formatTallyAmount(hsnBreakupList.fold(0, (sum, i) => sum + i.sgst)),
+                                  style: pw.TextStyle(font: bold, fontSize: 7, color: PdfColors.black),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        hsnBodyCell(_formatTallyAmount(hsnBreakupList.fold(0, (sum, i) => sum + i.totalTax)), align: pw.Alignment.centerRight, isBold: true),
+                      ],
+                    ),
+                  ],
+                ),
+        ),
+
+        // 6. Tax Amount in Words Box
+        pw.Container(
+          width: double.infinity,
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              left: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              right: pw.BorderSide(color: PdfColors.black, width: 0.8),
+              bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            ),
+          ),
+          padding: const pw.EdgeInsets.fromLTRB(5, 3, 5, 3),
+          child: pw.RichText(
+            text: pw.TextSpan(
+              children: [
+                pw.TextSpan(
+                  text: 'Tax Amount (in words) : ',
+                  style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black),
+                ),
+                pw.TextSpan(
+                  text: _formatTallyWords(cgst + sgst + igst),
+                  style: pw.TextStyle(font: bold, fontSize: 7.5, color: PdfColors.black),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // 7. Declaration & Signatory Box (Structured as a pw.Table so the dividing line stretches full height)
+        pw.Table(
+          border: const pw.TableBorder(
+            left: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            right: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+            verticalInside: pw.BorderSide(color: PdfColors.black, width: 0.5),
+          ),
+          columnWidths: const {
+            0: pw.FlexColumnWidth(5.5),
+            1: pw.FlexColumnWidth(4.5),
+          },
+          children: [
+            pw.TableRow(
+              children: [
+                // Left Cell: Declaration & Bank details
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(5),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'Declaration',
+                        style: pw.TextStyle(
+                          font: regular,
+                          fontSize: 7.5,
+                          decoration: pw.TextDecoration.underline,
+                          color: PdfColors.black,
+                        ),
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        customSettings.showDeclaration && customSettings.declarationText.trim().isNotEmpty
+                            ? customSettings.declarationText.trim()
+                            : 'We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.',
+                        style: pw.TextStyle(font: regular, fontSize: 6.8, color: PdfColors.black, lineSpacing: 1.1),
+                      ),
+                      if (customSettings.showBankDetails && bankAccount != null) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Text("Company's Bank Details", style: pw.TextStyle(font: bold, fontSize: 7.5, color: PdfColors.black)),
+                        pw.SizedBox(height: 1),
+                        pw.Row(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            if (upiUri != null && customSettings.showUpiQr) ...[
+                              pw.Container(
+                                margin: const pw.EdgeInsets.only(right: 6, top: 2),
+                                child: pw.BarcodeWidget(
+                                  barcode: pw.Barcode.qrCode(),
+                                  data: upiUri,
+                                  width: 36,
+                                  height: 36,
+                                ),
+                              ),
+                            ],
+                            pw.Expanded(
+                              child: pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text('Bank Name : ${bankAccount.bankName}', style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.black)),
+                                  pw.Text('A/c No.   : ${bankAccount.accountNumber}', style: pw.TextStyle(font: bold, fontSize: 7, color: PdfColors.black)),
+                                  if (bankAccount.ifsc != null && bankAccount.ifsc!.isNotEmpty)
+                                    pw.Text('Branch & IFS Code : ${bankAccount.ifsc}', style: pw.TextStyle(font: regular, fontSize: 7, color: PdfColors.black)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // Right Cell: Signatory
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(5),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        'for $bizName',
+                        style: pw.TextStyle(font: bold, fontSize: 7.5, color: PdfColors.black),
+                        textAlign: pw.TextAlign.right,
+                      ),
+                      if (signatureImage != null)
+                        pw.Container(
+                          height: 38,
+                          margin: const pw.EdgeInsets.symmetric(vertical: 2),
+                          child: pw.Image(signatureImage, fit: pw.BoxFit.contain),
+                        )
+                      else
+                        pw.SizedBox(height: 38),
+                      pw.Container(
+                        alignment: pw.Alignment.centerRight,
+                        child: pw.Text(
+                          'Authorised Signatory',
+                          style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black),
+                          textAlign: pw.TextAlign.right,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+
+        // 8. Outside Bottom Computer Generated Invoice footer
+        pw.Container(
+          alignment: pw.Alignment.center,
+          padding: const pw.EdgeInsets.only(top: 4),
+          child: pw.Text(
+            'This is a Computer Generated Invoice',
+            style: pw.TextStyle(font: regular, fontSize: 7.5, color: PdfColors.black),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  return doc.save();
+}
